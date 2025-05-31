@@ -60,6 +60,12 @@ import { ref, computed } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+import { useSpeechStore } from '@/stores/speech'
+import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
+const speechStore = useSpeechStore()
+const router = useRouter()
+
 const result = ref({ text: '', emotion: '' })
 const listening = ref(false)
 
@@ -87,6 +93,14 @@ function startListening() {
     try {
       const res = await axios.post('http://localhost:5000/api/analyze', { text: spokenText })
       result.value.emotion = res.data.emotion
+
+      speechStore.setEmotion(res.data.emotion)
+
+      // 成功后跳转
+      setTimeout(() => {
+        router.push('/meditation')
+      }, 5000)
+
     } catch (err) {
       ElMessage.error('❌ Failed to analyze emotion.')
       console.error(err)
