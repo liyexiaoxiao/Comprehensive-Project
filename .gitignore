@@ -28,3 +28,10 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+# 忽略虚拟环境
+venv/
+
+# 忽略 PyTorch 相关文件
+backend/venv/Lib/site-packages/torch/
+backend/venv/Lib/site-packages/torchlib/
+backend/venv/Lib/site-packages/tensorflow/
