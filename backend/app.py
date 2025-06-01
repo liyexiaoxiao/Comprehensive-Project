@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from emotion_model import analyze_emotion 
+from music_service import get_music_file, get_music_list
 
 app = Flask(__name__)
 CORS(app)  
@@ -21,6 +22,26 @@ def analyze_text():
         return jsonify({"error": str(e)}), 500
 
     return jsonify({ "emotion": emotion })
+
+@app.route('/api/music/<emotion>', methods=['GET'])
+def get_music(emotion):
+    try:
+        file_path, error = get_music_file(emotion)
+        if error:
+            return jsonify({"error": error}), 404
+            
+        return send_file(file_path, mimetype='audio/mpeg')
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/music/list', methods=['GET'])
+def list_music():
+    try:
+        music_list = get_music_list()
+        return jsonify({"music_files": music_list})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     print("🚀 Flask running...")
