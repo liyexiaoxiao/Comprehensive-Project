@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from emotion_model import analyze_emotion 
-from music_service import get_music_file, get_music_list
+from music_service import get_music_file, get_music_list, get_next_music, get_prev_music
 
 app = Flask(__name__)
 CORS(app)  
@@ -27,6 +27,30 @@ def analyze_text():
 def get_music(emotion):
     try:
         file_path, error = get_music_file(emotion)
+        if error:
+            return jsonify({"error": error}), 404
+            
+        return send_file(file_path, mimetype='audio/mpeg')
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/music/<emotion>/next', methods=['GET'])
+def get_next(emotion):
+    try:
+        file_path, error = get_next_music(emotion)
+        if error:
+            return jsonify({"error": error}), 404
+            
+        return send_file(file_path, mimetype='audio/mpeg')
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/music/<emotion>/prev', methods=['GET'])
+def get_prev(emotion):
+    try:
+        file_path, error = get_prev_music(emotion)
         if error:
             return jsonify({"error": error}), 404
             
