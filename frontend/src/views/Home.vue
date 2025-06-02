@@ -95,6 +95,8 @@ function startListening() {
       result.value.emotion = res.data.emotion
 
       speechStore.setEmotion(res.data.emotion)
+      // 保存情绪到 localStorage
+      localStorage.setItem('currentEmotion', res.data.emotion)
 
       // 成功后跳转
       setTimeout(() => {
