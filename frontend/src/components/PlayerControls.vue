@@ -269,11 +269,11 @@ onUnmounted(() => {
 });
 </script>
 
-<style scope>
+<style scoped>
 .player {
-    color: white;
+    color: var(--color-text-primary);
     text-align: center;
-    /*padding: 20px;*/
+    font-family: var(--font-sans);
 }
 
 .controls {
@@ -284,35 +284,41 @@ onUnmounted(() => {
 }
 
 .controls button {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     font-size: 1.2rem;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
     cursor: pointer;
     color: inherit;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: background-color 0.3s;
-    padding: 7px;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-soft);
 }
 
 .controls button:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: #fff;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-float);
 }
 
 .progress {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    /*margin-top: 3px;*/
+    gap: 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
 input[type="range"] {
-    width: 1000px;
+    width: 100%;
+    max-width: 800px;
+    accent-color: var(--color-text-primary);
 }
 
 .voice-control-section {
@@ -320,7 +326,7 @@ input[type="range"] {
     align-items: center;
     justify-content: center;
     gap: 15px;
-    margin-top: 15px;
+    margin-top: 20px;
 }
 
 .voice-control-status {
@@ -329,28 +335,35 @@ input[type="range"] {
     justify-content: center;
     gap: 8px;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
-    transition: all 0.3s ease;
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+    background: rgba(255, 255, 255, 0.5);
+    padding: 6px 12px;
+    border-radius: var(--radius-pill);
 }
 
 .voice-control-status.listening {
-    color: #4CAF50;
-    animation: pulse 2s infinite;
+    color: var(--color-accent-sage);
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: var(--shadow-soft);
 }
 
 .language-toggle {
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 4px;
-    color: white;
-    padding: 4px 8px;
-    font-size: 0.8rem;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: var(--radius-pill);
+    color: var(--color-text-primary);
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: all var(--transition-fast);
 }
 
 .language-toggle:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: #fff;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
 }
 
 @keyframes pulse {

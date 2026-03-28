@@ -169,7 +169,7 @@ body {
 }
 
 .meditation-page {
-    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--font-sans);
     text-align: center;
     width: 100vw;
     height: 100vh;
@@ -189,8 +189,16 @@ body {
 .nav {
     position: fixed;
     top: 40px;
-    left: 20px;
-    /*z-index: 1000;*/
+    left: 40px;
+    z-index: 10;
+}
+
+.icon-button {
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.4) !important;
+}
+.icon-button:hover {
+    transform: scale(1.1);
 }
 
 .content {
@@ -224,41 +232,50 @@ body {
     top: calc(50% + 250px);
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(255,255,255,0.2);
-    border: none;
+    background-color: var(--color-bg-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.4);
     border-radius: 50%;
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--color-text-primary);
     font-size: 20px;
     cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-soft);
+    transition: all var(--transition-fast);
+}
+.left .set-time-button:hover {
+    background-color: rgba(255,255,255,0.8);
+    transform: translateX(-50%) scale(1.05);
 }
 
-.left login-modal-overlay {
-  position: fixed;  /* 固定定位 */
+.left .login-modal-overlay {
+  position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0,0,0,0.5);
+  background-color: rgba(0,0,0,0.2);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
 }
 
-.left login-modal {
+.left .login-modal {
     position: absolute;
-    top: 100%; /* 直接贴在按钮下方 */
+    top: 100%;
     left: 50%;
     transform: translateX(-50%);
     margin-top: 10px;
-    width: 300px;
-    background-color: #fefefe;
-    border-radius: 12px;
+    width: auto;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: var(--radius-lg);
     padding: 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-float);
     animation: fadeIn 0.3s ease;
     display: flex;
     flex-direction: column;
@@ -269,29 +286,32 @@ body {
 /* 按钮样式 */
 .left .login-btn {
     width: auto;
-    padding: 12px;
-    background-color: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    border-radius: 8px;
+    padding: 12px 20px;
+    background-color: rgba(255,255,255,0.6);
+    color: var(--color-text-primary);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: var(--radius-md);
     font-size: 16px;
+    font-weight: 500;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: all var(--transition-fast);
 }
 
 .login-btn:hover {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: #fff;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft);
 }
 
 /* 弹窗动画 */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: translateX(-50%) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateX(-50%) scale(1);
   }
 }
 
@@ -304,15 +324,24 @@ body {
 }
 
 .quote-section {
-    font-size: 1.5rem;
+    font-family: var(--font-serif);
+    font-size: 1.8rem;
+    color: var(--color-text-primary);
     text-align: center;
     width: 100%;
+    padding: 40px;
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(16px);
+    border-radius: var(--radius-xl);
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: var(--shadow-soft);
 }
 
 .controls-section {
     padding: 30px 40px;
-    background-color: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(5px);
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.05);
 }
 </style>

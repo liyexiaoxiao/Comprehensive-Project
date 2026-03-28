@@ -127,18 +127,15 @@ const emotionColor = computed(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap');
-
 .home {
   position: relative;
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  font-family: 'Quicksand', sans-serif;
   text-align: center;
   z-index: 1;
-  padding-top: 60px;
+  padding-top: 100px;
 }
 
 /* Improved header with perfect baseline alignment */
@@ -147,8 +144,10 @@ const emotionColor = computed(() => {
   top: 0;
   left: 0;
   width: 100%;
-  background-color: rgba(255, 255, 255, 0.8);
-  padding: 8px 0;
+  background: var(--color-bg-glass);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 16px 0;
   z-index: 1000;
   display: flex;
   justify-content: center;
@@ -160,62 +159,24 @@ const emotionColor = computed(() => {
   gap: 20px;
   max-width: 1200px;
   width: 100%;
-  padding: 0 20px;
+  padding: 0 40px;
 }
 
 .title {
-  font-size: 3.5rem;
-  font-weight: 700;
-  color: #333;
+  font-family: var(--font-serif);
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
   line-height: 1;
   margin: 0;
-  padding-bottom: 0.1em; /* Fine-tuned alignment */
 }
 
 .subtitle {
-  font-size: 1.2rem;
-  color: #666;
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  color: var(--color-text-secondary);
   line-height: 1;
   margin: 0;
-  padding-bottom: 0.3em; /* Fine-tuned alignment */
-}
-
-
-@keyframes gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-.centered-list li {
-  margin: 12px 0;
-  font-size: 1.1rem;
-  line-height: 1.6;
-  color: #FFFFFF; /* 使用白色字体 */
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6); /* 黑色阴影，增加可读性 */
-}
-
-.result-box p {
-  margin: 0.5rem 0;
-  line-height: 1.6;
-  color: #DCEFFF; /* 使用浅天蓝色字体 */
-  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.5); /* 给文字加上轻微的阴影 */
-}
-
-.content-box {
-  display: flex;
-  font-weight: 700;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
-
-.centered-list {
-  text-align: center;
-  list-style: none;
-  padding: 0;
-  margin: 0 0 2rem 0;
-  width: 100%;
 }
 
 .bg-video {
@@ -226,26 +187,54 @@ const emotionColor = computed(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.7;
+  opacity: 0.8;
+  filter: brightness(0.95) saturate(0.8);
+}
+
+.content-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 800px;
+  padding: 40px;
+  margin-top: 20px;
+  background: rgba(249, 248, 246, 0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
+  animation: slideUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.centered-list {
+  text-align: left;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .centered-list li {
-  margin: 12px 0;
   font-size: 1.1rem;
   line-height: 1.6;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.bg-video {
-  filter: brightness(0.9) blur(1px);
-}
-
 
 .centered-divider {
-  width: 80%;
-  margin: 1.5rem auto;
+  width: 100%;
+  margin: 2rem auto;
+  border-top-color: rgba(44, 48, 46, 0.1);
 }
 
 .button-container {
-  margin: 1rem 0;
+  margin: 2rem 0;
 }
 
 .listening-tag {
@@ -254,33 +243,39 @@ const emotionColor = computed(() => {
 
 .result-box {
   margin: 1.5rem 0;
-  background:rgb(139, 181, 224);
+  background: var(--color-bg-glass);
+  backdrop-filter: blur(12px);
   padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  width: 90%;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-soft);
+  width: 100%;
   max-width: 600px;
+  text-align: left;
 }
 
+.result-box p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  font-size: 1.05rem;
+}
 
 .philosophy {
-  font-weight: 500;
   margin: 2.5rem 0 1rem;
-  font-style: italic;
-  color: #DCEFFF;  /* 使用浅天蓝色字体 */
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5); /* 为哲学文字加上阴影 */
+  color: var(--color-text-secondary);
   max-width: 600px;
-  line-height: 1.6;
+  line-height: 1.8;
   font-size: 1.1rem;
+  font-style: italic;
 }
 
 /* 标题样式 */
 h1, h2 {
-  font-family: 'Quicksand', sans-serif;
-  font-weight: 700;
-  margin: 1rem 0;
-  color: #FFFFFF; /* 使用白色字体 */
-  text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.4); /* 强化阴影效果 */
+  font-family: var(--font-serif);
+  font-weight: 600;
+  margin: 1rem 0 2rem;
+  color: var(--color-text-primary);
 }
 
 h2 {
@@ -288,17 +283,54 @@ h2 {
 }
 
 .image-gallery {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-top: 2rem;
+  width: 100%;
 }
 
 .gallery-img {
   width: 100%;
-  max-width: 250px;
-  height: auto;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  height: 200px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  transition: all var(--transition-medium);
+}
+
+.gallery-img:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-float);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .header-text-container {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 0 20px;
+  }
+  .title {
+    font-size: 2rem;
+  }
+  .content-box {
+    margin: 20px;
+    padding: 24px;
+  }
+  .image-gallery {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

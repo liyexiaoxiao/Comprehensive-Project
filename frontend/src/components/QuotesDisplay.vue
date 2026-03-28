@@ -26,11 +26,8 @@ onMounted(() => {
 <style scoped>
 .quote-box {
     padding: 20px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 12px;
     font-size: 1.8rem;
-    font-style: italic;
-    color: #fff;
+    color: var(--color-text-primary);
     animation: fadeIn 1s ease-in;
     max-width: 500px;
     margin: auto;
@@ -38,18 +35,19 @@ onMounted(() => {
 }
 
 .zh {
-    font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", Arial, sans-serif;
-    font-weight: 600;
+    font-family: var(--font-sans);
+    font-weight: 500;
     font-style: normal; /* 中文正常体 */
 }
 
 .en {
-    font-family: "Times New Roman", Georgia, serif;
+    font-family: var(--font-serif);
     font-weight: 400;
     font-style: italic;
-    color: white;
+    color: var(--color-text-secondary);
     margin-top: 0.3em;
     display: block;
+    font-size: 1.4rem;
 }
 
 @keyframes fadeIn {
