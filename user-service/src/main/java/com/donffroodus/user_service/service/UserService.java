@@ -23,6 +23,12 @@ public class UserService {
 
     public UserInfo registerUser(UserRegisterRequest request)
     {
+        if (request.getUsername() == null || request.getUsername().isEmpty()) {
+            throw new RuntimeException("Username is required");
+        }
+        if (request.getPassword() == null || request.getPassword().isEmpty()) {
+            throw new RuntimeException("Password is required");
+        }
         if (userInfoRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("Username already exists");
         }
@@ -31,12 +37,6 @@ public class UserService {
         }
         if (request.getPhone() != null && !request.getPhone().isEmpty() && userInfoRepository.existsByPhone(request.getPhone())) {
             throw new RuntimeException("Phone number already exists");
-        }
-        if (request.getUsername() == null || request.getUsername().isEmpty()) {
-            throw new RuntimeException("Username is required");
-        }
-        if (request.getPassword() == null || request.getPassword().isEmpty()) {
-            throw new RuntimeException("Password is required");
         }
         UserInfo userInfo = new UserInfo();
         userInfo.setUsername(request.getUsername());
@@ -48,6 +48,13 @@ public class UserService {
     }
 
     public String loginUser(UserLoginRequest request) {
+        if (request.getUsername() == null || request.getUsername().isEmpty()) {
+            throw new RuntimeException("Username is required");
+        }
+        if (request.getPassword() == null || request.getPassword().isEmpty()) {
+            throw new RuntimeException("Password is required");
+        }
+
         UserInfo userInfo = userInfoRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Invalid username or password"));
 
