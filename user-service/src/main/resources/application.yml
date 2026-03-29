@@ -21,3 +21,7 @@ spring:
 
 server:
   port: 8080
+
+jwt:
+  secret: ${JWT_SECRET:this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable}
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hour in milliseconds

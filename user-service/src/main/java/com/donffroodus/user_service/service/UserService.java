@@ -4,9 +4,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.donffroodus.user_service.dto.UserLoginRequest;
 import com.donffroodus.user_service.dto.UserRegisterRequest;
 import com.donffroodus.user_service.entity.UserInfo;
 import com.donffroodus.user_service.repository.UserInfoRepository;
+import com.donffroodus.user_service.utils.JwtUtils;
 
 @Service
 public class UserService {
@@ -15,6 +17,9 @@ public class UserService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtUtils jwtUtils;
 
     public UserInfo registerUser(UserRegisterRequest request)
     {
@@ -40,5 +45,15 @@ public class UserService {
         userInfo.setPassword(passwordEncoder.encode(request.getPassword()));
 
         return userInfoRepository.save(userInfo);
+    }
+
+    public String loginUser(UserLoginRequest request) {
+        UserInfo userInfo = userInfoRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+
+        if (!passwordEncoder.matches(request.getPassword(), userInfo.getPassword())) {
+            throw new RuntimeException("Invalid username or password");
+        }
+        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getRole());
     }
 }
