@@ -11,4 +11,6 @@ import com.donffroodus.user_service.entity.UserInfo;
 public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
     Optional<UserInfo> findByUsername(String username);
     boolean existsByUsername(String username);
+    boolean existsByEmail(String email);
+    boolean existsByPhone(String phone);
 }   
