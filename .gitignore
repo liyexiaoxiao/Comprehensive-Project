@@ -37,5 +37,6 @@ backend/venv/Lib/site-packages/torch/
 backend/venv/Lib/site-packages/torchlib/
 backend/venv/Lib/site-packages/tensorflow/
 
-# 本地文档不提交
+user-service/src/main/resources/application-dev.yml
+
 docs/
