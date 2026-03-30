@@ -8,9 +8,9 @@
 
     <header class="site-header glass-panel animate-fade-in">
       <div class="brand-mark">
-        <div class="brand-logo">CE</div>
+        <div class="brand-logo">EH</div>
         <div class="brand-text">
-          <span class="brand-name">CalmEcho</span>
+          <span class="brand-name">EmotionHealing</span>
           <span class="brand-subtitle">沉浸式情绪花园</span>
         </div>
       </div>

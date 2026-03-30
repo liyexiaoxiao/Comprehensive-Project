@@ -6,7 +6,7 @@
     <!-- Fixed header with improved text alignment -->
     <div class="fixed-header">
       <div class="header-text-container">
-        <h1 class="title">CalmEcho</h1>
+        <h1 class="title">EmotionHealing</h1>
         <p class="subtitle">Let your voice guide your mind.</p>
       </div>
     </div>

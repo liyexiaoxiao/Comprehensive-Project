@@ -1,347 +1,495 @@
 <template>
-    <div id="background" class="background-layer"></div>
+  <div class="meditation-page">
+    <div class="blur-orb orb-coral"></div>
+    <div class="blur-orb orb-leaf"></div>
+    <div class="blur-orb orb-sky"></div>
 
-    <div class="meditation-page" :style="bgStyle">
-        <div class="main-layout">
-            <div class="nav">
-                <button class="icon-button" :style="iconStyle" @click="returnHomepage" circle>
-                    <font-awesome-icon icon="angle-left" />
-                </button>
-            </div>
+    <div class="page-shell">
+      <div class="top-bar">
+        <button class="back-btn" @click="goBack">
+          <font-awesome-icon icon="angle-left" />
+          <span>返回</span>
+        </button>
+        <h1 class="page-title">冥想室</h1>
+        <div style="width: 80px"></div> <!-- placeholder for balance -->
+      </div>
 
-            <div class="content">
-                <div class="left">
-                    <CircleTimer :colors="theme.colors" :total-time="selectedTime" key="circle-timer" />
-                    
-                    <button class="set-time-button" @click="showTimeOptions = !showTimeOptions" circle>
-                        <font-awesome-icon icon="clock-rotate-left" />
-                    </button>
+      <div class="main-content">
+        <!-- Left: Timer and Controls -->
+        <div class="timer-panel glass-panel">
+          <div class="timer-wrapper">
+            <CircleTimer 
+              :total-time="selectedTime" 
+              :colors="['#D97A6C', '#8ca595']" 
+              key="circle-timer" 
+            />
+          </div>
+          
+          <div class="time-options">
+            <button 
+              v-for="option in timeOptions" 
+              :key="option" 
+              :class="['time-btn', { active: selectedTime === option }]"
+              @click="selectTime(option)"
+            >
+              {{ option / 60 }}分钟
+            </button>
+          </div>
 
-                    <div class="set-time-wrapper">
-                        <div v-if="showTimeOptions" class="login-modal-overlay" @click.self="showTimeOptions = false">
-                            <div class="login-modal">
-                                <div style="display: flex; flex-direction: row; gap: 12px;">
-                                    <button v-for="option in timeOptions" :key="option" @click="selectTime(option)" class="login-btn">
-                                        {{ option / 60 }} 分钟
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="right">
-                    <div class="quote-section">
-                        <QuotesDisplay />
-                    </div>
-                </div>
-            </div>
-
-            <div class="controls-section">
-                <PlayerControls />
-            </div>
+          <button class="guide-btn" @click="startGuide">
+            <span class="guide-icon">✨</span>
+            <span>冥想引导</span>
+          </button>
         </div>
+
+        <!-- Right: Playlist and Player -->
+        <div class="playlist-panel glass-panel">
+          <div class="panel-header">
+            <h2>冥想背景音</h2>
+            <p>选择符合当下情绪的背景音</p>
+          </div>
+
+          <div class="emotion-grid">
+            <button 
+              v-for="emotion in emotions" 
+              :key="emotion.id"
+              :class="['emotion-btn', { active: currentTrack?.id === emotion.id }]"
+              @click="selectTrack(emotion)"
+            >
+              {{ emotion.name }}
+            </button>
+          </div>
+
+          <div class="player-controls">
+            <div class="now-playing-info" v-if="currentTrack">
+              <strong>{{ currentTrack.name }}</strong>
+              <span>{{ formatTime(progressSeconds) }} / {{ formatTime(currentTrack.duration) }}</span>
+            </div>
+            <div class="now-playing-info" v-else>
+              <strong>未选择音乐</strong>
+              <span>00:00 / 00:00</span>
+            </div>
+
+            <div class="control-buttons">
+              <button class="ctrl-btn" @click="playPrevious" :disabled="!currentTrack">
+                <font-awesome-icon icon="backward-step" />
+              </button>
+              <button class="ctrl-btn play-btn" @click="togglePlayback" :disabled="!currentTrack">
+                <font-awesome-icon :icon="isPlaying ? 'pause' : 'play'" />
+              </button>
+              <button class="ctrl-btn" @click="playNext" :disabled="!currentTrack">
+                <font-awesome-icon icon="forward-step" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue';
-import { emotionThemes } from '@/utils/emotionThemes.js';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import CircleTimer from '@/components/CircleTimer.vue'
 
-import Home from '@/views/Home.vue';
-import CircleTimer from '@/components/CircleTimer.vue';
-import QuotesDisplay from '@/components/QuotesDisplay.vue';
-import PlayerControls from '@/components/PlayerControls.vue';
+const emotions = [
+  { id: 'calm', name: '平静', title: '平静之声', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'relax', name: '放松', title: '放松频率', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'focus', name: '专注', title: '深度专注', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'tired', name: '疲惫', title: '缓解疲惫', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'anxious', name: '焦虑', title: '抚平焦虑', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'sad', name: '悲伤', title: '拥抱悲伤', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'lonely', name: '孤独', title: '陪伴孤独', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'joyful', name: '喜悦', title: '喜悦共振', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'angry', name: '愤怒', title: '释放愤怒', artist: 'Emotion Healing', duration: 1800 },
+  { id: 'hopeful', name: '充满希望', title: '希望之光', artist: 'Emotion Healing', duration: 1800 }
+]
 
-import axios from 'axios';
-import { useRouter } from "vue-router";
+const router = useRouter()
 
-const router = useRouter();
+const goBack = () => {
+  router.push('/service')
+}
 
-import * as THREE from 'three';
-import FOG from 'vanta/dist/vanta.fog.min';
-
-import { useSpeechStore } from '@/stores/speech'
-const speechStore = useSpeechStore()
-
-const emotions = ['joy', 'sadness', 'anger', 'fear', 'love', 'surprise', 'neutral']
-const selectedEmotion = computed(() => speechStore.emotion)
-const theme = computed(() => emotionThemes[selectedEmotion.value] || emotionThemes.neutral)
-
-const vantaRef = ref(null);
-let vantaEffect = null;
-
-const showTimeOptions = ref(false)
-const selectedTime = ref(180) // 默认 3 分钟
-const timeOptions = [60, 180, 300, 600] // 秒数
+// Timer Logic
+const timeOptions = [180, 300, 600, 1200] // 3min, 5min, 10min, 20min
+const selectedTime = ref(300)
 
 const selectTime = (option) => {
-    selectedTime.value = option;
-    showTimeOptions.value = false;
+  selectedTime.value = option
 }
 
-// 整个容器背景样式，铺满屏幕
-const bgStyle = computed(() => ({
-    width: '100vw',
-    height: '100vh',
-    margin: 0,
-    padding: 0,
-    color: '#333',
-    overflow: 'hidden', // 保证不出现黑边/滚动
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-}))
+const startGuide = () => {
+  ElMessage.info('冥想引导功能即将上线，敬请期待。')
+}
 
-const iconStyle = computed(() => ({
-    border: 'none',
-    color: 'white',
-    cursor: 'pointer',
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%', 
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'background-color 0.3s ease',
-    fontSize: '20px',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-    backgroundColor: theme.value.colors[0] || '#ffffff',
-}))
+// Player Logic
+const currentTrack = ref(null)
+const isPlaying = ref(false)
+const progressSeconds = ref(0)
+let playTimer = null
+
+const formatTime = (seconds) => {
+  const safeValue = Number.isFinite(seconds) ? seconds : 0
+  const m = Math.floor(safeValue / 60)
+  const s = Math.floor(safeValue % 60)
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+const stopTimer = () => {
+  if (playTimer) {
+    clearInterval(playTimer)
+    playTimer = null
+  }
+}
+
+const startTimer = () => {
+  stopTimer()
+  playTimer = setInterval(() => {
+    if (!isPlaying.value || !currentTrack.value) return
+    
+    if (progressSeconds.value >= currentTrack.value.duration) {
+      playNext()
+      return
+    }
+    progressSeconds.value += 1
+  }, 1000)
+}
+
+const selectTrack = (track) => {
+  currentTrack.value = track
+  progressSeconds.value = 0
+  isPlaying.value = true
+  startTimer()
+}
+
+const togglePlayback = () => {
+  if (!currentTrack.value) return
+  isPlaying.value = !isPlaying.value
+  if (isPlaying.value) {
+    startTimer()
+  } else {
+    stopTimer()
+  }
+}
+
+const playNext = () => {
+  if (!currentTrack.value) return
+  const idx = emotions.findIndex(t => t.id === currentTrack.value.id)
+  const nextIdx = (idx + 1) % emotions.length
+  selectTrack(emotions[nextIdx])
+}
+
+const playPrevious = () => {
+  if (!currentTrack.value) return
+  const idx = emotions.findIndex(t => t.id === currentTrack.value.id)
+  const prevIdx = idx > 0 ? idx - 1 : emotions.length - 1
+  selectTrack(emotions[prevIdx])
+}
 
 onMounted(() => {
-    initVanta();
-});
-
-const handleNodeClick = (nodeData) => {
-  console.log('点击了节点：', nodeData.label)
-}
+  // Optionally select the first track automatically
+  // selectTrack(activeCategory.value.tracks[0])
+})
 
 onBeforeUnmount(() => {
-    if (vantaEffect) vantaEffect.destroy();
-});
-
-watch(theme, () => {
-    if (vantaEffect) vantaEffect.destroy();
-    initVanta();
-});
-
-function initVanta() {
-    vantaEffect = FOG({
-    el: document.querySelector("#background"),
-    THREE: THREE,
-    mouseControls: true,
-    touchControls: true,
-    gyroControls: false,
-    minHeight: 200.0,
-    minWidth: 200.0,
-    highlightColor: hexToInt(theme.value.colors[0]),
-    midtoneColor: hexToInt(theme.value.colors[1]),
-    lowlightColor: hexToInt(theme.value.colors[2] || theme.value.colors[1]),
-    baseColor: 0xffebeb,
-    blurFactor: 0.6,
-    zoom: 1,
-    speed: 1,
-  });
-}
-
-function hexToInt(hex) {
-    // 支持 "#rrggbb" 或 "rrggbb"
-    return parseInt(hex.replace('#', ''), 16);
-}
-
-const returnHomepage = () => {
-    router.push('/')  // 返回首页
-}
+  stopTimer()
+})
 </script>
 
 <style scoped>
-body {
-    overflow: hidden;
-}
-
-.background-layer {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-}
-
 .meditation-page {
-    font-family: var(--font-sans);
-    text-align: center;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.main-layout {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-.nav {
-    position: fixed;
-    top: 40px;
-    left: 40px;
-    z-index: 10;
-}
-
-.icon-button {
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.4) !important;
-}
-.icon-button:hover {
-    transform: scale(1.1);
-}
-
-.content {
-    flex: 1;
-    display: flex;
-    flex-direction: row;
-    padding: 2rem;
-    box-sizing: border-box;
-    overflow: hidden;
-}
-
-.left {
-    position: relative;
-    flex: 1.5;
-    display: flex;
-    justify-content: center;
-    flex-direction: column;
-    align-items: center;
-    overflow: hidden;
-}
-
-.left .set-time-wrapper {
-    position: absolute;
-    top: calc(50% + 250px);
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.left .set-time-button {
-    position: fixed;
-    top: calc(50% + 250px);
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--color-bg-glass);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.4);
-    border-radius: 50%;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-primary);
-    font-size: 20px;
-    cursor: pointer;
-    box-shadow: var(--shadow-soft);
-    transition: all var(--transition-fast);
-}
-.left .set-time-button:hover {
-    background-color: rgba(255,255,255,0.8);
-    transform: translateX(-50%) scale(1.05);
-}
-
-.left .login-modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0,0,0,0.2);
-  backdrop-filter: blur(4px);
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--color-bg-primary);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
 }
 
-.left .login-modal {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-top: 10px;
-    width: auto;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    box-shadow: var(--shadow-float);
-    animation: fadeIn 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    z-index: 10;
+.blur-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: floatGentle 15s ease-in-out infinite alternate;
+  z-index: 0;
 }
 
-/* 按钮样式 */
-.left .login-btn {
-    width: auto;
-    padding: 12px 20px;
-    background-color: rgba(255,255,255,0.6);
-    color: var(--color-text-primary);
-    border: 1px solid rgba(255,255,255,0.4);
-    border-radius: var(--radius-md);
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition-fast);
+.orb-coral { top: -10%; right: -5%; width: 500px; height: 500px; background: var(--color-accent-blush); opacity: 0.6; }
+.orb-leaf { left: -10%; bottom: -10%; width: 600px; height: 600px; background: var(--color-accent-sage); opacity: 0.5; animation-delay: -5s; }
+.orb-sky { left: 40%; top: 30%; width: 400px; height: 400px; background: var(--color-accent-sky); opacity: 0.4; animation-delay: -2s; }
+
+.page-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1400px;
+  height: 100%;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
 }
 
-.login-btn:hover {
-    background-color: #fff;
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-soft);
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
 }
 
-/* 弹窗动画 */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) scale(0.96);
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  transition: all var(--transition-fast);
+}
+
+.back-btn:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
+}
+
+.page-title {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.main-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  overflow: hidden;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Timer Panel */
+.timer-panel {
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+}
+
+.timer-wrapper {
+  transform: scale(1.2);
+  margin-bottom: 20px;
+}
+
+.time-options {
+  display: flex;
+  gap: 16px;
+}
+
+.time-btn {
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.time-btn.active {
+  background: var(--color-text-primary);
+  color: #fff;
+  border-color: var(--color-text-primary);
+}
+
+.time-btn:hover:not(.active) {
+  background: #fff;
+}
+
+.guide-btn {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 40px;
+  background: linear-gradient(135deg, var(--color-accent-sage), #8ca595);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 1.2rem;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(124, 152, 133, 0.3);
+  transition: all var(--transition-fast);
+}
+
+.guide-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(124, 152, 133, 0.4);
+}
+
+.guide-icon {
+  font-size: 1.4rem;
+}
+
+/* Playlist Panel */
+.playlist-panel {
+  overflow: hidden;
+}
+
+.panel-header h2 {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  margin: 0 0 8px 0;
+  color: var(--color-text-primary);
+}
+
+.panel-header p {
+  color: var(--color-text-secondary);
+  margin: 0 0 24px 0;
+}
+
+.emotion-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  align-content: start;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-bottom: 16px;
+}
+
+.emotion-btn {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-size: 1.1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-medium);
+  text-align: center;
+}
+
+.emotion-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-2px);
+}
+
+.emotion-btn.active {
+  background: #fff;
+  border-color: rgba(44, 48, 46, 0.1);
+  box-shadow: var(--shadow-soft);
+  color: var(--color-accent-terracotta);
+  font-weight: 600;
+}
+
+.player-controls {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--color-text-primary);
+  color: #fff;
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.now-playing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.now-playing-info strong {
+  font-size: 1.1rem;
+}
+
+.now-playing-info span {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.control-buttons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ctrl-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ctrl-btn:hover:not(:disabled) {
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.ctrl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.play-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.play-btn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  transform: scale(1.05);
+}
+
+@keyframes floatGentle {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, -30px) scale(1.05); }
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
   }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) scale(1);
+  
+  .page-shell {
+    height: auto;
+    min-height: 100vh;
   }
-}
-
-.right {
-    flex: 1.5;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-}
-
-.quote-section {
-    font-family: var(--font-serif);
-    font-size: 1.8rem;
-    color: var(--color-text-primary);
-    text-align: center;
-    width: 100%;
-    padding: 40px;
-    background: var(--color-bg-glass);
-    backdrop-filter: blur(16px);
-    border-radius: var(--radius-xl);
-    border: 1px solid rgba(255,255,255,0.4);
-    box-shadow: var(--shadow-soft);
-}
-
-.controls-section {
-    padding: 30px 40px;
-    background: rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(16px);
-    border-top: 1px solid rgba(255, 255, 255, 0.6);
-    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.05);
+  
+  .meditation-page {
+    height: auto;
+    overflow: auto;
+  }
 }
 </style>

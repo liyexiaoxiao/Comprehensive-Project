@@ -26,9 +26,9 @@ export const homeScenes = [
 
 export const musicCategories = [
   {
-    id: 'night',
-    name: '舒缓入夜',
-    description: '像黄昏后的房间灯光，缓慢、松弛、适合睡前。',
+    id: 'recommend',
+    name: '今日推荐30首',
+    description: '为你精选的今日放松旋律。',
     tracks: [
       {
         id: 'night-1',
@@ -54,26 +54,40 @@ export const musicCategories = [
     ],
   },
   {
-    id: 'forest',
-    name: '雨声森林',
-    description: '细雨、叶片和空气的层次，适合轻度冥想与独处。',
+    id: 'guess',
+    name: '猜你喜欢',
+    description: '根据你的收听习惯生成的专属推荐。',
     tracks: [
       {
-        id: 'forest-1',
+        id: 'guess-1',
         title: '林间细雨',
         artist: 'Moss and Wind',
         duration: 212,
         cover: '/images/feature-img-4.jpg',
       },
       {
-        id: 'forest-2',
+        id: 'guess-2',
         title: '青苔回音',
         artist: 'Green Hollow',
         duration: 238,
         cover: '/images/feature-img-2.jpg',
       },
+    ],
+  },
+  {
+    id: 'leaderboard',
+    name: '排行榜',
+    description: '最受欢迎的放松与专注音乐。',
+    tracks: [
       {
-        id: 'forest-3',
+        id: 'top-1',
+        title: '安静醒来',
+        artist: 'Morning Vessel',
+        duration: 214,
+        cover: '/images/feature-img-3.jpg',
+      },
+      {
+        id: 'top-2',
         title: '湿润的清晨',
         artist: 'Forest Tape',
         duration: 205,
@@ -82,61 +96,26 @@ export const musicCategories = [
     ],
   },
   {
-    id: 'morning',
-    name: '晨光冥想',
-    description: '干净、通透，适合早晨整理状态与重新聚焦。',
+    id: 'new',
+    name: '新音乐',
+    description: '最新收录的治愈系纯音乐。',
     tracks: [
       {
-        id: 'morning-1',
-        title: '第一束暖光',
-        artist: 'Amber Dawn',
-        duration: 188,
-        cover: '/images/feature-img-3.jpg',
-      },
-      {
-        id: 'morning-2',
-        title: '安静醒来',
-        artist: 'Morning Vessel',
-        duration: 214,
-        cover: '/images/feature-img-4.jpg',
-      },
-      {
-        id: 'morning-3',
+        id: 'new-1',
         title: '缓慢展开的白日',
         artist: 'Soft Horizon',
         duration: 232,
         cover: '/images/feature-img-2.jpg',
       },
-    ],
-  },
-  {
-    id: 'focus',
-    name: '深度专注',
-    description: '更克制、更少情绪波动，为工作和学习保留清晰边界。',
-    tracks: [
       {
-        id: 'focus-1',
+        id: 'new-2',
         title: '纸页与风',
         artist: 'Quiet Routine',
         duration: 246,
-        cover: '/images/feature-img-1.jpg',
-      },
-      {
-        id: 'focus-2',
-        title: '呼吸对齐',
-        artist: 'Monoline',
-        duration: 224,
-        cover: '/images/feature-img-3.jpg',
-      },
-      {
-        id: 'focus-3',
-        title: '午后低语',
-        artist: 'Plain Tone',
-        duration: 208,
         cover: '/images/feature-img-4.jpg',
       },
     ],
-  },
+  }
 ]
 
 export const initialMessages = [

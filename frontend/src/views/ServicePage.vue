@@ -6,23 +6,37 @@
 
     <div class="service-shell">
       <section class="music-panel surface warm-surface">
-        <div class="panel-head">
-          <div>
-            <p class="kicker">Sound Garden</p>
-            <h1>今晚你想走进哪一种声场？</h1>
-            <p class="lead">
-              不同音乐区像花园里的不同小径，有的更安睡，有的更专注，有的更适合轻微整理情绪。
-            </p>
+        <div class="panel-top-bar">
+          <div class="portal-actions">
+            <button class="portal-btn" type="button" @click="goToPlaceholder('meditation-room')">
+              <span class="portal-icon">🌌</span>
+              <span>冥想室</span>
+            </button>
+            <button class="portal-btn" type="button" @click="goToPlaceholder('personal-space')">
+              <span class="portal-icon">🌿</span>
+              <span>个人空间</span>
+            </button>
           </div>
           <RouterLink class="back-link" to="/">回首页</RouterLink>
+        </div>
+
+        <div class="panel-head">
+          <div>
+            <h1>今晚你想走进哪一种声场？</h1>
+            <p class="lead">
+              不同音乐区像花园里的不同小径，有的更安睡，有的更专注......
+            </p>
+          </div>
         </div>
 
         <div class="top-tools">
           <label class="search-field">
             <span>搜索音乐</span>
-            <input v-model.trim="searchText" type="text" placeholder="搜索歌名或创作者" />
+            <div class="search-input-wrapper">
+              <input v-model.trim="searchText" type="text" placeholder="搜索纯音乐主题或情绪" />
+              <button class="search-btn">搜索</button>
+            </div>
           </label>
-          <div class="mood-chip">{{ activeCategory.name }}</div>
         </div>
 
         <div class="category-grid">
@@ -150,17 +164,6 @@
           <p class="heard-text">
             {{ heardText || '点击后可直接说话；当前使用浏览器语音识别与前端模拟回复。' }}
           </p>
-        </div>
-
-        <div class="portal-grid">
-          <button class="portal-card meditation" type="button" @click="goToPlaceholder('meditation-room')">
-            <strong>冥想室</strong>
-            <span>进入更深一层的沉静空间，继续往内走。</span>
-          </button>
-          <button class="portal-card personal" type="button" @click="goToPlaceholder('personal-space')">
-            <strong>个人空间</strong>
-            <span>回看记录、偏好与属于自己的情绪地图。</span>
-          </button>
         </div>
       </section>
     </div>
@@ -351,9 +354,12 @@ const toggleVoiceInput = () => {
   recognition.value?.start()
 }
 
-const goToPlaceholder = (panel) => {
-  const target = panel === 'meditation-room' ? '/meditation-room' : '/personal-space'
-  router.push(target)
+const goToPlaceholder = (target) => {
+  if (target === 'meditation-room') {
+    router.push('/meditation-room')
+  } else {
+    ElMessage.success(`准备前往: ${target}，功能暂未完全开放。`)
+  }
 }
 
 watch(activeCategoryId, () => {
@@ -419,17 +425,20 @@ onBeforeUnmount(() => {
 <style scoped>
 .service-page {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
-  padding: 40px 24px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
 }
 
 .blur-orb {
-  position: fixed;
+  position: absolute;
   border-radius: 50%;
   filter: blur(80px);
   pointer-events: none;
   animation: floatGentle 15s ease-in-out infinite alternate;
+  z-index: 0;
 }
 
 .orb-coral {
@@ -464,11 +473,11 @@ onBeforeUnmount(() => {
 .service-shell {
   position: relative;
   z-index: 1;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(400px, 0.8fr);
-  gap: 30px;
+  gap: 20px;
 }
 
 .surface {
@@ -476,18 +485,65 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-float);
   border: 1px solid rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(20px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .warm-surface {
-  padding: 40px;
+  padding: 30px;
   background: rgba(249, 248, 246, 0.75);
 }
 
 .cool-surface {
-  padding: 40px;
+  padding: 30px;
   background: rgba(240, 239, 234, 0.75);
+}
+
+.panel-top-bar {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.portal-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.portal-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+  transition: all var(--transition-fast);
+}
+
+.portal-btn:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
+}
+
+.portal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--color-bg-primary);
+  border-radius: 50%;
+  font-size: 16px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .panel-head,
@@ -497,6 +553,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .kicker {
@@ -585,8 +642,9 @@ onBeforeUnmount(() => {
 }
 
 .top-tools {
-  margin-top: 40px;
+  margin-top: 24px;
   align-items: flex-end;
+  flex-shrink: 0;
 }
 
 .search-field {
@@ -596,6 +654,12 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .search-field span,
 .volume-control span {
   font-weight: 500;
@@ -603,6 +667,7 @@ onBeforeUnmount(() => {
 }
 
 .search-field input {
+  flex: 1;
   height: 52px;
   padding: 0 20px;
   border-radius: var(--radius-pill);
@@ -613,6 +678,23 @@ onBeforeUnmount(() => {
   transition: all var(--transition-medium);
 }
 
+.search-btn {
+  height: 52px;
+  padding: 0 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-primary);
+  color: #fff;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.search-btn:hover {
+  background: var(--color-text-secondary);
+  transform: translateY(-1px);
+}
+
 .search-field input:focus {
   background: #fff;
   border-color: var(--color-accent-terracotta);
@@ -620,13 +702,24 @@ onBeforeUnmount(() => {
 }
 
 .category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  overflow-x: auto;
   gap: 16px;
-  margin-top: 30px;
+  margin-top: 24px;
+  flex-shrink: 0;
+  padding-bottom: 8px; /* space for potential shadow/focus */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+  scroll-snap-type: x mandatory;
+}
+
+.category-grid::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
 
 .category-card {
+  flex: 0 0 auto;
+  width: 240px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -636,6 +729,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-lg);
   text-align: left;
   transition: all var(--transition-medium);
+  scroll-snap-align: start;
 }
 
 .category-card:hover {
@@ -662,10 +756,14 @@ onBeforeUnmount(() => {
 }
 
 .track-section {
-  margin-top: 60px;
+  margin-top: 30px;
   background: rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-xl);
-  padding: 30px;
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .track-list {
@@ -673,6 +771,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 12px;
   margin-top: 24px;
+  flex: 1;
 }
 
 .track-card {
@@ -714,12 +813,13 @@ onBeforeUnmount(() => {
 }
 
 .player-shell {
-  margin-top: 40px;
+  margin-top: 16px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 24px 30px;
+  gap: 16px;
+  padding: 12px 20px;
   background: var(--color-text-primary);
   color: var(--color-bg-primary);
   border-radius: var(--radius-pill);
@@ -728,13 +828,13 @@ onBeforeUnmount(() => {
 .now-playing {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 200px;
+  gap: 12px;
+  min-width: 160px;
 }
 
 .now-playing img {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   object-fit: cover;
   animation: spin 10s linear infinite;
@@ -747,10 +847,11 @@ onBeforeUnmount(() => {
 
 .now-playing strong {
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .now-playing span {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: rgba(255,255,255,0.7);
 }
 
@@ -759,13 +860,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .player-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .action-button,
@@ -776,7 +877,8 @@ onBeforeUnmount(() => {
 }
 
 .action-button {
-  padding: 8px 16px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
   color: rgba(255,255,255,0.8);
 }
 .action-button:hover {
@@ -785,7 +887,8 @@ onBeforeUnmount(() => {
 }
 
 .primary-button {
-  padding: 12px 32px;
+  padding: 8px 24px;
+  font-size: 0.95rem;
   background: #fff;
   color: var(--color-text-primary);
 }
@@ -878,6 +981,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .voice-box .primary-button {
@@ -887,45 +991,27 @@ onBeforeUnmount(() => {
   font-size: 1.1rem;
 }
 
-.portal-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 30px;
-  padding-top: 30px;
-  border-top: 1px solid rgba(44, 48, 46, 0.1);
-}
-
-.portal-card {
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.6);
-  border-radius: var(--radius-lg);
-  text-align: left;
-  transition: all var(--transition-fast);
-}
-
-.portal-card:hover {
-  background: #fff;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-soft);
-}
-
-.portal-card strong {
-  font-size: 1.1rem;
-  color: var(--color-text-primary);
-  margin-bottom: 8px;
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
 @media (max-width: 1024px) {
+  .service-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
   .service-shell {
     grid-template-columns: 1fr;
+    height: auto;
+  }
+  .surface {
+    height: auto;
+    overflow: visible;
+  }
+  .track-section, .chat-stream {
+    overflow-y: visible;
   }
   .player-shell {
     flex-direction: column;

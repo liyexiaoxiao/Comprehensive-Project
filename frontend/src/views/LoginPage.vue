@@ -7,7 +7,7 @@
 
     <div class="login-container animate-fade-in">
       <aside class="story-panel glass-panel">
-        <div class="brand-logo-small">CE</div>
+        <div class="brand-logo-small">EH</div>
         <h1 class="story-title">进入您的<br/>情绪花园</h1>
         <p class="story-desc">
           这里没有喧嚣，只有属于您的宁静时刻。

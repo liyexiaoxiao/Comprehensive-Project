@@ -10,7 +10,8 @@ const routes = [
   { path: '/service', name: 'service', component: ServicePage },
   {
     path: '/meditation-room',
-    redirect: { name: 'service', query: { panel: 'meditation-room' } },
+    name: 'meditation-room',
+    component: () => import('@/views/Meditation.vue'),
   },
   {
     path: '/personal-space',
