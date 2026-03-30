@@ -11,4 +11,10 @@ import com.donffroodus.music_service.entity.MusicTagMapping;
 public interface MusicTagMappingRepository extends JpaRepository<MusicTagMapping, Long> {
 
 	List<MusicTagMapping> findByMusicId(Long musicId);
+
+	List<MusicTagMapping> findByTagId(Long tagId);
+
+	void deleteByMusicId(Long musicId);
+
+	void deleteByTagId(Long tagId);
 }
