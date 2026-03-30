@@ -30,6 +30,7 @@ coverage
 *.tsbuildinfo
 # 忽略虚拟环境
 venv/
+backend/myenv/
 
 # 忽略 PyTorch 相关文件
 backend/venv/Lib/site-packages/torch/
@@ -37,3 +38,5 @@ backend/venv/Lib/site-packages/torchlib/
 backend/venv/Lib/site-packages/tensorflow/
 
 user-service/src/main/resources/application-dev.yml
+
+docs/
