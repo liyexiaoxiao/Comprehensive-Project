@@ -134,13 +134,13 @@ public class UserService {
         logOperation(adminUserNamd, "UPDATE_USER", "更新了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " (管理员: " + adminUserNamd + ")", ip);
     }
 
-    public void resetPasswordAsAdmin(Long targetUserId, AdminResetPasswordRequest request, String adminUserNamd, String ip) {
+    public void resetPasswordAsAdmin(Long targetUserId, AdminResetPasswordRequest request, String adminUserName, String ip) {
         UserInfo targetUser = userInfoRepository.findById(targetUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         targetUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userInfoRepository.save(targetUser);
 
-        logOperation(adminUserNamd, "RESET_PASSWORD", "重置了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " 的密码 (管理员: " + adminUserNamd + ")", ip);
+        logOperation(adminUserName, "RESET_PASSWORD", "重置了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " 的密码 (管理员: " + adminUserName + ")", ip);
     }
 }
