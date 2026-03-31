@@ -28,6 +28,8 @@ const props = defineProps({
     }
 });
 
+const emit = defineEmits(['complete'])
+
 const timeLeft = ref(props.totalTime)
 const dashArray = ref('0, 1130')  // 初始值
 const isBreathing = ref(true)
@@ -57,6 +59,7 @@ const startTimer = () => {
         else {
             clearInterval(interval);
             interval = null;
+            emit('complete');
         }
     }, 1000);
 };
@@ -86,11 +89,12 @@ watch(() => props.totalTime, (newVal) => {
 
 <style scoped>
 .circle-timer {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: auto;
+    max-width: 440px;
+    max-height: 440px;
+    aspect-ratio: 1 / 1;
     box-sizing: border-box;
-    width: 440px;
-    height: 440px;
     overflow: hidden;
     position: relative;
     transform-origin: center center;

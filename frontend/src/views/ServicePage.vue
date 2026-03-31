@@ -39,7 +39,7 @@
           </label>
         </div>
 
-        <div class="category-grid">
+        <div class="category-grid" ref="categoryScrollRef" @wheel.prevent="handleWheel">
           <button
             v-for="category in musicCategories"
             :key="category.id"
@@ -188,6 +188,20 @@ const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
 const recognition = ref(null)
+
+// Category Scroll Logic
+const categoryScrollRef = ref(null)
+
+const handleWheel = (e) => {
+  if (categoryScrollRef.value) {
+    // Translate vertical scroll (deltaY) to horizontal scroll
+    const scrollAmount = e.deltaY > 0 ? 300 : -300
+    categoryScrollRef.value.scrollBy({
+      left: scrollAmount,
+      behavior: 'smooth'
+    })
+  }
+}
 
 const activeCategory = computed(
   () => musicCategories.find((category) => category.id === activeCategoryId.value) || musicCategories[0],
@@ -705,9 +719,9 @@ onBeforeUnmount(() => {
   display: flex;
   overflow-x: auto;
   gap: 16px;
-  margin-top: 24px;
+  margin-top: 8px; /* Adjusted to balance the top padding */
   flex-shrink: 0;
-  padding-bottom: 8px; /* space for potential shadow/focus */
+  padding: 16px 8px 24px 8px; /* Added padding to prevent box-shadow and hover transforms from being clipped */
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
   scroll-snap-type: x mandatory;
@@ -720,39 +734,59 @@ onBeforeUnmount(() => {
 .category-card {
   flex: 0 0 auto;
   width: 240px;
+  height: 120px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: flex-start;
   padding: 24px;
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(44, 48, 46, 0.05);
-  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.5); /* Thicker default border to avoid layout shift when selected */
+  border-radius: var(--radius-xl);
   text-align: left;
-  transition: all var(--transition-medium);
-  scroll-snap-align: start;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  scroll-snap-align: center;
+  backdrop-filter: blur(10px);
+  color: var(--color-text-primary);
+  cursor: pointer;
 }
 
 .category-card:hover {
   background: rgba(255, 255, 255, 0.8);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-soft);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 15px 30px rgba(44, 48, 46, 0.1);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
 .category-card.active {
-  background: var(--color-text-primary);
-  color: var(--color-bg-primary);
-  border-color: var(--color-text-primary);
+  background: #fff;
+  border-color: var(--color-accent-terracotta);
+  color: var(--color-text-primary);
+  box-shadow: 0 10px 25px rgba(200, 138, 117, 0.2);
+  transform: translateY(-4px) scale(1.01);
 }
 
 .category-card strong {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 600;
+  font-family: var(--font-serif);
 }
 
 .category-card span {
   font-size: 0.85rem;
   margin-top: 8px;
+  color: var(--color-text-secondary);
   opacity: 0.8;
+  transition: all 0.3s;
+}
+
+.category-card.active strong {
+  color: var(--color-accent-terracotta);
+}
+
+.category-card.active span {
+  color: var(--color-accent-terracotta);
+  opacity: 1;
 }
 
 .track-section {

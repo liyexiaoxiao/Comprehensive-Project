@@ -115,6 +115,48 @@ export const musicCategories = [
         cover: '/images/feature-img-4.jpg',
       },
     ],
+  },
+  {
+    id: 'favorite',
+    name: '我喜欢',
+    description: '你标记为喜欢的治愈旋律。',
+    tracks: [
+      {
+        id: 'fav-1',
+        title: '星空下的呢喃',
+        artist: 'Night Whisper',
+        duration: 210,
+        cover: '/images/feature-img-1.jpg',
+      },
+      {
+        id: 'fav-2',
+        title: '晨露',
+        artist: 'Morning Dew',
+        duration: 185,
+        cover: '/images/feature-img-3.jpg',
+      },
+    ],
+  },
+  {
+    id: 'collection',
+    name: '我收藏',
+    description: '你收藏的专属歌单与氛围音。',
+    tracks: [
+      {
+        id: 'col-1',
+        title: '深海回音',
+        artist: 'Deep Ocean',
+        duration: 320,
+        cover: '/images/feature-img-4.jpg',
+      },
+      {
+        id: 'col-2',
+        title: '壁炉边的猫',
+        artist: 'Cozy Winter',
+        duration: 275,
+        cover: '/images/feature-img-2.jpg',
+      },
+    ],
   }
 ]
 

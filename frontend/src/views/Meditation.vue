@@ -21,7 +21,8 @@
             <CircleTimer 
               :total-time="selectedTime" 
               :colors="['#D97A6C', '#8ca595']" 
-              key="circle-timer" 
+              key="circle-timer"
+              @complete="handleTimerComplete"
             />
           </div>
           
@@ -35,11 +36,6 @@
               {{ option / 60 }}分钟
             </button>
           </div>
-
-          <button class="guide-btn" @click="startGuide">
-            <span class="guide-icon">✨</span>
-            <span>冥想引导</span>
-          </button>
         </div>
 
         <!-- Right: Playlist and Player -->
@@ -49,15 +45,28 @@
             <p>选择符合当下情绪的背景音</p>
           </div>
 
-          <div class="emotion-grid">
+          <div class="emotion-scroll-container" ref="emotionScrollRef" @wheel.prevent="handleWheel">
             <button 
               v-for="emotion in emotions" 
               :key="emotion.id"
               :class="['emotion-btn', { active: currentTrack?.id === emotion.id }]"
               @click="selectTrack(emotion)"
             >
-              {{ emotion.name }}
+              <span class="emotion-name">{{ emotion.name }}</span>
+              <span class="emotion-desc">{{ emotion.title }}</span>
             </button>
+          </div>
+
+          <div class="guide-section">
+            <button class="guide-btn" :class="{ active: showGuideText }" @click="toggleGuide">
+              <span class="guide-icon">✨</span>
+              <span>冥想引导</span>
+            </button>
+            <transition name="fade-slide">
+              <div class="guide-text-box" v-if="showGuideText">
+                <p>{{ guideText }}</p>
+              </div>
+            </transition>
           </div>
 
           <div class="player-controls">
@@ -83,8 +92,74 @@
             </div>
           </div>
         </div>
+
+        <!-- Far Right: Plant Growth -->
+        <div class="plant-panel glass-panel">
+          <div class="panel-header plant-header">
+            <div>
+              <h2>冥想森林</h2>
+              <p>记录你的专注时光</p>
+            </div>
+            <button class="info-btn" @click="showPlantInfo = true">
+              <font-awesome-icon icon="circle-info" />
+            </button>
+          </div>
+          
+          <div class="plant-display">
+            <div class="plant-stage">
+              <span class="plant-emoji">{{ currentPlantEmoji }}</span>
+            </div>
+            
+            <div class="plant-stats">
+              <div class="stat-item">
+                <span class="stat-label">总冥想时间</span>
+                <span class="stat-value"><strong>{{ totalMeditationTime }}</strong> 分钟</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">当前植物</span>
+                <span class="stat-value"><strong>{{ currentTreeName }}</strong> ({{ currentStageName }})</span>
+              </div>
+              <div class="stat-item" v-if="fruits > 0">
+                <span class="stat-label">已结果实</span>
+                <span class="stat-value fruit-emojis">{{ '🍎'.repeat(fruits) }}</span>
+              </div>
+            </div>
+            
+            <div class="progress-section">
+              <div class="progress-bar-container">
+                <div class="progress-bar" :style="{ width: progressPercentage + '%' }"></div>
+              </div>
+              <p class="next-stage-text">{{ nextStageText }}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Plant Info Modal -->
+    <transition name="fade">
+      <div class="modal-overlay" v-if="showPlantInfo" @click.self="showPlantInfo = false">
+        <div class="modal-content glass-panel">
+          <button class="close-btn" @click="showPlantInfo = false">
+            <font-awesome-icon icon="xmark" />
+          </button>
+          <h3>🌲 种植说明</h3>
+          <p class="modal-desc">每次冥想的时间都会转化为植物的生长养分：</p>
+          <ul class="growth-rules">
+            <li><span class="rule-time">0-10分钟</span><span class="rule-stage">播种 🪴</span></li>
+            <li><span class="rule-time">10-30分钟</span><span class="rule-stage">发芽 🌱</span></li>
+            <li><span class="rule-time">30-50分钟</span><span class="rule-stage">展叶 🌿</span></li>
+            <li><span class="rule-time">50-70分钟</span><span class="rule-stage">小树 🌳</span></li>
+            <li><span class="rule-time">70-100分钟</span><span class="rule-stage">大树 🌲</span></li>
+            <li><span class="rule-time">100分钟以上</span><span class="rule-stage">每20分钟结一次果 🍎</span></li>
+          </ul>
+          <div class="modal-footer-text">
+            当结满3次果实后，植物将化作养分，并为你更换新的神秘树种！
+          </div>
+          <button class="modal-confirm-btn" @click="showPlantInfo = false">我知道了</button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -113,6 +188,86 @@ const goBack = () => {
   router.push('/service')
 }
 
+// Plant Growth Logic Mock
+const totalMeditationTime = ref(45) // mock: 45 minutes
+
+const TREE_CYCLE_TIME = 160 // 100 mins to mature + 3 * 20 mins for 3 fruits
+
+const currentTreeTime = computed(() => totalMeditationTime.value % TREE_CYCLE_TIME)
+const completedTrees = computed(() => Math.floor(totalMeditationTime.value / TREE_CYCLE_TIME))
+
+const treeTypes = ['橡树', '枫树', '银杏', '樱花树', '松树']
+const currentTreeName = computed(() => treeTypes[completedTrees.value % treeTypes.length])
+const showPlantInfo = ref(false)
+
+const plantStages = [
+  { time: 0, name: '播种', emoji: '🪴' },
+  { time: 10, name: '发芽', emoji: '🌱' },
+  { time: 30, name: '展叶', emoji: '🌿' },
+  { time: 50, name: '小树', emoji: '🌳' },
+  { time: 70, name: '大树', emoji: '🌲' },
+  { time: 100, name: '成熟', emoji: '🌳✨' }
+]
+
+const currentStage = computed(() => {
+  let stage = plantStages[0]
+  for (const s of plantStages) {
+    if (currentTreeTime.value >= s.time) {
+      stage = s
+    }
+  }
+  return stage
+})
+
+const currentPlantEmoji = computed(() => currentStage.value.emoji)
+const currentStageName = computed(() => currentStage.value.name)
+
+const fruits = computed(() => {
+  if (currentTreeTime.value < 100) return 0
+  const extraTime = currentTreeTime.value - 100
+  const fruitCount = Math.floor(extraTime / 20)
+  return Math.min(fruitCount, 3)
+})
+
+const progressPercentage = computed(() => {
+  if (currentTreeTime.value >= 160) return 100
+  if (currentTreeTime.value >= 100) {
+     const extraTime = currentTreeTime.value - 100
+     const timeInCurrentStage = extraTime % 20
+     return (timeInCurrentStage / 20) * 100
+  }
+  let current = plantStages[0]
+  let next = plantStages[1]
+  for (let i = 0; i < plantStages.length - 1; i++) {
+    if (currentTreeTime.value >= plantStages[i].time && currentTreeTime.value < plantStages[i+1].time) {
+      current = plantStages[i]
+      next = plantStages[i+1]
+      break
+    }
+  }
+  const stageDuration = next.time - current.time
+  const timeInStage = currentTreeTime.value - current.time
+  return (timeInStage / stageDuration) * 100
+})
+
+const nextStageText = computed(() => {
+  if (currentTreeTime.value >= 100) {
+    const extraTime = currentTreeTime.value - 100
+    if (extraTime >= 60) return '即将化作养分，孕育新的生命！'
+    const timeToNextFruit = 20 - (extraTime % 20)
+    return `距离结出下一颗果实还需 ${timeToNextFruit} 分钟`
+  }
+  let next = plantStages[1]
+  for (let i = 0; i < plantStages.length; i++) {
+    if (currentTreeTime.value < plantStages[i].time) {
+      next = plantStages[i]
+      break
+    }
+  }
+  const timeToNext = next.time - currentTreeTime.value
+  return `距离下一阶段【${next.name}】还需 ${timeToNext} 分钟`
+})
+
 // Timer Logic
 const timeOptions = [180, 300, 600, 1200] // 3min, 5min, 10min, 20min
 const selectedTime = ref(300)
@@ -121,8 +276,30 @@ const selectTime = (option) => {
   selectedTime.value = option
 }
 
-const startGuide = () => {
-  ElMessage.info('冥想引导功能即将上线，敬请期待。')
+const handleTimerComplete = () => {
+  const meditatedMins = Math.floor(selectedTime.value / 60)
+  totalMeditationTime.value += meditatedMins
+}
+
+const showGuideText = ref(false)
+const guideText = ref('请找一个舒适的姿势坐下或躺下。轻轻闭上双眼，做三次深长的呼吸。吸气时，感受清新的空气充满胸腔；呼气时，让身体的紧张感随之消散。现在，将注意力放在你的呼吸上，不要刻意控制，只是静静地观察它。如果思绪飘远，没关系，温柔地将它拉回呼吸上。在这里，你不需要做任何事，只需享受这一刻的宁静。')
+
+const toggleGuide = () => {
+  showGuideText.value = !showGuideText.value
+}
+
+// Emotion Scroll Logic
+const emotionScrollRef = ref(null)
+
+const handleWheel = (e) => {
+  if (emotionScrollRef.value) {
+    // Translate vertical scroll (deltaY) to horizontal scroll
+    const scrollAmount = e.deltaY > 0 ? 300 : -300
+    emotionScrollRef.value.scrollBy({
+      left: scrollAmount,
+      behavior: 'smooth'
+    })
+  }
 }
 
 // Player Logic
@@ -203,12 +380,13 @@ onBeforeUnmount(() => {
 .meditation-page {
   position: relative;
   height: 100vh;
-  width: 100vw;
+  width: 100%;
   overflow: hidden;
   background-color: var(--color-bg-primary);
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 20px;
 }
 
 .blur-orb {
@@ -228,9 +406,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1400px;
   height: 100%;
-  padding: 40px;
   display: flex;
   flex-direction: column;
 }
@@ -271,8 +447,8 @@ onBeforeUnmount(() => {
 .main-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  grid-template-columns: 1.1fr 1.1fr 0.8fr;
+  gap: 30px;
   overflow: hidden;
 }
 
@@ -282,7 +458,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-float);
-  padding: 40px;
+  padding: 30px;
   display: flex;
   flex-direction: column;
 }
@@ -295,13 +471,28 @@ onBeforeUnmount(() => {
 }
 
 .timer-wrapper {
-  transform: scale(1.2);
   margin-bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.timer-wrapper :deep(.circle-timer) {
+  width: 100%;
+  height: auto;
+  max-width: 440px;
+  max-height: 440px;
+  aspect-ratio: 1 / 1;
 }
 
 .time-options {
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .time-btn {
@@ -324,34 +515,84 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+  flex: 1;
+}
+
 .guide-btn {
-  margin-top: 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 40px;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 28px;
   background: linear-gradient(135deg, var(--color-accent-sage), #8ca595);
   color: #fff;
   border: none;
   border-radius: var(--radius-pill);
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 600;
-  box-shadow: 0 8px 20px rgba(124, 152, 133, 0.3);
+  box-shadow: 0 6px 16px rgba(124, 152, 133, 0.3);
   transition: all var(--transition-fast);
+  cursor: pointer;
+  z-index: 2;
 }
 
 .guide-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px rgba(124, 152, 133, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(124, 152, 133, 0.4);
+}
+
+.guide-btn.active {
+  background: linear-gradient(135deg, var(--color-accent-terracotta), #c88a75);
+  box-shadow: 0 6px 16px rgba(200, 138, 117, 0.3);
 }
 
 .guide-icon {
-  font-size: 1.4rem;
+  font-size: 1.1rem;
+}
+
+.guide-text-box {
+  margin-top: 12px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(10px);
+  text-align: justify;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  width: 100%;
+  max-width: 100%;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 /* Playlist Panel */
 .playlist-panel {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  flex-shrink: 0;
 }
 
 .panel-header h2 {
@@ -363,55 +604,92 @@ onBeforeUnmount(() => {
 
 .panel-header p {
   color: var(--color-text-secondary);
-  margin: 0 0 24px 0;
+  margin: 0 0 16px 0;
 }
 
-.emotion-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.emotion-scroll-container {
+  flex: 0 0 auto;
+  display: flex;
   gap: 16px;
-  align-content: start;
-  overflow-y: auto;
-  padding-right: 8px;
-  margin-bottom: 16px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 12px 8px;
+  margin-bottom: 8px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+
+.emotion-scroll-container::-webkit-scrollbar {
+  display: none;
 }
 
 .emotion-btn {
-  padding: 16px 20px;
+  flex: 0 0 auto;
+  width: 140px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
   background: rgba(255, 255, 255, 0.4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-xl);
   color: var(--color-text-primary);
-  font-size: 1.1rem;
-  font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-medium);
-  text-align: center;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  scroll-snap-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.emotion-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  font-family: var(--font-serif);
+}
+
+.emotion-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  opacity: 0.8;
+  transition: all 0.3s;
 }
 
 .emotion-btn:hover {
   background: rgba(255, 255, 255, 0.8);
-  transform: translateY(-2px);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 10px 20px rgba(44, 48, 46, 0.1);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
 .emotion-btn.active {
-  background: #fff;
-  border-color: rgba(44, 48, 46, 0.1);
-  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--color-accent-terracotta);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 10px 20px rgba(217, 122, 108, 0.2);
+}
+
+.emotion-btn.active .emotion-name {
   color: var(--color-accent-terracotta);
-  font-weight: 600;
+}
+
+.emotion-btn.active .emotion-desc {
+  opacity: 1;
+  color: var(--color-accent-terracotta);
 }
 
 .player-controls {
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--color-text-primary);
-  color: #fff;
-  border-radius: var(--radius-xl);
+  margin-top: auto;
+  background: rgba(44, 48, 46, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  padding: 16px 24px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .now-playing-info {
@@ -469,6 +747,229 @@ onBeforeUnmount(() => {
 .play-btn:hover:not(:disabled) {
   color: var(--color-text-primary);
   transform: scale(1.05);
+}
+
+/* Plant Panel */
+.plant-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.plant-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.info-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 4px;
+}
+
+.info-btn:hover {
+  color: var(--color-accent-terracotta);
+  transform: scale(1.1);
+}
+
+.plant-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-top: 10px;
+}
+
+.plant-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 180px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-xl);
+  margin-bottom: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.plant-emoji {
+  font-size: 6rem;
+  filter: drop-shadow(0 10px 10px rgba(0,0,0,0.1));
+  animation: floatGentle 4s ease-in-out infinite alternate;
+}
+
+.plant-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 0.95rem;
+}
+
+.stat-label {
+  color: var(--color-text-secondary);
+}
+
+.stat-value {
+  color: var(--color-text-primary);
+}
+
+.fruit-emojis {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+}
+
+.progress-section {
+  margin-top: auto;
+}
+
+.progress-bar-container {
+  height: 8px;
+  background: rgba(44, 48, 46, 0.1);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-accent-sage), var(--color-accent-terracotta));
+  border-radius: var(--radius-pill);
+  transition: width 0.5s ease-in-out;
+}
+
+.next-stage-text {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  width: 90%;
+  max-width: 450px;
+  padding: 30px;
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.close-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.modal-content h3 {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--color-text-primary);
+}
+
+.modal-desc {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 20px;
+}
+
+.growth-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.growth-rules li {
+  display: flex;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 0.95rem;
+}
+
+.rule-time {
+  color: var(--color-text-secondary);
+}
+
+.rule-stage {
+  font-weight: bold;
+  color: var(--color-text-primary);
+}
+
+.modal-footer-text {
+  font-size: 0.9rem;
+  color: var(--color-accent-terracotta);
+  text-align: center;
+  margin-bottom: 24px;
+  font-weight: 500;
+}
+
+.modal-confirm-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--color-text-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.modal-confirm-btn:hover {
+  background: var(--color-accent-sage);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 @keyframes floatGentle {
