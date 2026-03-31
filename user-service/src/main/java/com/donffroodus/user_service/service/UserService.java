@@ -122,6 +122,12 @@ public class UserService {
         if (request.getStatus() != null) {
             targetUser.setStatus(request.getStatus());
         }
+        if (request.getAvatarUrl() != null) {
+            targetUser.setAvatarUrl(request.getAvatarUrl());
+        }
+        if (request.getBio() != null) {
+            targetUser.setBio(request.getBio());
+        }
 
         userInfoRepository.save(targetUser);
 

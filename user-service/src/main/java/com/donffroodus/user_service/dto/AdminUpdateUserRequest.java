@@ -7,6 +7,8 @@ public class AdminUpdateUserRequest {
     private String phone;
     private String role;
     private String status;
+    private String avatarUrl;
+    private String bio;
 
     // Getters and Setters
     public String getUsername() {
@@ -44,5 +46,17 @@ public class AdminUpdateUserRequest {
     }
     public void setStatus(String status) {
         this.status = status;
+    }
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+    public String getBio() {
+        return bio;
+    }
+    public void setBio(String bio) {
+        this.bio = bio;
     }
 }
