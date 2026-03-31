@@ -28,6 +28,8 @@ const props = defineProps({
     }
 });
 
+const emit = defineEmits(['complete'])
+
 const timeLeft = ref(props.totalTime)
 const dashArray = ref('0, 1130')  // 初始值
 const isBreathing = ref(true)
@@ -57,6 +59,7 @@ const startTimer = () => {
         else {
             clearInterval(interval);
             interval = null;
+            emit('complete');
         }
     }, 1000);
 };
@@ -86,18 +89,21 @@ watch(() => props.totalTime, (newVal) => {
 
 <style scoped>
 .circle-timer {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: auto;
+    max-width: 440px;
+    max-height: 440px;
+    aspect-ratio: 1 / 1;
     box-sizing: border-box;
-    width: 440px;
-    height: 440px;
     overflow: hidden;
     position: relative;
     transform-origin: center center;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
     padding: 20px;
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    box-shadow: var(--shadow-float);
     animation: breath 4s ease-in-out infinite;
 }
 
@@ -124,11 +130,10 @@ svg {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 2.8rem; 
-    font-weight: bold; 
-    color: #fff; 
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-    font-family: 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    font-size: 3.2rem; 
+    font-weight: 600; 
+    color: var(--color-text-primary); 
+    font-family: var(--font-serif);
 }
 
 .breath {
@@ -138,11 +143,9 @@ svg {
 @keyframes breath {
     0%, 100% {
         transform: scale(1);
-        opacity: 0.8s;
     }
     50% {
-        transform: scale(1.1);
-        opacity: 1;
+        transform: scale(1.05);
     }
 }
 </style>
