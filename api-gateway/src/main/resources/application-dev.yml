@@ -20,7 +20,7 @@ spring:
           predicates:
             - Path=/api/social/**
           filters:
-            - RewritePath=/api/social/(?<segment>.*), /api/$\{segment
+            - RewritePath=/api/social/(?<segment>.*), /api/$\{segment}
 
 jwt:
   secret: this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable

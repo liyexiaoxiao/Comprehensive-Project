@@ -93,7 +93,7 @@ public class UserController {
     }
 
     @PatchMapping("/update-info")
-    public ResponseEntity<?> updateMyInfo(@RequestBody UserUpdateMeRequest updateDto, @RequestHeader("X-User-Id") Long userId, HttpServletRequest httpRequest) {
+    public ResponseEntity<?> updateMyInfo(@RequestBody UserUpdateMeRequest updateDto, @RequestHeader("X-User-Id") Long userId) {
         try {
             userService.updateMyInfo(userId, updateDto);
             return ResponseEntity.ok("个人信息更新成功");
@@ -103,7 +103,7 @@ public class UserController {
     }
 
     @DeleteMapping("/delete-me")
-    public ResponseEntity<?> deleteMyAccount(@RequestHeader("X-User-Id") Long userId,HttpServletRequest httpRequest) {
+    public ResponseEntity<?> deleteMyAccount(@RequestHeader("X-User-Id") Long userId) {
         try {
             userService.deleteMyAccount(userId);
             return ResponseEntity.ok("账户删除成功");
@@ -150,15 +150,7 @@ public class UserController {
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         try {
             UserInfoRequest user = userService.getUserById(id);
-            return ResponseEntity.ok(new UserInfoRequest() {{
-                setUserId(user.getUserId());
-                setUsername(user.getUsername());
-                setNickname(user.getNickname());
-                setEmail(user.getEmail());
-                setPhone(user.getPhone());
-                setAvatarUrl(user.getAvatarUrl());
-                setBio(user.getBio());
-            }});
+            return ResponseEntity.ok(user);
         } catch (RuntimeException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         }
