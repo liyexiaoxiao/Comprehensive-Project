@@ -92,9 +92,9 @@ public class UserController {
     }
 
     @PatchMapping("/update-info")
-    public ResponseEntity<?> updateMyInfo(@RequestBody UserUpdateMeRequest updateDto, HttpServletRequest httpRequest) {
+    public ResponseEntity<?> updateMyInfo(@RequestBody UserUpdateMeRequest updateDto, @RequestHeader("X-User-Id") Long userId, HttpServletRequest httpRequest) {
         try {
-            userService.updateMyInfo(SecurityContextHolder.getContext().getAuthentication().getName(), updateDto);
+            userService.updateMyInfo(userId, updateDto);
             return ResponseEntity.ok("个人信息更新成功");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
@@ -102,9 +102,9 @@ public class UserController {
     }
 
     @DeleteMapping("/delete-me")
-    public ResponseEntity<?> deleteMyAccount(HttpServletRequest httpRequest) {
+    public ResponseEntity<?> deleteMyAccount(@RequestHeader("X-User-Id") Long userId,HttpServletRequest httpRequest) {
         try {
-            userService.deleteMyAccount(SecurityContextHolder.getContext().getAuthentication().getName());
+            userService.deleteMyAccount(userId);
             return ResponseEntity.ok("账户删除成功");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
@@ -112,9 +112,9 @@ public class UserController {
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<?> changeMyPassword(@RequestBody UserChangePasswordRequest request) {
+    public ResponseEntity<?> changeMyPassword(@RequestBody UserChangePasswordRequest request, @RequestHeader("X-User-Id") Long userId) {
         try {
-            userService.changeMyPassword(SecurityContextHolder.getContext().getAuthentication().getName(), request.getOldPassword(), request.getNewPassword());
+            userService.changeMyPassword(userId, request.getOldPassword(), request.getNewPassword());
             return ResponseEntity.ok("密码修改成功");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
@@ -122,7 +122,7 @@ public class UserController {
     }
     
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping("/all-users")
+    @GetMapping("/get-users")
     public String getMethodName(@RequestParam(defaultValue = "0") String offset, @RequestParam(defaultValue = "10") String limit) {
         UserInfo[] users = userService.getUserInfos(Integer.parseInt(offset), Integer.parseInt(limit));
         String JsonResponse = "[";
@@ -137,4 +137,14 @@ public class UserController {
 
     }
     
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(@PathVariable Long id) {
+        try {
+            UserInfo user = userService.getUserById(id);
+            return ResponseEntity.ok(user);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body(e.getMessage());
+        }
+    }
 }

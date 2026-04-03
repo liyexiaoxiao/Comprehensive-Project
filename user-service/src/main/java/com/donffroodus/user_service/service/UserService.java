@@ -145,8 +145,8 @@ public class UserService {
         logOperation(adminUserName, "RESET_PASSWORD", "重置了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " 的密码 (管理员: " + adminUserName + ")", ip);
     }
     
-    public void updateMyInfo(String currentUsername, UserUpdateMeRequest request) {
-        UserInfo userInfo = userInfoRepository.findByUsername(currentUsername)
+    public void updateMyInfo(Long UserId, UserUpdateMeRequest request) {
+        UserInfo userInfo = userInfoRepository.findById(UserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (request.getEmail() != null && !request.getEmail().isEmpty() && !request.getEmail().equals(userInfo.getEmail())) {
@@ -174,8 +174,8 @@ public class UserService {
         userInfoRepository.save(userInfo);
     }
 
-    public void changeMyPassword(String currentUsername, String oldPassword, String newPassword) {
-        UserInfo userInfo = userInfoRepository.findByUsername(currentUsername)
+    public void changeMyPassword(Long userId, String oldPassword, String newPassword) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!passwordEncoder.matches(oldPassword, userInfo.getPassword())) {
@@ -186,8 +186,8 @@ public class UserService {
         userInfoRepository.save(userInfo);
     }
 
-    public void deleteMyAccount(String currentUsername) {
-        UserInfo userInfo = userInfoRepository.findByUsername(currentUsername)
+    public void deleteMyAccount(Long userId) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         userInfoRepository.delete(userInfo);
@@ -203,7 +203,12 @@ public class UserService {
     }
 
     public UserInfo getUserById(Long userId) {
-        return userInfoRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        UserInfo user = userInfoRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        UserInfo safeUser = new UserInfo();
+        org.springframework.beans.BeanUtils.copyProperties(user, safeUser);
+        safeUser.setPassword("Redacted");
+        return safeUser;
     }
 }
