@@ -1,0 +1,16 @@
+server:
+  port: 8080 # 网关的端口依然是 8080，它是直面用户的入口
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        # 路由规则：将用户服务相关的请求，转发到 8082 端口
+        - id: user-service-route
+          uri: http://localhost:8082  # <-- 注意这里已经改成了你说的 8082
+          predicates:
+            - Path=/api/users/**, /api/admin/**
+
+# JWT 密钥必须和 User-Service 保持绝对一致
+jwt:
+  secret: this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable

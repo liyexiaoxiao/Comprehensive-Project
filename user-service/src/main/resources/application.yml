@@ -20,7 +20,7 @@ spring:
         format_sql: true
 
 server:
-  port: 8080
+  port: 8082
 
 jwt:
   secret: ${JWT_SECRET:this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable}

@@ -1,0 +1,21 @@
+server:
+  port: 8080 # 网关占据 8080 端口，直面用户
+
+spring:
+  application:
+    name: api-gateway
+
+  profiles:
+    active: dev
+
+  cloud:
+    gateway:
+      routes:
+        - id: user-service-route
+          uri: http://localhost:8082  # 注意：这里是下游微服务的真实地址
+          predicates:
+            - Path=/api/users/**, /api/admin/**
+
+# 必须和 User-Service 保持完全一致的密钥，否则网关无法解密
+jwt:
+  secret: ${JWT_SECRET:this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable}
