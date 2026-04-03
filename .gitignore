@@ -40,3 +40,4 @@ backend/venv/Lib/site-packages/tensorflow/
 user-service/src/main/resources/application-dev.yml
 
 docs/
+api-gateway/src/main/resources/application-dev.yml
