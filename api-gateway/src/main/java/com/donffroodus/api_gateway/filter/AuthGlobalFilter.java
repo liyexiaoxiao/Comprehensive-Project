@@ -43,10 +43,12 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             Claims claims = jwtUtils.getClaimsFromToken(token);
             String username = claims.getSubject();
             String role = claims.get("role", String.class);
+            Long userId = claims.get("userId", Long.class);
 
             ServerHttpRequest mutatedRequest = request.mutate()
                     .header("X-User-Name", username)
                     .header("X-User-Role", "ROLE_" + role.toUpperCase()) // 提前把 ROLE_ 拼好
+                    .header("X-User-Id", userId.toString())
                     .build();
 
             ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();

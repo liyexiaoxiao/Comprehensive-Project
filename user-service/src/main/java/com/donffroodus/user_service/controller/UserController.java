@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,9 +54,8 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser() {
-        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
-        return ResponseEntity.ok("你好，" + currentUsername + "！你已成功访问受保护的接口。" + "你的权限是：" + SecurityContextHolder.getContext().getAuthentication().getAuthorities());
+    public ResponseEntity<?> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(userService.getUserById(userId));
     }
 
     @PreAuthorize("hasRole('ADMIN')") 

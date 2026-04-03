@@ -69,7 +69,7 @@ public class UserService {
         if (!passwordEncoder.matches(request.getPassword(), userInfo.getPassword())) {
             throw new RuntimeException("Invalid username or password");
         }
-        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getRole());
+        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getId(), userInfo.getRole());
     }
 
     private void logOperation(String adminUserName, String type, String details, String ip) {
@@ -200,5 +200,10 @@ public class UserService {
 
     public UserInfo[] getUserInfos(int offset, int limit) {
         return userInfoRepository.findAll().stream().skip(offset).limit(limit).toArray(UserInfo[]::new);
+    }
+
+    public UserInfo getUserById(Long userId) {
+        return userInfoRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }
