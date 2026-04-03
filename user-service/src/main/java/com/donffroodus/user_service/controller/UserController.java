@@ -10,16 +10,23 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.donffroodus.user_service.dto.AdminResetPasswordRequest;
 import com.donffroodus.user_service.dto.AdminUpdateUserRequest;
+import com.donffroodus.user_service.dto.UserChangePasswordRequest;
+import com.donffroodus.user_service.dto.UserInfoRequest;
 import com.donffroodus.user_service.dto.UserLoginRequest;
 import com.donffroodus.user_service.dto.UserRegisterRequest;
+import com.donffroodus.user_service.dto.UserUpdateMeRequest;
+import com.donffroodus.user_service.entity.UserInfo;
 import com.donffroodus.user_service.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
+
 
 @RestController
 @RequestMapping("/api/users")
@@ -48,9 +55,8 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser() {
-        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
-        return ResponseEntity.ok("你好，" + currentUsername + "！你已成功访问受保护的接口。" + "你的权限是：" + SecurityContextHolder.getContext().getAuthentication().getAuthorities());
+    public ResponseEntity<?> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(userService.getUserById(userId));
     }
 
     @PreAuthorize("hasRole('ADMIN')") 
@@ -85,5 +91,68 @@ public class UserController {
             return ResponseEntity.status(400).body(e.getMessage());
         }
     }
+
+    @PatchMapping("/update-info")
+    public ResponseEntity<?> updateMyInfo(@RequestBody UserUpdateMeRequest updateDto, @RequestHeader("X-User-Id") Long userId) {
+        try {
+            userService.updateMyInfo(userId, updateDto);
+            return ResponseEntity.ok("个人信息更新成功");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/delete-me")
+    public ResponseEntity<?> deleteMyAccount(@RequestHeader("X-User-Id") Long userId) {
+        try {
+            userService.deleteMyAccount(userId);
+            return ResponseEntity.ok("账户删除成功");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changeMyPassword(@RequestBody UserChangePasswordRequest request, @RequestHeader("X-User-Id") Long userId) {
+        try {
+            userService.changeMyPassword(userId, request.getOldPassword(), request.getNewPassword());
+            return ResponseEntity.ok("密码修改成功");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
     
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/get-users")
+    public ResponseEntity<?> getUsers(@RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "10") int limit) {
+        if (offset < 0 || limit <= 0) {
+            return ResponseEntity.badRequest().body("Invalid offset or limit");
+        }
+        UserInfo[] users = userService.getUserInfos(offset, limit);
+        UserInfoRequest[] userInfoRequests = new UserInfoRequest[users.length];
+        for (int i = 0; i < users.length; i++) {
+            UserInfo user = users[i];
+            UserInfoRequest userInfoRequest = new UserInfoRequest();
+            userInfoRequest.setUserId(user.getId());
+            userInfoRequest.setUsername(user.getUsername());
+            userInfoRequest.setNickname(user.getNickname());
+            userInfoRequest.setEmail(user.getEmail());
+            userInfoRequest.setPhone(user.getPhone());
+            userInfoRequest.setAvatarUrl(user.getAvatarUrl());
+            userInfoRequest.setBio(user.getBio());
+            userInfoRequests[i] = userInfoRequest;
+        }
+        return ResponseEntity.ok(userInfoRequests);
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(@PathVariable Long id) {
+        try {
+            UserInfoRequest user = userService.getUserById(id);
+            return ResponseEntity.ok(user);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body(e.getMessage());
+        }
+    }
 }

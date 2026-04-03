@@ -6,8 +6,10 @@ import org.springframework.stereotype.Service;
 
 import com.donffroodus.user_service.dto.AdminResetPasswordRequest;
 import com.donffroodus.user_service.dto.AdminUpdateUserRequest;
+import com.donffroodus.user_service.dto.UserInfoRequest;
 import com.donffroodus.user_service.dto.UserLoginRequest;
 import com.donffroodus.user_service.dto.UserRegisterRequest;
+import com.donffroodus.user_service.dto.UserUpdateMeRequest;
 import com.donffroodus.user_service.entity.OperationLog;
 import com.donffroodus.user_service.entity.UserInfo;
 import com.donffroodus.user_service.repository.OperationLogRepository;
@@ -68,7 +70,7 @@ public class UserService {
         if (!passwordEncoder.matches(request.getPassword(), userInfo.getPassword())) {
             throw new RuntimeException("Invalid username or password");
         }
-        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getRole());
+        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getId(), userInfo.getRole());
     }
 
     private void logOperation(String adminUserName, String type, String details, String ip) {
@@ -142,5 +144,78 @@ public class UserService {
         userInfoRepository.save(targetUser);
 
         logOperation(adminUserName, "RESET_PASSWORD", "重置了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " 的密码 (管理员: " + adminUserName + ")", ip);
+    }
+    
+    public void updateMyInfo(Long userId, UserUpdateMeRequest request) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (request.getEmail() != null && !request.getEmail().isEmpty() && !request.getEmail().equals(userInfo.getEmail())) {
+            if (userInfoRepository.existsByEmail(request.getEmail())) {
+                throw new RuntimeException("Email already exists");
+            }
+            userInfo.setEmail(request.getEmail());
+        }
+        if (request.getPhone() != null && !request.getPhone().isEmpty() && !request.getPhone().equals(userInfo.getPhone())) {
+            if (userInfoRepository.existsByPhone(request.getPhone())) {
+                throw new RuntimeException("Phone number already exists");
+            }
+            userInfo.setPhone(request.getPhone());
+        }
+        if (request.getNickname() != null) {
+            userInfo.setNickname(request.getNickname());
+        }
+        if (request.getAvatarUrl() != null) {
+            userInfo.setAvatarUrl(request.getAvatarUrl());
+        }
+        if (request.getBio() != null) {
+            userInfo.setBio(request.getBio());
+        }
+
+        userInfoRepository.save(userInfo);
+    }
+
+    public void changeMyPassword(Long userId, String oldPassword, String newPassword) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(oldPassword, userInfo.getPassword())) {
+            throw new RuntimeException("Old password is incorrect");
+        }
+
+        userInfo.setPassword(passwordEncoder.encode(newPassword));
+        userInfoRepository.save(userInfo);
+    }
+
+    public void deleteMyAccount(Long userId) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        userInfoRepository.delete(userInfo);
+    }
+
+    public UserInfo getUserInfo(String userId) {
+        return userInfoRepository.findById(Long.valueOf(userId))
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public UserInfo[] getUserInfos(int offset, int limit) {
+        return userInfoRepository.findAll().stream().skip(offset).limit(limit).toArray(UserInfo[]::new);
+    }
+
+    public UserInfoRequest getUserById(Long userId) {
+        UserInfo user = userInfoRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        UserInfoRequest safeUser = new UserInfoRequest();
+        safeUser.setUserId(user.getId());
+        safeUser.setUsername(user.getUsername());
+        safeUser.setNickname(user.getNickname());
+        safeUser.setEmail(user.getEmail());
+        safeUser.setPhone(user.getPhone());
+        safeUser.setAvatarUrl(user.getAvatarUrl());
+        safeUser.setBio(user.getBio());
+
+        return safeUser;
     }
 }
