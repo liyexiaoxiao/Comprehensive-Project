@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.donffroodus.user_service.dto.AdminResetPasswordRequest;
 import com.donffroodus.user_service.dto.AdminUpdateUserRequest;
 import com.donffroodus.user_service.dto.UserChangePasswordRequest;
+import com.donffroodus.user_service.dto.UserInfoRequest;
 import com.donffroodus.user_service.dto.UserLoginRequest;
 import com.donffroodus.user_service.dto.UserRegisterRequest;
 import com.donffroodus.user_service.dto.UserUpdateMeRequest;
@@ -123,26 +124,41 @@ public class UserController {
     
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/get-users")
-    public String getMethodName(@RequestParam(defaultValue = "0") String offset, @RequestParam(defaultValue = "10") String limit) {
-        UserInfo[] users = userService.getUserInfos(Integer.parseInt(offset), Integer.parseInt(limit));
-        String JsonResponse = "[";
-        for (UserInfo user : users) {
-            JsonResponse += "{ \"id\": " + user.getId() + ", \"username\": \"" + user.getUsername() + "\", \"nickname\": \"" + user.getNickname() + "\", \"email\": \"" + user.getEmail() + "\", \"phone\": \"" + user.getPhone() + "\", \"role\": \"" + user.getRole() + "\", \"status\": \"" + user.getStatus() + "\", \"avatarUrl\": \"" + user.getAvatarUrl() + "\", \"bio\": \"" + user.getBio() + "\" },";
+    public ResponseEntity<?> getUsers(@RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "10") int limit) {
+        if (offset < 0 || limit <= 0) {
+            return ResponseEntity.badRequest().body("Invalid offset or limit");
         }
-        if (users.length > 0) {
-            JsonResponse = JsonResponse.substring(0, JsonResponse.length() - 1); // Remove trailing comma
+        UserInfo[] users = userService.getUserInfos(offset, limit);
+        UserInfoRequest[] userInfoRequests = new UserInfoRequest[users.length];
+        for (int i = 0; i < users.length; i++) {
+            UserInfo user = users[i];
+            UserInfoRequest userInfoRequest = new UserInfoRequest();
+            userInfoRequest.setUserId(user.getId());
+            userInfoRequest.setUsername(user.getUsername());
+            userInfoRequest.setNickname(user.getNickname());
+            userInfoRequest.setEmail(user.getEmail());
+            userInfoRequest.setPhone(user.getPhone());
+            userInfoRequest.setAvatarUrl(user.getAvatarUrl());
+            userInfoRequest.setBio(user.getBio());
+            userInfoRequests[i] = userInfoRequest;
         }
-        JsonResponse += "]";
-        return JsonResponse;
-
+        return ResponseEntity.ok(userInfoRequests);
     }
     
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         try {
-            UserInfo user = userService.getUserById(id);
-            return ResponseEntity.ok(user);
+            UserInfoRequest user = userService.getUserById(id);
+            return ResponseEntity.ok(new UserInfoRequest() {{
+                setUserId(user.getUserId());
+                setUsername(user.getUsername());
+                setNickname(user.getNickname());
+                setEmail(user.getEmail());
+                setPhone(user.getPhone());
+                setAvatarUrl(user.getAvatarUrl());
+                setBio(user.getBio());
+            }});
         } catch (RuntimeException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         }

@@ -14,13 +14,13 @@ spring:
           predicates:
             - Path=/api/music/**
           filters:
-          - RewritePath=/api/music/(?<segment>.*), /api/$\{segment}
+            - RewritePath=/api/music/(?<segment>.*), /api/$\{segment}
         - id: social-service-route
           uri: http://localhost:8083
           predicates:
             - Path=/api/social/**
           filters:
-          - RewritePath=/api/social/(?<segment>.*), /api/$\{segment
+            - RewritePath=/api/social/(?<segment>.*), /api/$\{segment
 
 jwt:
   secret: this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.donffroodus.user_service.dto.AdminResetPasswordRequest;
 import com.donffroodus.user_service.dto.AdminUpdateUserRequest;
+import com.donffroodus.user_service.dto.UserInfoRequest;
 import com.donffroodus.user_service.dto.UserLoginRequest;
 import com.donffroodus.user_service.dto.UserRegisterRequest;
 import com.donffroodus.user_service.dto.UserUpdateMeRequest;
@@ -145,8 +146,8 @@ public class UserService {
         logOperation(adminUserName, "RESET_PASSWORD", "重置了用户: " + targetUserId + "，用户名: " + targetUser.getUsername() + " 的密码 (管理员: " + adminUserName + ")", ip);
     }
     
-    public void updateMyInfo(Long UserId, UserUpdateMeRequest request) {
-        UserInfo userInfo = userInfoRepository.findById(UserId)
+    public void updateMyInfo(Long userId, UserUpdateMeRequest request) {
+        UserInfo userInfo = userInfoRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (request.getEmail() != null && !request.getEmail().isEmpty() && !request.getEmail().equals(userInfo.getEmail())) {
@@ -202,13 +203,19 @@ public class UserService {
         return userInfoRepository.findAll().stream().skip(offset).limit(limit).toArray(UserInfo[]::new);
     }
 
-    public UserInfo getUserById(Long userId) {
+    public UserInfoRequest getUserById(Long userId) {
         UserInfo user = userInfoRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
-        UserInfo safeUser = new UserInfo();
-        org.springframework.beans.BeanUtils.copyProperties(user, safeUser);
-        safeUser.setPassword("Redacted");
+        UserInfoRequest safeUser = new UserInfoRequest();
+        safeUser.setUserId(user.getId());
+        safeUser.setUsername(user.getUsername());
+        safeUser.setNickname(user.getNickname());
+        safeUser.setEmail(user.getEmail());
+        safeUser.setPhone(user.getPhone());
+        safeUser.setAvatarUrl(user.getAvatarUrl());
+        safeUser.setBio(user.getBio());
+
         return safeUser;
     }
 }

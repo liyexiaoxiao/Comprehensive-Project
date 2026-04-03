@@ -46,9 +46,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             Long userId = claims.get("userId", Long.class);
 
             ServerHttpRequest mutatedRequest = request.mutate()
-                    .header("X-User-Name", username)
-                    .header("X-User-Role", "ROLE_" + role.toUpperCase()) // 提前把 ROLE_ 拼好
-                    .header("X-User-Id", userId.toString())
+                    .headers(headers -> {
+                        headers.remove("X-User-Name");
+                        headers.remove("X-User-Role");
+                        headers.remove("X-User-Id");
+                        headers.set("X-User-Name", username);
+                        headers.set("X-User-Role", "ROLE_" + role.toUpperCase()); // 提前把 ROLE_ 拼好
+                        headers.set("X-User-Id", userId.toString());
+                    })
                     .build();
 
             ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();

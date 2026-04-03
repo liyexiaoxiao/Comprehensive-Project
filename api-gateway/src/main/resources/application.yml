@@ -20,13 +20,13 @@ spring:
           predicates:
             - Path=/api/music/**
           filters:
-          - RewritePath=/api/music/(?<segment>.*), /api/$\{segment}
+            - RewritePath=/api/music/(?<segment>.*), /api/$\{segment}
         - id: social-service-route
           uri: http://localhost:8083
           predicates:
             - Path=/api/social/**
           filters:
-          - RewritePath=/api/social/(?<segment>.*), /api/$\{segment
+            - RewritePath=/api/social/(?<segment>.*), /api/$\{segment}
 
 # 必须和 User-Service 保持完全一致的密钥，否则网关无法解密
 jwt:
