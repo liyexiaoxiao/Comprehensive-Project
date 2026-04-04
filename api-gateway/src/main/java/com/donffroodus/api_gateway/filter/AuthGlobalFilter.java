@@ -29,11 +29,19 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private boolean isInWhitelist(String path) {
         for (String whitelistedPath : WHITELIST) {
-            if (path.startsWith(whitelistedPath)) {
+            if (matchesWhitelistedPath(path, whitelistedPath)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean matchesWhitelistedPath(String path, String whitelistedPath) {
+        return path.equals(whitelistedPath)
+                || path.equals(whitelistedPath + "/")
+                || path.startsWith(whitelistedPath + "?")
+                || path.startsWith(whitelistedPath + "/?")
+                || (path + "/").equals(whitelistedPath);
     }
 
     @Override
@@ -71,7 +79,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .build();
 
             ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();
-            
+
             return chain.filter(mutatedExchange);
 
         } catch (Exception e) {
@@ -92,6 +100,6 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // 优先级设置：数字越小，执行越早。设为 -1 确保它在路由转发前执行。
-        return -1; 
+        return -1;
     }
 }
