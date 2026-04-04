@@ -22,12 +22,26 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private JwtUtils jwtUtils;
 
+    private static final String[] WHITELIST = {
+        "/api/users/login",
+        "/api/users/register"
+    };
+
+    private boolean isInWhitelist(String path) {
+        for (String whitelistedPath : WHITELIST) {
+            if (path.startsWith(whitelistedPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        if (path.contains("/api/users/login") || path.contains("/api/users/register")) {
+        if (isInWhitelist(path)) {
             return chain.filter(exchange);
         }
 
