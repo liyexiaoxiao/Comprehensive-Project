@@ -22,12 +22,34 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private JwtUtils jwtUtils;
 
+    private static final String[] WHITELIST = {
+        "/api/users/login",
+        "/api/users/register"
+    };
+
+    private boolean isInWhitelist(String path) {
+        for (String whitelistedPath : WHITELIST) {
+            if (matchesWhitelistedPath(path, whitelistedPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesWhitelistedPath(String path, String whitelistedPath) {
+        return path.equals(whitelistedPath)
+                || path.equals(whitelistedPath + "/")
+                || path.startsWith(whitelistedPath + "?")
+                || path.startsWith(whitelistedPath + "/?")
+                || (path + "/").equals(whitelistedPath);
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        if (path.contains("/api/users/login") || path.contains("/api/users/register")) {
+        if (isInWhitelist(path)) {
             return chain.filter(exchange);
         }
 
@@ -57,7 +79,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .build();
 
             ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();
-            
+
             return chain.filter(mutatedExchange);
 
         } catch (Exception e) {
@@ -78,6 +100,6 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // 优先级设置：数字越小，执行越早。设为 -1 确保它在路由转发前执行。
-        return -1; 
+        return -1;
     }
 }
