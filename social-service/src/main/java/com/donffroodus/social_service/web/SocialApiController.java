@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,33 +30,36 @@ public class SocialApiController {
 		this.moodDiaryRepository = moodDiaryRepository;
 	}
 
-	@GetMapping("/users/{userId}/mood-diaries")
+	@GetMapping("/me/mood-diaries")
 	public List<MoodDiary> listUserMoodDiaries(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@RequestParam(value = "date", required = false) LocalDate date) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (date != null) {
 			return moodDiaryRepository.findByUserIdAndDate(userId, date);
 		}
 		return moodDiaryRepository.findByUserIdOrderByDateDescCreatedAtDesc(userId);
 	}
 
-	@GetMapping("/users/{userId}/mood-diaries/{diaryId}")
+	@GetMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<MoodDiary> getMoodDiary(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("diaryId") Long diaryId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return moodDiaryRepository.findByIdAndUserId(diaryId, userId)
 				.map(ResponseEntity::ok)
 				.orElse(ResponseEntity.notFound().build());
 	}
 
-	@PostMapping("/users/{userId}/mood-diaries")
+	@PostMapping("/me/mood-diaries")
 	public ResponseEntity<MoodDiary> createMoodDiary(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MoodDiaryWriteRequest request) {
 		if (request == null || request.date() == null) {
 			return ResponseEntity.badRequest().build();
 		}
 
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		MoodDiary diary = new MoodDiary();
 		diary.setUserId(userId);
 		diary.setDate(request.date());
@@ -64,15 +68,16 @@ public class SocialApiController {
 		return ResponseEntity.ok(moodDiaryRepository.save(diary));
 	}
 
-	@PutMapping("/users/{userId}/mood-diaries/{diaryId}")
+	@PutMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<MoodDiary> updateMoodDiary(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("diaryId") Long diaryId,
 			@RequestBody MoodDiaryWriteRequest request) {
 		if (request == null || request.date() == null) {
 			return ResponseEntity.badRequest().build();
 		}
 
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return moodDiaryRepository.findByIdAndUserId(diaryId, userId)
 				.map(existing -> {
 					existing.setDate(request.date());
@@ -83,10 +88,11 @@ public class SocialApiController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
-	@DeleteMapping("/users/{userId}/mood-diaries/{diaryId}")
+	@DeleteMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<Void> deleteMoodDiary(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("diaryId") Long diaryId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return moodDiaryRepository.findByIdAndUserId(diaryId, userId)
 				.map(existing -> {
 					moodDiaryRepository.delete(existing);

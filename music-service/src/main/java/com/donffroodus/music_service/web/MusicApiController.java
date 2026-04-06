@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -87,15 +88,17 @@ public class MusicApiController {
 		return emotionTagRepository.findAll();
 	}
 
-	@GetMapping("/users/{userId}/music-preferences")
-	public List<UserPreference> listUserPreferences(@PathVariable("userId") Long userId) {
+	@GetMapping("/me/music-preferences")
+	public List<UserPreference> listUserPreferences(@RequestHeader("X-User-Id") String xUserId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return userPreferenceRepository.findByUserId(userId);
 	}
 
-	@PostMapping("/users/{userId}/music-preferences")
+	@PostMapping("/me/music-preferences")
 	public ResponseEntity<UserPreference> upsertMusicPreference(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MusicPreferenceRequest request) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.musicId() == null || request.preferenceType() == null) {
 			return ResponseEntity.badRequest().build();
 		}
@@ -112,10 +115,11 @@ public class MusicApiController {
 		return ResponseEntity.ok(userPreferenceRepository.save(pref));
 	}
 
-	@DeleteMapping("/users/{userId}/music-preferences/{musicId}")
+	@DeleteMapping("/me/music-preferences/{musicId}")
 	public ResponseEntity<Void> deleteMusicPreference(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("musicId") Long musicId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, musicId);
 		if (existing.isEmpty()) {
 			return ResponseEntity.notFound().build();
@@ -125,10 +129,11 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
-	@PostMapping("/users/{userId}/music-recommendations/by-emotion")
+	@PostMapping("/me/music-recommendations/by-emotion")
 	public ResponseEntity<List<MusicResource>> recommendByEmotion(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MusicRecommendationRequest request) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.emotionTagId() == null) {
 			return ResponseEntity.badRequest().build();
 		}
@@ -173,10 +178,11 @@ public class MusicApiController {
 		return ResponseEntity.ok(result);
 	}
 
-	@PostMapping("/users/{userId}/music-recommendations/next")
+	@PostMapping("/me/music-recommendations/next")
 	public ResponseEntity<List<MusicResource>> recommendNext(
-			@PathVariable("userId") Long userId,
+			@RequestHeader("X-User-Id") String xUserId,
 			@RequestBody NextMusicRequest request) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.currentMusicId() == null) {
 			return ResponseEntity.badRequest().build();
 		}
@@ -240,7 +246,9 @@ public class MusicApiController {
 	}
 
 	@PostMapping("/music-resources")
-	public ResponseEntity<MusicResource> createMusic(@RequestBody MusicResourceWriteRequest request) {
+	public ResponseEntity<MusicResource> createMusic(
+			@RequestHeader("X-User-Id") String xUserId,
+			@RequestBody MusicResourceWriteRequest request) {
 		if (request == null || request.title() == null || request.fileUrl() == null) {
 			return ResponseEntity.badRequest().build();
 		}
@@ -252,7 +260,7 @@ public class MusicApiController {
 		music.setFileUrl(request.fileUrl());
 		music.setCoverUrl(request.coverUrl());
 		music.setSource(request.source());
-		music.setUploaderId(request.uploaderId());
+		music.setUploaderId(GatewayAuthSupport.requireUserId(xUserId));
 		return ResponseEntity.ok(musicResourceRepository.save(music));
 	}
 
@@ -272,7 +280,6 @@ public class MusicApiController {
 					existing.setFileUrl(request.fileUrl());
 					existing.setCoverUrl(request.coverUrl());
 					existing.setSource(request.source());
-					existing.setUploaderId(request.uploaderId());
 					return ResponseEntity.ok(musicResourceRepository.save(existing));
 				})
 				.orElse(ResponseEntity.notFound().build());
@@ -411,8 +418,7 @@ public class MusicApiController {
 			Integer duration,
 			String fileUrl,
 			String coverUrl,
-			String source,
-			Long uploaderId) {
+			String source) {
 	}
 
 	public static record MusicTagsWriteRequest(
