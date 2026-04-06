@@ -37,6 +37,8 @@ backend/venv/Lib/site-packages/torch/
 backend/venv/Lib/site-packages/torchlib/
 backend/venv/Lib/site-packages/tensorflow/
 
+target/
+
 user-service/src/main/resources/application-dev.yml
 
 docs/
