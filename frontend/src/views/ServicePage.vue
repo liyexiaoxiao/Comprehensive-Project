@@ -8,11 +8,11 @@
       <section class="music-panel surface warm-surface">
         <div class="panel-top-bar">
           <div class="portal-actions">
-            <button class="portal-btn" type="button" @click="goToPlaceholder('meditation-room')">
+            <button class="portal-btn" type="button" @click="$router.push({ name: 'meditation-room' })">
               <span class="portal-icon">🌌</span>
               <span>冥想室</span>
             </button>
-            <button class="portal-btn" type="button" @click="goToPlaceholder('personal-space')">
+            <button class="portal-btn" type="button" @click="$router.push({ name: 'personal-space' })">
               <span class="portal-icon">🌿</span>
               <span>个人空间</span>
             </button>
