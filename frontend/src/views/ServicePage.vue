@@ -174,12 +174,25 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { initialMessages, mockReplies, musicCategories } from '@/data/mockContent'
+import { initialMessages, mockReplies, musicCategories as originalCategories } from '@/data/mockContent'
+import { useMusicStore } from '@/stores/musicStore'
 
 const router = useRouter()
 const route = useRoute()
+const musicStore = useMusicStore()
 
-const activeCategoryId = ref(musicCategories[0].id)
+// Dynamic computed categories to include custom playlists
+const musicCategories = computed(() => {
+  const customCats = musicStore.customPlaylists.map(pl => ({
+    id: pl.id,
+    name: pl.name,
+    description: pl.description || '自建歌单',
+    tracks: pl.tracks
+  }))
+  return [...originalCategories, ...customCats]
+})
+
+const activeCategoryId = ref(originalCategories[0].id)
 const searchText = ref('')
 const volume = ref(68)
 const isPlaying = ref(false)
@@ -204,7 +217,7 @@ const handleWheel = (e) => {
 }
 
 const activeCategory = computed(
-  () => musicCategories.find((category) => category.id === activeCategoryId.value) || musicCategories[0],
+  () => musicCategories.value.find((category) => category.id === activeCategoryId.value) || musicCategories.value[0],
 )
 
 const filteredTracks = computed(() => {
@@ -239,10 +252,33 @@ const stopTimer = () => {
   }
 }
 
+const audioPlayer = new Audio()
+
 const startTimer = () => {
   stopTimer()
+  if (currentTrack.value.file) {
+    if (!audioPlayer.src || audioPlayer.src !== currentTrack.value.objectUrl) {
+      if (!currentTrack.value.objectUrl) {
+        currentTrack.value.objectUrl = URL.createObjectURL(currentTrack.value.file)
+      }
+      audioPlayer.src = currentTrack.value.objectUrl
+    }
+    audioPlayer.volume = volume.value / 100
+    audioPlayer.currentTime = progressSeconds.value
+    audioPlayer.play().catch(err => console.error(err))
+    
+    audioPlayer.onended = () => {
+      playNext()
+    }
+  }
+
   playTimer = setInterval(() => {
     if (!isPlaying.value) {
+      return
+    }
+
+    if (currentTrack.value.file && audioPlayer.src) {
+      progressSeconds.value = audioPlayer.currentTime
       return
     }
 
@@ -256,31 +292,58 @@ const startTimer = () => {
 }
 
 const selectTrack = (track) => {
+  if (currentTrack.value.id === track.id) {
+    togglePlayback()
+    return
+  }
+  if (audioPlayer) {
+    audioPlayer.pause()
+    audioPlayer.src = ''
+  }
   currentTrack.value = track
   progressSeconds.value = 0
   isPlaying.value = true
+  startTimer()
 }
 
 const togglePlayback = () => {
   isPlaying.value = !isPlaying.value
+  if (isPlaying.value) {
+    startTimer()
+  } else {
+    stopTimer()
+    if (currentTrack.value.file) {
+      audioPlayer.pause()
+    }
+  }
 }
+
+watch(volume, (newVol) => {
+  if (audioPlayer) {
+    audioPlayer.volume = newVol / 100
+  }
+})
+
+watch(progressSeconds, (newVal) => {
+  // If user drags the slider and it's playing a real file, sync audio
+  // To avoid circular updates, we check difference
+  if (currentTrack.value.file && audioPlayer && Math.abs(audioPlayer.currentTime - newVal) > 1) {
+    audioPlayer.currentTime = newVal
+  }
+})
 
 const playNext = () => {
   const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
   const currentIndex = trackPool.findIndex((track) => track.id === currentTrack.value.id)
   const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % trackPool.length : 0
-  currentTrack.value = trackPool[nextIndex]
-  progressSeconds.value = 0
-  isPlaying.value = true
+  selectTrack(trackPool[nextIndex])
 }
 
 const playPrevious = () => {
   const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
   const currentIndex = trackPool.findIndex((track) => track.id === currentTrack.value.id)
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : trackPool.length - 1
-  currentTrack.value = trackPool[prevIndex]
-  progressSeconds.value = 0
-  isPlaying.value = true
+  selectTrack(trackPool[prevIndex])
 }
 
 const timeStamp = () =>

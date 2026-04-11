@@ -9,7 +9,11 @@
     <div class="page-shell">
       <!-- Sidebar -->
       <aside class="sidebar glass-panel">
-        <h2 class="sidebar-title">个人空间</h2>
+        <div class="sidebar-brand">
+          <span class="sidebar-kicker">My Sanctuary</span>
+          <h2 class="sidebar-title">个人空间</h2>
+          <p class="sidebar-subtitle">记录、整理与回看你的情绪轨迹</p>
+        </div>
         <nav class="space-nav">
           <button 
             v-for="tab in tabs" 
@@ -309,17 +313,294 @@
         </div>
 
         <!-- Tab 4: 音乐库 -->
-        <div v-else-if="currentTab === 'music'" class="tab-content placeholder-tab">
-          <font-awesome-icon icon="music" class="placeholder-icon" />
-          <h3>音乐库</h3>
-          <p>功能开发中...</p>
+        <div v-else-if="currentTab === 'music'" class="tab-content music-tab">
+          <div class="music-header">
+            <h3 class="section-title">音乐库</h3>
+            <div class="music-actions">
+              <button class="action-btn music-main-btn" @click="openUploadModal">上传音乐</button>
+              <button class="action-btn outline music-main-btn" @click="openCreatePlaylistModal">新建歌单</button>
+            </div>
+          </div>
+
+          <div class="music-content glass-panel-inner">
+            <div class="music-overview-grid">
+              <article class="music-overview-card">
+                <span class="overview-label">我的上传</span>
+                <strong>{{ musicStore.uploadedTracks.length }}</strong>
+                <p>首个人上传音乐，形成你的情绪声音档案。</p>
+              </article>
+              <article class="music-overview-card">
+                <span class="overview-label">我喜欢</span>
+                <strong>{{ likedTracksList.length }}</strong>
+                <p>首喜欢歌曲，沉淀近期最常回访的旋律。</p>
+              </article>
+              <article class="music-overview-card">
+                <span class="overview-label">我收藏</span>
+                <strong>{{ collectedTracksList.length }}</strong>
+                <p>首收藏内容，方便在不同场景快速切换。</p>
+              </article>
+              <article class="music-overview-card">
+                <span class="overview-label">我的歌单</span>
+                <strong>{{ musicStore.customPlaylists.length }}</strong>
+                <p>个自建歌单，把常用氛围整理成自己的入口。</p>
+              </article>
+            </div>
+
+            <div class="music-sections-grid">
+              <section class="music-showcase-card uploads-card">
+                <div class="music-showcase-header">
+                  <div>
+                    <span class="music-card-kicker">Personal Archive</span>
+                    <h4>我的上传</h4>
+                    <p>近期上传的情绪音乐会优先展示在这里，便于继续归类和加入歌单。</p>
+                  </div>
+                  <span class="section-meta">{{ musicStore.uploadedTracks.length }} 首</span>
+                </div>
+
+                <div v-if="musicStore.uploadedTracks.length" class="music-track-scroll-area">
+                  <div class="music-track-stack">
+                  <article class="music-track-card" v-for="track in musicStore.uploadedTracks" :key="track.id">
+                    <div class="track-main">
+                      <div class="track-title-row">
+                        <strong>{{ track.title }}</strong>
+                        <span class="track-duration">{{ formatDuration(track.duration) }}</span>
+                      </div>
+                      <span class="track-artist-name">{{ getTrackArtist(track) }}</span>
+                      <div class="track-tag-row">
+                        <span v-for="tag in getTrackTags(track)" :key="tag" class="small-tag">{{ tag }}</span>
+                      </div>
+                    </div>
+                    <div class="track-action-row">
+                      <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
+                      <button class="icon-btn danger" @click="musicStore.removeUploadedTrack(track.id)" title="删除">🗑️</button>
+                    </div>
+                  </article>
+                  </div>
+                </div>
+                <div v-else class="empty-state compact-empty-state">
+                  还没上传过音乐，点击上方按钮上传你的第一首歌吧！
+                </div>
+              </section>
+
+              <section class="music-showcase-card likes-card">
+                <div class="music-showcase-header">
+                  <div>
+                    <span class="music-card-kicker">Favorite Mood</span>
+                    <h4>我喜欢</h4>
+                    <p>这里保留你最近最想反复回放的歌曲，适合快速进入熟悉的情绪状态。</p>
+                  </div>
+                  <span class="section-meta">{{ likedTracksList.length }} 首</span>
+                </div>
+
+                <div v-if="likedTracksList.length" class="music-track-scroll-area">
+                  <div class="music-track-stack">
+                  <article class="music-track-card compact-track-card" v-for="track in likedTracksList" :key="track.id">
+                    <div class="track-main">
+                      <div class="track-title-row">
+                        <strong>{{ track.title }}</strong>
+                        <span class="track-duration">{{ formatDuration(track.duration) }}</span>
+                      </div>
+                      <span class="track-artist-name">{{ getTrackArtist(track) }}</span>
+                      <div class="track-tag-row">
+                        <span v-for="tag in getTrackTags(track)" :key="tag" class="small-tag subtle-tag">{{ tag }}</span>
+                      </div>
+                    </div>
+                    <div class="track-action-row">
+                      <button class="icon-btn" @click="musicStore.toggleLike(track.id)" title="取消喜欢">💔</button>
+                      <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" :title="musicStore.collectedTrackIds.includes(track.id) ? '取消收藏' : '收藏'">
+                        <span :class="{ 'active-icon': musicStore.collectedTrackIds.includes(track.id) }">⭐</span>
+                      </button>
+                      <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
+                    </div>
+                  </article>
+                  </div>
+                </div>
+                <div v-else class="empty-state compact-empty-state">
+                  暂无喜欢的音乐。
+                </div>
+              </section>
+
+              <section class="music-showcase-card collections-card">
+                <div class="music-showcase-header">
+                  <div>
+                    <span class="music-card-kicker">Saved Library</span>
+                    <h4>我收藏</h4>
+                    <p>收藏区更适合留住一些不同场景的备用旋律，比如夜晚、通勤和专注时刻。</p>
+                  </div>
+                  <span class="section-meta">{{ collectedTracksList.length }} 首</span>
+                </div>
+
+                <div v-if="collectedTracksList.length" class="music-track-scroll-area">
+                  <div class="music-track-stack">
+                  <article class="music-track-card compact-track-card" v-for="track in collectedTracksList" :key="track.id">
+                    <div class="track-main">
+                      <div class="track-title-row">
+                        <strong>{{ track.title }}</strong>
+                        <span class="track-duration">{{ formatDuration(track.duration) }}</span>
+                      </div>
+                      <span class="track-artist-name">{{ getTrackArtist(track) }}</span>
+                      <div class="track-tag-row">
+                        <span v-for="tag in getTrackTags(track)" :key="tag" class="small-tag subtle-tag">{{ tag }}</span>
+                      </div>
+                    </div>
+                    <div class="track-action-row">
+                      <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" title="取消收藏">❌</button>
+                      <button class="icon-btn" @click="musicStore.toggleLike(track.id)" :title="musicStore.likedTrackIds.includes(track.id) ? '取消喜欢' : '喜欢'">
+                        <span :class="{ 'active-icon': musicStore.likedTrackIds.includes(track.id) }">❤️</span>
+                      </button>
+                      <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
+                    </div>
+                  </article>
+                  </div>
+                </div>
+                <div v-else class="empty-state compact-empty-state">
+                  暂无收藏的音乐。
+                </div>
+              </section>
+
+              <section class="music-showcase-card playlists-card">
+                <div class="music-showcase-header">
+                  <div>
+                    <span class="music-card-kicker">Playlist Studio</span>
+                    <h4>我的歌单</h4>
+                    <p>用歌单把不同时间段和状态拆开管理，左右滑动切换不同歌单，详情通过弹窗查看。</p>
+                  </div>
+                  <span class="section-meta">{{ musicStore.customPlaylists.length }} 个</span>
+                </div>
+
+                <div
+                  v-if="musicStore.customPlaylists.length"
+                  ref="playlistCarouselRef"
+                  class="playlist-carousel-shell"
+                  @wheel.prevent="handlePlaylistWheel"
+                >
+                  <div class="playlist-carousel">
+                  <article
+                    class="playlist-preview-card"
+                    v-for="pl in musicStore.customPlaylists"
+                    :key="pl.id"
+                    :class="{ active: activePlaylist?.id === pl.id }"
+                    @click="selectPlaylist(pl)"
+                  >
+                    <div class="playlist-info">
+                      <h4>{{ pl.name }}</h4>
+                      <p>{{ pl.description }}</p>
+                      <span>{{ formatPlaylistMeta(pl) }}</span>
+                    </div>
+                    <div class="playlist-card-actions">
+                      <button class="action-btn outline slim-btn" @click.stop="openPlaylistDetailModal(pl)">查看</button>
+                      <button class="icon-btn delete-pl-btn always-show" @click.stop="deletePlaylistAndReset(pl.id)" title="删除歌单">🗑️</button>
+                    </div>
+                  </article>
+                  </div>
+                </div>
+                <div v-else class="empty-state compact-empty-state">
+                  暂无歌单，点击上方新建歌单吧！
+                </div>
+              </section>
+            </div>
+          </div>
         </div>
 
         <!-- Tab 5: 朋友圈 -->
-        <div v-else-if="currentTab === 'social'" class="tab-content placeholder-tab">
-          <font-awesome-icon icon="users" class="placeholder-icon" />
-          <h3>朋友圈</h3>
-          <p>分享你的心情，查看朋友们的动态（开发中）</p>
+        <div v-else-if="currentTab === 'social'" class="tab-content social-tab">
+          <div class="social-header">
+            <div>
+              <h3 class="section-title">朋友圈</h3>
+              <p class="social-header-desc">像动态广场一样浏览好友近况，支持点赞、评论与带上“现在的情绪”发布帖子。</p>
+            </div>
+            <button class="action-btn social-publish-btn" @click="openSocialComposer">发布</button>
+          </div>
+
+          <div class="social-layout">
+            <div class="social-feed">
+              <article v-for="post in socialPosts" :key="post.id" class="social-post-card glass-panel-inner">
+                <div class="social-post-top">
+                  <div class="social-author-block">
+                    <div class="social-avatar">{{ getNameInitial(post.authorName) }}</div>
+                    <div>
+                      <div class="social-author-row">
+                        <strong>{{ post.authorName }}</strong>
+                        <span class="social-role-tag">{{ post.authorRole }}</span>
+                      </div>
+                      <span class="social-post-time">{{ post.timeLabel }}</span>
+                    </div>
+                  </div>
+                  <span class="social-mood-pill">现在的情绪 · {{ post.mood }}</span>
+                </div>
+
+                <p class="social-post-content">{{ post.content }}</p>
+
+                <div v-if="post.highlights?.length" class="social-highlight-row">
+                  <span v-for="item in post.highlights" :key="item" class="social-highlight-chip"># {{ item }}</span>
+                </div>
+
+                <div class="social-post-actions">
+                  <button class="social-action-chip" :class="{ active: post.likedByMe }" @click="toggleSocialLike(post)">
+                    {{ post.likedByMe ? '已赞' : '点赞' }} · {{ post.likes }}
+                  </button>
+                  <span class="social-comment-total">{{ post.comments.length }} 条评论</span>
+                </div>
+
+                <div class="social-comment-list">
+                  <div v-for="comment in post.comments" :key="comment.id" class="social-comment-item">
+                    <span class="social-comment-author">{{ comment.author }}：</span>
+                    <span class="social-comment-text">{{ comment.content }}</span>
+                    <span class="social-comment-time">{{ comment.timeLabel }}</span>
+                  </div>
+                </div>
+
+                <div class="social-comment-editor">
+                  <input
+                    v-model="post.commentDraft"
+                    type="text"
+                    class="info-input"
+                    placeholder="写下你的评论..."
+                    @keyup.enter="submitSocialComment(post)"
+                  />
+                  <button class="action-btn social-comment-btn" @click="submitSocialComment(post)">评论</button>
+                </div>
+              </article>
+
+              <div v-if="socialPosts.length === 0" class="empty-state compact-empty-state">
+                朋友圈暂时还没有动态，点击右上角发布第一条帖子吧！
+              </div>
+            </div>
+
+            <aside class="social-side-panel glass-panel-inner">
+              <div class="social-side-card">
+                <span class="social-side-kicker">Social Snapshot</span>
+                <h4>今日互动看板</h4>
+                <div class="social-stat-grid">
+                  <div class="social-stat-item">
+                    <strong>{{ socialSummary.postCount }}</strong>
+                    <span>动态</span>
+                  </div>
+                  <div class="social-stat-item">
+                    <strong>{{ socialSummary.commentCount }}</strong>
+                    <span>评论</span>
+                  </div>
+                  <div class="social-stat-item">
+                    <strong>{{ socialSummary.likeCount }}</strong>
+                    <span>点赞</span>
+                  </div>
+                  <div class="social-stat-item">
+                    <strong>{{ friendsList.length }}</strong>
+                    <span>好友</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="social-side-card muted">
+                <span class="social-side-kicker">Posting Tip</span>
+                <h4>发布建议</h4>
+                <p>发帖时可以写下今天的片段，再补充一句“现在的情绪”，更容易让好友理解你的状态。</p>
+                <div class="social-trend-tags">
+                  <span v-for="tag in socialMoodSuggestions" :key="tag" class="small-tag subtle-tag">{{ tag }}</span>
+                </div>
+              </div>
+            </aside>
+          </div>
         </div>
 
         <!-- Tab 6: 好友 -->
@@ -351,6 +632,182 @@
           </div>
         </div>
       </main>
+
+      <!-- Music Modals -->
+      <div v-if="activeMusicModal === 'upload'" class="modal-overlay" @click.self="closeMusicModal">
+        <div class="modal-content glass-panel music-modal-card upload-modal-card">
+          <div class="modal-header">
+            <h3>上传音乐</h3>
+            <button class="close-btn" @click="closeMusicModal">&times;</button>
+          </div>
+          <div class="modal-body music-upload-form">
+            <div class="form-group">
+              <label>选择音频文件 (MP3)</label>
+              <input ref="audioInputRef" type="file" accept=".mp3,audio/*" class="hidden-file-input" @change="handleAudioSelect" />
+              <div class="file-select-wrap">
+                <button class="modal-btn secondary-btn large-btn" @click="triggerAudioSelect">选择 MP3 文件</button>
+                <span class="selected-file-name">{{ uploadForm.file ? uploadForm.file.name : '未选择文件' }}</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>歌曲名</label>
+              <input type="text" v-model="uploadForm.title" placeholder="输入歌曲名称" class="info-input" />
+            </div>
+            <div class="form-group">
+              <label>作者（可选）</label>
+              <input type="text" v-model="uploadForm.artist" placeholder="输入作者名称，不填则展示为佚名" class="info-input" />
+            </div>
+            <div class="form-group">
+              <label>情绪标签</label>
+              <div class="tag-input-group stack">
+                <input type="text" v-model="uploadForm.tagInput" placeholder="输入情绪(如: 安静)" class="info-input" />
+                <div class="tag-action-row">
+                  <button class="modal-btn secondary-btn" @click="addTag">添加标签</button>
+                  <button class="modal-btn ai-btn" @click="autoDetectTags">AI 辅助判别</button>
+                </div>
+              </div>
+              <div class="current-tags">
+                <span v-for="(tag, index) in uploadForm.tags" :key="index" class="small-tag">
+                  {{ tag }} <span class="remove-tag" @click="uploadForm.tags.splice(index, 1)">&times;</span>
+                </span>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn secondary-btn" @click="closeMusicModal">取消</button>
+              <button class="modal-btn primary-btn" @click="submitUpload" :disabled="!uploadForm.file || !uploadForm.title">确认上传</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeMusicModal === 'playlist'" class="modal-overlay" @click.self="closeMusicModal">
+        <div class="modal-content glass-panel music-modal-card playlist-modal-card">
+          <div class="modal-header">
+            <h3>新建歌单</h3>
+            <button class="close-btn" @click="closeMusicModal">&times;</button>
+          </div>
+          <div class="modal-body music-create-form">
+            <div class="form-group">
+              <label>歌单名称</label>
+              <input type="text" v-model="newPlaylistName" placeholder="输入歌单名称" class="info-input" />
+            </div>
+            <div class="form-group">
+              <label>歌单简介</label>
+              <textarea
+                v-model="newPlaylistDescription"
+                placeholder="输入歌单简介，比如适合通勤、夜晚或专注时播放"
+                class="info-input info-textarea"
+                rows="4"
+              />
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn secondary-btn" @click="closeMusicModal">取消</button>
+              <button class="modal-btn primary-btn" @click="submitCreatePlaylist" :disabled="!newPlaylistName">创建</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showPlaylistDetailModal && activePlaylist" class="modal-overlay" @click.self="closePlaylistDetailModal">
+        <div class="modal-content glass-panel music-modal-card playlist-detail-modal-card">
+          <div class="modal-header">
+            <div class="playlist-detail-modal-title">
+              <span class="playlist-focus-label">当前展开</span>
+              <h3>{{ activePlaylist.name }}</h3>
+              <p>{{ activePlaylist.description }}</p>
+            </div>
+            <button class="close-btn" @click="closePlaylistDetailModal">&times;</button>
+          </div>
+          <div class="playlist-detail-modal-meta">
+            <span class="playlist-focus-meta">{{ formatPlaylistMeta(activePlaylist) }}</span>
+          </div>
+          <div v-if="playlistModalTracks.length" class="playlist-track-scroll-area">
+            <div class="playlist-track-list">
+              <article class="playlist-track-row" v-for="track in playlistModalTracks" :key="track.id">
+                <div class="playlist-track-main">
+                  <strong>{{ track.title }}</strong>
+                  <span>{{ getTrackArtist(track) }}</span>
+                </div>
+                <div class="playlist-track-side">
+                  <span>{{ formatDuration(track.duration) }}</span>
+                  <button class="icon-btn" @click="musicStore.removeTrackFromPlaylist(activePlaylist.id, track.id)" title="移出歌单">❌</button>
+                </div>
+              </article>
+            </div>
+          </div>
+          <div v-else class="empty-state compact-empty-state">
+            歌单里还没有音乐哦。
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showAddToPlaylistModal" class="modal-overlay" @click.self="showAddToPlaylistModal = false">
+        <div class="modal-content glass-panel">
+          <div class="modal-header">
+            <h3>加入歌单</h3>
+            <button class="close-btn" @click="showAddToPlaylistModal = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div v-if="musicStore.customPlaylists.length === 0" class="empty-state">
+              暂无歌单，请先创建歌单。
+            </div>
+            <div v-else class="playlist-select-list">
+              <button
+                v-for="pl in musicStore.customPlaylists" 
+                :key="pl.id" 
+                class="modal-btn secondary-btn full-width-btn"
+                @click="confirmAddToPlaylist(pl.id)"
+              >
+                {{ pl.name }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showSocialComposer" class="modal-overlay" @click.self="closeSocialComposer">
+        <div class="modal-content glass-panel music-modal-card social-modal-card">
+          <div class="modal-header">
+            <h3>发布帖子</h3>
+            <button class="close-btn" @click="closeSocialComposer">&times;</button>
+          </div>
+          <div class="modal-body social-create-form">
+            <div class="form-group">
+              <label>帖子内容</label>
+              <textarea
+                v-model="socialDraft.content"
+                class="info-input info-textarea"
+                rows="5"
+                placeholder="记录一下此刻发生了什么，或者想和朋友分享什么..."
+              />
+            </div>
+            <div class="form-group">
+              <label>现在的情绪</label>
+              <input
+                v-model="socialDraft.mood"
+                type="text"
+                class="info-input"
+                placeholder="例如：轻松、期待、平静"
+              />
+            </div>
+            <div class="social-draft-preview">
+              <span class="social-preview-label">预览标签</span>
+              <span class="social-mood-pill">{{ socialDraft.mood.trim() || '未填写情绪' }}</span>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn secondary-btn" @click="closeSocialComposer">取消</button>
+              <button
+                class="modal-btn primary-btn"
+                @click="submitSocialPost"
+                :disabled="!socialDraft.content.trim() || !socialDraft.mood.trim()"
+              >
+                发布动态
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
@@ -358,6 +815,10 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import { useMusicStore } from '@/stores/musicStore'
+import { ElMessage } from 'element-plus'
+
+const musicStore = useMusicStore()
 
 // --- Profile State ---
 const userProfile = ref({
@@ -795,6 +1256,366 @@ onMounted(() => {
   }
 })
 
+// --- Tab 4: Music State ---
+const activeMusicModal = ref('')
+const showAddToPlaylistModal = ref(false)
+const showPlaylistDetailModal = ref(false)
+const newPlaylistName = ref('')
+const newPlaylistDescription = ref('')
+const trackToAdd = ref(null)
+const activePlaylist = ref(null)
+const audioInputRef = ref(null)
+const playlistCarouselRef = ref(null)
+
+const uploadForm = ref({
+  file: null,
+  title: '',
+  artist: '',
+  duration: 0,
+  tagInput: '',
+  tags: []
+})
+
+import { musicCategories } from '@/data/mockContent'
+const allExternalTracks = computed(() => {
+  return musicCategories.flatMap(c => c.tracks)
+})
+
+const likedTracksList = computed(() => {
+  return musicStore.likedTrackIds.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || allExternalTracks.value.find(t => t.id === id)
+  }).filter(Boolean)
+})
+
+const collectedTracksList = computed(() => {
+  return musicStore.collectedTrackIds.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || allExternalTracks.value.find(t => t.id === id)
+  }).filter(Boolean)
+})
+
+const playlistModalTracks = computed(() => activePlaylist.value?.tracks ?? [])
+
+const getTrackTags = (track) => {
+  if (track.tags?.length) return track.tags.slice(0, 2)
+  return ['舒缓', '纯音乐']
+}
+
+const getTrackArtist = (track) => {
+  return track?.artist?.trim() || '佚名'
+}
+
+const formatDuration = (seconds) => {
+  if (!seconds) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const formatPlaylistMeta = (playlist) => {
+  const totalSeconds = playlist.tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
+  const totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
+  return `${playlist.tracks.length} 首 · ${totalMinutes} 分钟`
+}
+
+const handleAudioSelect = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    uploadForm.value.file = file
+    if (!uploadForm.value.title) {
+      uploadForm.value.title = file.name.replace(/\.[^/.]+$/, "") // Remove extension
+    }
+    const audio = document.createElement('audio')
+    audio.src = URL.createObjectURL(file)
+    audio.onloadedmetadata = () => {
+      uploadForm.value.duration = audio.duration
+    }
+  }
+}
+
+const triggerAudioSelect = () => {
+  audioInputRef.value?.click()
+}
+
+const openUploadModal = () => {
+  activeMusicModal.value = 'upload'
+}
+
+const openCreatePlaylistModal = () => {
+  activeMusicModal.value = 'playlist'
+}
+
+const resetUploadForm = () => {
+  uploadForm.value = {
+    file: null,
+    title: '',
+    artist: '',
+    duration: 0,
+    tagInput: '',
+    tags: []
+  }
+  if (audioInputRef.value) {
+    audioInputRef.value.value = ''
+  }
+}
+
+const closeMusicModal = () => {
+  if (activeMusicModal.value === 'upload') {
+    resetUploadForm()
+  }
+  if (activeMusicModal.value === 'playlist') {
+    newPlaylistName.value = ''
+    newPlaylistDescription.value = ''
+  }
+  activeMusicModal.value = ''
+}
+
+const addTag = () => {
+  const tag = uploadForm.value.tagInput.trim()
+  if (tag && !uploadForm.value.tags.includes(tag)) {
+    uploadForm.value.tags.push(tag)
+  }
+  uploadForm.value.tagInput = ''
+}
+
+const autoDetectTags = () => {
+  ElMessage.info('AI 正在分析音频情绪特征...')
+  setTimeout(() => {
+    const mockAITags = ['平静', '治愈', '孤独']
+    mockAITags.forEach(t => {
+      if (!uploadForm.value.tags.includes(t)) {
+        uploadForm.value.tags.push(t)
+      }
+    })
+    ElMessage.success('AI 标签生成完成')
+  }, 1000)
+}
+
+const submitUpload = () => {
+  if (!uploadForm.value.file || !uploadForm.value.title) return
+  
+  const newTrack = {
+    id: 'upload_' + Date.now(),
+    title: uploadForm.value.title.trim(),
+    artist: uploadForm.value.artist.trim(),
+    duration: uploadForm.value.duration || 180,
+    tags: [...uploadForm.value.tags],
+    cover: '/images/feature-img-1.jpg',
+    file: uploadForm.value.file
+  }
+  
+  musicStore.addUploadedTrack(newTrack)
+  closeMusicModal()
+  ElMessage.success('音乐上传成功')
+}
+
+const submitCreatePlaylist = () => {
+  if (!newPlaylistName.value) return
+  musicStore.createPlaylist(newPlaylistName.value, newPlaylistDescription.value.trim())
+  newPlaylistName.value = ''
+  newPlaylistDescription.value = ''
+  closeMusicModal()
+  ElMessage.success('歌单创建成功')
+}
+
+const openAddToPlaylistModal = (track) => {
+  trackToAdd.value = track
+  showAddToPlaylistModal.value = true
+}
+
+const confirmAddToPlaylist = (playlistId) => {
+  if (trackToAdd.value) {
+    musicStore.addTrackToPlaylist(playlistId, trackToAdd.value)
+    ElMessage.success('已加入歌单')
+  }
+  showAddToPlaylistModal.value = false
+  trackToAdd.value = null
+}
+
+const selectPlaylist = (pl) => {
+  activePlaylist.value = musicStore.customPlaylists.find(item => item.id === pl.id) || pl
+}
+
+const openPlaylistDetailModal = (pl) => {
+  selectPlaylist(pl)
+  showPlaylistDetailModal.value = true
+}
+
+const closePlaylistDetailModal = () => {
+  showPlaylistDetailModal.value = false
+}
+
+const handlePlaylistWheel = (event) => {
+  const container = playlistCarouselRef.value || event.currentTarget
+  if (!container) return
+
+  const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+  container.scrollBy({
+    left: delta * 1.15,
+    behavior: 'smooth'
+  })
+}
+
+const deletePlaylistAndReset = (playlistId) => {
+  musicStore.deletePlaylist(playlistId)
+  if (activePlaylist.value?.id === playlistId) {
+    activePlaylist.value = null
+    showPlaylistDetailModal.value = false
+  }
+}
+
+watch(
+  () => musicStore.customPlaylists,
+  (playlists) => {
+    if (!playlists.length) {
+      activePlaylist.value = null
+      showPlaylistDetailModal.value = false
+      return
+    }
+
+    if (!activePlaylist.value) {
+      activePlaylist.value = playlists[0]
+      return
+    }
+
+    activePlaylist.value = playlists.find(item => item.id === activePlaylist.value.id) || playlists[0]
+  },
+  { immediate: true, deep: true }
+)
+
+// --- Tab 5: Social State ---
+const socialMoodSuggestions = ['轻松', '期待', '平静', '治愈']
+
+const createSocialPost = (post) => ({
+  ...post,
+  highlights: Array.isArray(post.highlights) ? [...post.highlights] : [],
+  comments: Array.isArray(post.comments) ? post.comments.map(comment => ({ ...comment })) : [],
+  commentDraft: ''
+})
+
+const showSocialComposer = ref(false)
+const socialDraft = ref({
+  content: '',
+  mood: ''
+})
+const socialPosts = ref([
+  createSocialPost({
+    id: 'post_1',
+    authorName: '小明',
+    authorRole: '好友',
+    timeLabel: '10 分钟前',
+    mood: '轻松',
+    content: '今天下课后沿着操场走了一圈，风很舒服，感觉整个人都慢下来了一点。',
+    highlights: ['散步', '晚风'],
+    likes: 18,
+    likedByMe: false,
+    comments: [
+      { id: 'comment_1', author: 'Alice', content: '听起来很治愈，我也想去走走。', timeLabel: '8 分钟前' },
+      { id: 'comment_2', author: '我', content: '这种慢下来的时刻真的很难得。', timeLabel: '5 分钟前' }
+    ]
+  }),
+  createSocialPost({
+    id: 'post_2',
+    authorName: 'Alice',
+    authorRole: '好友',
+    timeLabel: '32 分钟前',
+    mood: '期待',
+    content: '把这周的任务清单整理完了，晚上准备听点歌，给明天留一点盼头。',
+    highlights: ['计划感', '夜晚歌单'],
+    likes: 25,
+    likedByMe: true,
+    comments: [
+      { id: 'comment_3', author: '李华', content: '完成清单的成就感最适合配音乐。', timeLabel: '20 分钟前' }
+    ]
+  }),
+  createSocialPost({
+    id: 'post_3',
+    authorName: '李华',
+    authorRole: '好友',
+    timeLabel: '1 小时前',
+    mood: '平静',
+    content: '午后在图书馆坐了很久，什么都没急着做，只是把手头的内容一点点收完。',
+    highlights: ['图书馆', '专注'],
+    likes: 12,
+    likedByMe: false,
+    comments: [
+      { id: 'comment_4', author: '小明', content: '这种节奏感很舒服。', timeLabel: '56 分钟前' }
+    ]
+  })
+])
+
+const socialSummary = computed(() => {
+  return socialPosts.value.reduce((summary, post) => {
+    summary.postCount += 1
+    summary.commentCount += post.comments.length
+    summary.likeCount += post.likes
+    return summary
+  }, {
+    postCount: 0,
+    commentCount: 0,
+    likeCount: 0
+  })
+})
+
+const getNameInitial = (name) => {
+  return (name || '我').trim().slice(0, 1).toUpperCase()
+}
+
+const resetSocialDraft = () => {
+  socialDraft.value = {
+    content: '',
+    mood: ''
+  }
+}
+
+const openSocialComposer = () => {
+  showSocialComposer.value = true
+}
+
+const closeSocialComposer = () => {
+  showSocialComposer.value = false
+  resetSocialDraft()
+}
+
+const toggleSocialLike = (post) => {
+  post.likedByMe = !post.likedByMe
+  post.likes += post.likedByMe ? 1 : -1
+}
+
+const submitSocialComment = (post) => {
+  const content = post.commentDraft.trim()
+  if (!content) return
+
+  post.comments.push({
+    id: `comment_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
+    author: userProfile.value.name || '我',
+    content,
+    timeLabel: '刚刚'
+  })
+  post.commentDraft = ''
+  ElMessage.success('评论成功')
+}
+
+const submitSocialPost = () => {
+  const content = socialDraft.value.content.trim()
+  const mood = socialDraft.value.mood.trim()
+  if (!content || !mood) return
+
+  socialPosts.value.unshift(createSocialPost({
+    id: `post_${Date.now()}`,
+    authorName: userProfile.value.name || '我',
+    authorRole: '我',
+    timeLabel: '刚刚',
+    mood,
+    content,
+    highlights: [mood],
+    likes: 0,
+    likedByMe: false,
+    comments: []
+  }))
+  closeSocialComposer()
+  ElMessage.success('动态发布成功')
+}
+
 // --- Tab 6: Friends State ---
 const friendsList = ref([
   { id: '1001', name: '小明', intimacy: 3 },
@@ -949,8 +1770,36 @@ window.addEventListener('resize', () => {
   align-items: center;
   position: relative;
   overflow: hidden;
-  /* Static Light Green Theme Background */
-  background: linear-gradient(135deg, #f4fdf6, #e8f5e9, #f4fdf6);
+  background:
+    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.92), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(204, 226, 212, 0.8), transparent 26%),
+    radial-gradient(circle at 78% 82%, rgba(225, 239, 229, 0.86), transparent 20%),
+    linear-gradient(145deg, #f5fbf5 0%, #e4f1e8 48%, #edf7ef 100%);
+}
+
+.personal-space-page::before,
+.personal-space-page::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(6px);
+}
+
+.personal-space-page::before {
+  width: 360px;
+  height: 360px;
+  top: -90px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, rgba(219, 236, 225, 0.2) 58%, transparent 78%);
+}
+
+.personal-space-page::after {
+  width: 300px;
+  height: 300px;
+  bottom: -120px;
+  left: -70px;
+  background: radial-gradient(circle, rgba(206, 227, 214, 0.5) 0%, rgba(242, 249, 244, 0.12) 62%, transparent 78%);
 }
 
 .back-btn {
@@ -960,17 +1809,24 @@ window.addEventListener('resize', () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--color-text-primary);
+  color: #385058;
   text-decoration: none;
-  font-size: 1.1rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   transition: all var(--transition-fast);
   z-index: 10;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 10px 24px rgba(94, 123, 114, 0.08);
+  backdrop-filter: blur(10px);
 }
 
 .back-btn:hover {
-  transform: translateX(-5px);
+  transform: translateX(-4px) translateY(-1px);
   color: var(--color-accent-sage);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .page-shell {
@@ -980,20 +1836,22 @@ window.addEventListener('resize', () => {
   gap: 20px;
   margin-top: 40px;
   height: calc(100vh - 120px);
+  position: relative;
+  z-index: 1;
 }
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(250, 252, 251, 0.66) 100%);
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-float);
+  box-shadow: 0 22px 48px rgba(93, 121, 112, 0.12);
   overflow: hidden;
 }
 
 .glass-panel-inner {
-  background: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52) 0%, rgba(247, 250, 248, 0.44) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: var(--radius-lg);
   padding: 20px;
 }
@@ -1004,22 +1862,68 @@ window.addEventListener('resize', () => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 30px 0;
+  padding: 22px 18px 20px;
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(246, 251, 248, 0.72) 100%);
+}
+
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.75), transparent 26%),
+    linear-gradient(180deg, rgba(180, 206, 188, 0.12), transparent 34%);
+  pointer-events: none;
+}
+
+.sidebar-brand {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 22px;
+  padding: 18px 16px 16px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(244, 249, 246, 0.6));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.sidebar-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6f8a7e;
+  background: rgba(190, 214, 197, 0.36);
 }
 
 .sidebar-title {
-  padding: 0 30px;
-  margin-bottom: 30px;
+  padding: 0;
+  margin: 12px 0 8px;
   font-family: var(--font-serif);
-  color: var(--color-text-primary);
-  font-size: 1.5rem;
+  color: #2f4247;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-subtitle {
+  margin: 0;
+  color: #7a8e88;
+  font-size: 0.9rem;
+  line-height: 1.65;
 }
 
 .space-nav {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0 15px;
+  padding: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .nav-item {
@@ -1027,29 +1931,78 @@ window.addEventListener('resize', () => {
   align-items: center;
   gap: 12px;
   padding: 15px 20px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-lg);
-  color: var(--color-text-secondary);
-  font-size: 1.1rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid transparent;
+  border-radius: 18px;
+  color: #68807a;
+  font-size: 1.05rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
   text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent 62%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.5);
-  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.62);
+  color: #33484d;
+  border-color: rgba(203, 220, 212, 0.85);
+  transform: translateX(4px);
+}
+
+.nav-item:hover::before {
+  opacity: 1;
 }
 
 .nav-item.active {
-  background: var(--color-accent-sage);
+  background: linear-gradient(135deg, #9bb992 0%, #86aa8a 100%);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(124, 152, 133, 0.3);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 28px rgba(124, 152, 133, 0.24);
+  transform: translateX(6px);
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.12);
 }
 
 .nav-icon {
   width: 20px;
+  height: 20px;
+  padding: 9px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #6a857c;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  position: relative;
+  z-index: 1;
+}
+
+.nav-item span {
+  position: relative;
+  z-index: 1;
+}
+
+.nav-item.active .nav-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 /* Main Content */
@@ -1059,6 +2012,19 @@ window.addEventListener('resize', () => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  position: relative;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.36), transparent 18%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 250, 247, 0.66));
+}
+
+.main-content::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 92px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent);
+  pointer-events: none;
 }
 
 .section-title {
@@ -1276,20 +2242,303 @@ window.addEventListener('resize', () => {
   min-height: 200px;
 }
 
-/* Placeholder Tabs */
-.placeholder-tab {
+/* Social Tab */
+.social-tab {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  gap: 20px;
   height: 100%;
-  color: var(--color-text-secondary);
+  min-height: 0;
 }
 
-.placeholder-icon {
-  font-size: 4rem;
-  color: rgba(0,0,0,0.1);
-  margin-bottom: 20px;
+.social-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.social-header-desc {
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.social-publish-btn,
+.social-comment-btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+.social-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(260px, 0.95fr);
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+.social-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.social-feed::-webkit-scrollbar {
+  width: 8px;
+}
+
+.social-feed::-webkit-scrollbar-thumb {
+  background: rgba(118, 150, 157, 0.3);
+  border-radius: 999px;
+}
+
+.social-feed::-webkit-scrollbar-track {
+  background: rgba(235, 242, 240, 0.72);
+  border-radius: 999px;
+}
+
+.social-post-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid rgba(118, 150, 157, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 250, 248, 0.92) 100%);
+}
+
+.social-post-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.social-author-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.social-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(118, 150, 157, 0.88), rgba(144, 181, 167, 0.92));
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(118, 150, 157, 0.18);
+}
+
+.social-author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.social-role-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(118, 150, 157, 0.12);
+  color: #56727a;
+  font-size: 0.78rem;
+}
+
+.social-post-time,
+.social-comment-time {
+  color: #809299;
+  font-size: 0.85rem;
+}
+
+.social-mood-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(118, 150, 157, 0.12);
+  color: #3f5b63;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.social-post-content {
+  margin: 0;
+  color: #32444a;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.social-highlight-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.social-highlight-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(118, 150, 157, 0.16);
+  color: #56727a;
+  font-size: 0.82rem;
+}
+
+.social-post-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(118, 150, 157, 0.12);
+}
+
+.social-action-chip {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(118, 150, 157, 0.1);
+  color: #436068;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.social-action-chip:hover,
+.social-action-chip.active {
+  background: rgba(118, 150, 157, 0.2);
+  color: #29434a;
+}
+
+.social-comment-total {
+  color: #71848b;
+  font-size: 0.9rem;
+}
+
+.social-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.social-comment-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.social-comment-author {
+  color: #2b4147;
+  font-weight: 600;
+}
+
+.social-comment-text {
+  color: #4d6167;
+}
+
+.social-comment-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.social-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.social-side-card {
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.social-side-card.muted {
+  background: rgba(244, 248, 246, 0.88);
+}
+
+.social-side-kicker {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: #7b9096;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.social-side-card h4 {
+  margin: 0 0 12px;
+  color: #24353a;
+}
+
+.social-side-card p {
+  margin: 0;
+  color: #62757c;
+  line-height: 1.7;
+}
+
+.social-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.social-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(248, 251, 249, 0.95);
+}
+
+.social-stat-item strong {
+  font-size: 1.35rem;
+  color: #2d4750;
+}
+
+.social-stat-item span {
+  color: #7a8f95;
+  font-size: 0.88rem;
+}
+
+.social-trend-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.social-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.social-draft-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(248, 251, 249, 0.96);
+}
+
+.social-preview-label {
+  color: #73878d;
+  font-size: 0.9rem;
 }
 
 .emotion-summary {
@@ -1929,6 +3178,899 @@ window.addEventListener('resize', () => {
 
 .danger-btn:hover {
   background: #ff1744;
+}
+
+/* === Music Tab Styles === */
+.music-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.music-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+
+.music-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.music-main-btn {
+  min-width: 128px;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+}
+
+.music-content {
+  flex: 1;
+  padding: 10px 0 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.music-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.music-overview-card {
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 250, 248, 0.9) 100%);
+  border: 1px solid rgba(107, 140, 147, 0.14);
+  box-shadow: 0 12px 28px rgba(63, 89, 98, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.music-overview-card strong {
+  font-size: 1.9rem;
+  line-height: 1;
+  color: #22353b;
+}
+
+.music-overview-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #61777e;
+}
+
+.overview-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #72919a;
+}
+
+.music-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.section-meta {
+  font-size: 0.86rem;
+  color: #4f6870;
+  font-weight: 600;
+  padding: 6px 12px;
+  min-width: 72px;
+  min-height: 34px;
+  border-radius: 999px;
+  background: rgba(117, 151, 160, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  line-height: 1;
+  flex-shrink: 0;
+  writing-mode: horizontal-tb;
+}
+
+.music-showcase-card {
+  height: 540px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(108, 140, 149, 0.14);
+  box-shadow: 0 18px 36px rgba(57, 84, 92, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.uploads-card {
+  background: linear-gradient(180deg, rgba(251, 254, 252, 0.98) 0%, rgba(241, 249, 245, 0.96) 100%);
+}
+
+.likes-card {
+  background: linear-gradient(180deg, rgba(255, 251, 251, 0.98) 0%, rgba(253, 242, 246, 0.96) 100%);
+}
+
+.collections-card {
+  background: linear-gradient(180deg, rgba(251, 252, 255, 0.98) 0%, rgba(242, 246, 255, 0.96) 100%);
+}
+
+.playlists-card {
+  background: linear-gradient(180deg, rgba(250, 252, 251, 0.98) 0%, rgba(239, 247, 243, 0.96) 100%);
+}
+
+.music-showcase-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.music-showcase-header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.music-showcase-header h4 {
+  margin: 6px 0 8px;
+  font-size: 1.28rem;
+  color: #203239;
+}
+
+.music-showcase-header p {
+  margin: 0;
+  color: #60777e;
+  line-height: 1.65;
+  font-size: 0.92rem;
+}
+
+.music-card-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7f97a0;
+}
+
+.music-track-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.music-track-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.music-track-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(113, 144, 152, 0.1);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+}
+
+.music-track-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(63, 89, 98, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.track-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.track-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.track-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  color: #23363d;
+}
+
+.track-duration {
+  flex-shrink: 0;
+  color: #6d848c;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.track-artist-name {
+  color: #5f7077;
+  font-size: 0.9rem;
+}
+
+.track-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.track-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.small-tag {
+  background: rgba(var(--color-accent-sage-rgb), 0.22);
+  color: var(--color-accent-sage);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.subtle-tag {
+  background: rgba(111, 126, 160, 0.12);
+  color: #5b6f96;
+}
+
+.compact-empty-state {
+  flex: 1;
+  min-height: 180px;
+  border-radius: 18px;
+  border: 1px dashed rgba(112, 144, 152, 0.26);
+  background: rgba(255, 255, 255, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  color: #6a7f86;
+}
+
+.remove-tag {
+  margin-left: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.icon-btn {
+  background: rgba(243, 249, 247, 0.92);
+  border: 1px solid rgba(86, 117, 126, 0.14);
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.95;
+  transition: opacity 0.2s, transform 0.2s, border-color 0.2s, background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  border-color: rgba(66, 98, 108, 0.36);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.icon-btn.danger:hover {
+  color: #ff5252;
+}
+
+.active-icon {
+  opacity: 1;
+}
+
+.playlist-carousel-shell {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scroll-padding-left: 2px;
+}
+
+.playlist-carousel {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, calc(50% - 8px));
+  gap: 14px;
+  transition: transform 0.35s ease;
+}
+
+.playlist-preview-card {
+  background: rgba(255,255,255,0.82);
+  border-radius: 18px;
+  padding: 18px 16px;
+  border: 1px solid rgba(112, 144, 152, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.24s, box-shadow 0.24s, border-color 0.24s;
+  cursor: pointer;
+  scroll-snap-align: start;
+  min-height: 100%;
+}
+
+.playlist-preview-card:hover,
+.playlist-preview-card.active {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(97, 132, 140, 0.28);
+}
+
+.playlist-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.playlist-info h4 {
+  font-size: 1.02rem;
+  margin: 0;
+  color: #22353b;
+}
+
+.playlist-info p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: #64797f;
+  min-height: 72px;
+}
+
+.playlist-info span {
+  font-size: 0.82rem;
+  color: #667d84;
+}
+
+.playlist-card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.slim-btn {
+  height: 34px;
+  border-radius: 999px;
+  padding: 0 14px;
+}
+
+.delete-pl-btn {
+  border-radius: 10px;
+}
+
+.always-show {
+  display: inline-flex !important;
+}
+
+.playlist-focus-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7b939b;
+  font-weight: 700;
+}
+
+.playlist-focus-meta {
+  color: #627981;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.playlist-detail-modal-card.modal-content {
+  width: min(calc(100vw - 48px), 620px);
+  max-width: 620px;
+}
+
+.social-modal-card.modal-content {
+  width: min(calc(100vw - 48px), 560px);
+}
+
+.playlist-detail-modal-title h3 {
+  margin: 6px 0 6px;
+}
+
+.playlist-detail-modal-title p {
+  margin: 0;
+  color: #64797f;
+  line-height: 1.6;
+}
+
+.playlist-detail-modal-meta {
+  margin-bottom: 8px;
+}
+
+.playlist-track-scroll-area {
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.info-textarea {
+  min-height: 108px;
+  resize: vertical;
+}
+
+.playlist-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.playlist-track-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(247, 251, 249, 0.92);
+}
+
+.playlist-track-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.playlist-track-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #23363d;
+}
+
+.playlist-track-main span {
+  color: #667b82;
+  font-size: 0.88rem;
+}
+
+.playlist-track-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6b828a;
+  font-size: 0.84rem;
+}
+
+.music-track-scroll-area::-webkit-scrollbar,
+.playlist-track-scroll-area::-webkit-scrollbar,
+.playlist-carousel-shell::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.music-track-scroll-area::-webkit-scrollbar-thumb,
+.playlist-track-scroll-area::-webkit-scrollbar-thumb,
+.playlist-carousel-shell::-webkit-scrollbar-thumb {
+  background: rgba(118, 150, 157, 0.34);
+  border-radius: 999px;
+}
+
+.music-track-scroll-area::-webkit-scrollbar-track,
+.playlist-track-scroll-area::-webkit-scrollbar-track,
+.playlist-carousel-shell::-webkit-scrollbar-track {
+  background: rgba(235, 242, 240, 0.72);
+  border-radius: 999px;
+}
+
+@media (max-width: 1180px) {
+  .sidebar {
+    width: 232px;
+  }
+
+  .music-overview-grid,
+  .music-sections-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playlist-carousel {
+    grid-auto-columns: minmax(220px, calc(70% - 8px));
+  }
+
+  .social-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .music-sections-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .back-btn {
+    top: 18px;
+    left: 18px;
+  }
+
+  .page-shell {
+    margin-top: 64px;
+    height: auto;
+    min-height: calc(100vh - 120px);
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .music-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .music-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .music-showcase-card {
+    height: auto;
+    min-height: 520px;
+    padding: 18px;
+  }
+
+  .social-header,
+  .social-post-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .music-track-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .track-action-row {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .personal-space-page {
+    padding: 24px 12px;
+  }
+
+  .main-content {
+    padding: 18px;
+  }
+
+  .sidebar-brand {
+    padding: 16px 14px;
+  }
+
+  .nav-item {
+    padding: 14px 16px;
+  }
+
+  .music-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .music-track-card,
+  .playlist-track-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .track-title-row,
+  .track-action-row,
+  .playlist-track-side {
+    width: 100%;
+  }
+
+  .track-title-row,
+  .playlist-track-side {
+    justify-content: space-between;
+  }
+
+  .playlist-carousel {
+    grid-auto-columns: 88%;
+  }
+
+  .social-comment-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+.music-upload-form .form-group,
+.music-create-form .form-group,
+.social-create-form .form-group {
+  margin: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.music-modal-card.modal-content {
+  width: min(calc(100vw - 48px), 560px);
+  max-height: min(calc(100vh - 48px), 720px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 28px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #f9fdfb 0%, #f2f9f6 100%);
+  border: 1px solid rgba(118, 150, 157, 0.2);
+  box-shadow: 0 18px 44px rgba(45, 74, 84, 0.16);
+}
+
+.upload-modal-card.modal-content {
+  max-width: 560px;
+}
+
+.playlist-modal-card.modal-content {
+  width: min(calc(100vw - 48px), 440px);
+  max-width: 440px;
+}
+
+.music-modal-card .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(118, 150, 157, 0.16);
+}
+
+.music-modal-card .modal-header h3 {
+  font-size: 1.35rem;
+  color: #1f3036;
+  margin: 0;
+}
+
+.music-modal-card .close-btn {
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(111, 124, 130, 0.12);
+  color: #33464d;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.music-modal-card .close-btn:hover {
+  background: rgba(111, 124, 130, 0.2);
+  transform: scale(1.03);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(22, 35, 40, 0.32);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.modal-content {
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.music-upload-form,
+.music-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.music-upload-form label {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #2d3c42;
+  font-weight: 600;
+}
+
+.music-upload-form .info-input,
+.music-create-form .info-input {
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(124, 150, 156, 0.36);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.file-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.selected-file-name {
+  flex: 1;
+  min-width: 0;
+  color: #4c636b;
+  font-size: 0.92rem;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(124, 150, 156, 0.2);
+}
+
+.tag-input-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tag-input-group.stack {
+  flex-direction: column;
+}
+
+.tag-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.current-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ai-btn {
+  background: linear-gradient(135deg, #8c85ff, #a48dff);
+  color: #fff;
+  border: none;
+}
+
+.ai-btn:hover {
+  background: linear-gradient(135deg, #7f79f2, #9681ef);
+}
+
+.full-width-btn {
+  width: 100%;
+  margin-bottom: 10px;
+  justify-content: flex-start;
+}
+
+.playlist-select-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.modal-btn {
+  border: none;
+  border-radius: 14px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-btn:hover {
+  transform: translateY(-1px);
+}
+
+.modal-btn:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.primary-btn {
+  background: #6f7c82;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(77, 95, 101, 0.2);
+}
+
+.primary-btn:hover {
+  background: #5f6c72;
+}
+
+.secondary-btn {
+  background: #f9fdfc;
+  color: #203039;
+  border: 1px solid rgba(74, 98, 106, 0.32);
+}
+
+.secondary-btn:hover {
+  background: #ffffff;
+}
+
+.large-btn {
+  min-width: 165px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.modal-actions .modal-btn {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 16px;
+  }
+
+  .music-modal-card.modal-content,
+  .playlist-modal-card.modal-content {
+    width: calc(100vw - 32px);
+    max-width: none;
+    max-height: calc(100vh - 32px);
+    padding: 20px 18px;
+    border-radius: 18px;
+  }
+
+  .music-modal-card .modal-header {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+  }
+
+  .file-select-wrap,
+  .tag-action-row,
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .large-btn,
+  .modal-actions .modal-btn,
+  .tag-action-row .modal-btn {
+    width: 100%;
+  }
 }
 
 </style>
