@@ -162,7 +162,7 @@
             <span>{{ isListening ? '结束语音输入' : '开始语音输入' }}</span>
           </button>
           <p class="heard-text">
-            {{ heardText || '点击后可直接说话；当前使用浏览器语音识别与前端模拟回复。' }}
+            {{ heardText || '点击后可直接说话；语音会转文字后发送给 AI，识别情绪并给出陪伴回复。' }}
           </p>
         </div>
       </section>
@@ -174,7 +174,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { initialMessages, mockReplies, musicCategories } from '@/data/mockContent'
+import axios from 'axios'
+import { initialMessages, musicCategories } from '@/data/mockContent'
 
 const router = useRouter()
 const route = useRoute()
@@ -295,6 +296,22 @@ const pushAssistantMessage = (content) => {
   })
 }
 
+const askCompanion = async (transcript) => {
+  try {
+    const { data } = await axios.post('http://127.0.0.1:5000/api/companion/chat', {
+      text: transcript,
+    })
+
+    const emotionText = data?.emotion ? `（识别情绪：${data.emotion}）` : ''
+    const replyText = data?.reply || '我在这里，先慢慢呼吸，我们可以一点点把感受说出来。'
+    pushAssistantMessage(`${emotionText}${replyText}`)
+  } catch (error) {
+    console.error(error)
+    pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
+    ElMessage.error('陪伴接口调用失败，请检查后端服务与 API Key。')
+  }
+}
+
 const handleTranscript = (transcript) => {
   heardText.value = `已识别：${transcript}`
   messages.value.push({
@@ -304,10 +321,7 @@ const handleTranscript = (transcript) => {
     timestamp: timeStamp(),
   })
 
-  const reply = mockReplies[Math.floor(Math.random() * mockReplies.length)]
-  window.setTimeout(() => {
-    pushAssistantMessage(reply)
-  }, 500)
+  askCompanion(transcript)
 }
 
 const stopVoiceRecognition = () => {

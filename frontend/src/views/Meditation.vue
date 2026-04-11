@@ -64,7 +64,8 @@
             </button>
             <transition name="fade-slide">
               <div class="guide-text-box" v-if="showGuideText">
-                <p>{{ guideText }}</p>
+                <p v-if="isGuideLoading">正在生成与你当前情绪匹配的冥想引导...</p>
+                <p v-else>{{ guideText }}</p>
               </div>
             </transition>
           </div>
@@ -167,6 +168,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 import CircleTimer from '@/components/CircleTimer.vue'
 
 const emotions = [
@@ -282,10 +284,30 @@ const handleTimerComplete = () => {
 }
 
 const showGuideText = ref(false)
-const guideText = ref('请找一个舒适的姿势坐下或躺下。轻轻闭上双眼，做三次深长的呼吸。吸气时，感受清新的空气充满胸腔；呼气时，让身体的紧张感随之消散。现在，将注意力放在你的呼吸上，不要刻意控制，只是静静地观察它。如果思绪飘远，没关系，温柔地将它拉回呼吸上。在这里，你不需要做任何事，只需享受这一刻的宁静。')
+const isGuideLoading = ref(false)
+const guideText = ref('请选择一种冥想背景音，我会为你生成对应的冥想引导。')
+
+const fetchMeditationGuide = async (emotionName) => {
+  isGuideLoading.value = true
+  try {
+    const { data } = await axios.post('http://127.0.0.1:5000/api/meditation/guide', {
+      emotion: emotionName,
+    })
+    guideText.value = data?.guide || '当前引导词生成失败，请稍后重试。'
+  } catch (error) {
+    console.error(error)
+    guideText.value = '冥想引导服务暂时不可用，请稍后再试。'
+    ElMessage.error('冥想引导生成失败，请检查后端服务与 Kimi API Key。')
+  } finally {
+    isGuideLoading.value = false
+  }
+}
 
 const toggleGuide = () => {
   showGuideText.value = !showGuideText.value
+  if (showGuideText.value && currentTrack.value) {
+    fetchMeditationGuide(currentTrack.value.name)
+  }
 }
 
 // Emotion Scroll Logic
@@ -340,6 +362,10 @@ const selectTrack = (track) => {
   progressSeconds.value = 0
   isPlaying.value = true
   startTimer()
+
+  if (showGuideText.value) {
+    fetchMeditationGuide(track.name)
+  }
 }
 
 const togglePlayback = () => {
