@@ -15,7 +15,8 @@ const routes = [
   },
   {
     path: '/personal-space',
-    redirect: { name: 'service', query: { panel: 'personal-space' } },
+    name: 'personal-space',
+    component: () => import('@/views/PersonalSpace.vue'),
   },
 ]
 
