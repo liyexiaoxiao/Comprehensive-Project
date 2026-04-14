@@ -26,6 +26,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+/**
+ * 数据服务 HTTP API：将 AI 对话、情绪快照、用户行为等事件写入 MongoDB，并支持按用户查询近期记录。
+ */
 @RestController
 @RequestMapping("/api/v1")
 @CrossOrigin(origins = "*")
@@ -44,6 +47,7 @@ public class DataApiController {
 		this.userBehaviorLogRepository = userBehaviorLogRepository;
 	}
 
+	/** 追加一条 AI 对话日志（需网关传入 X-User-Id）。 */
 	@PostMapping("/logs/ai-chat")
 	public ResponseEntity<AiChatLog> appendAiChatLog(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -59,6 +63,7 @@ public class DataApiController {
 		return ResponseEntity.ok(aiChatLogRepository.save(doc));
 	}
 
+	/** 追加一条情绪快照（分析结果等）。 */
 	@PostMapping("/logs/emotion-snapshot")
 	public ResponseEntity<EmotionSnapshot> appendEmotionSnapshot(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -74,6 +79,7 @@ public class DataApiController {
 		return ResponseEntity.ok(emotionSnapshotRepository.save(doc));
 	}
 
+	/** 追加一条用户行为日志（播放、点击等业务动作）。 */
 	@PostMapping("/logs/user-behavior")
 	public ResponseEntity<UserBehaviorLog> appendUserBehaviorLog(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -89,6 +95,7 @@ public class DataApiController {
 		return ResponseEntity.ok(userBehaviorLogRepository.save(doc));
 	}
 
+	/** 查询当前用户的 AI 对话历史；可选 sessionId 按会话筛选。 */
 	@GetMapping("/me/ai-chat-logs")
 	public List<AiChatLog> listAiChatLogs(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -102,6 +109,7 @@ public class DataApiController {
 		return aiChatLogRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, pageSize));
 	}
 
+	/** 查询当前用户近期的情绪快照列表。 */
 	@GetMapping("/me/emotion-snapshots")
 	public List<EmotionSnapshot> listEmotionSnapshots(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -111,6 +119,7 @@ public class DataApiController {
 		return emotionSnapshotRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, pageSize));
 	}
 
+	/** 查询当前用户近期的行为日志列表。 */
 	@GetMapping("/me/user-behavior-logs")
 	public List<UserBehaviorLog> listUserBehaviorLogs(
 			@RequestHeader("X-User-Id") String xUserId,

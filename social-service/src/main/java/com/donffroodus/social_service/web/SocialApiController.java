@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.donffroodus.social_service.entity.MoodDiary;
 import com.donffroodus.social_service.repository.MoodDiaryRepository;
 
+/**
+ * 社交服务 HTTP API：用户情绪日记（mood_diary）的增删改查。
+ */
 @RestController
 @RequestMapping("/api/v1")
 @CrossOrigin(origins = "*")
@@ -30,6 +33,7 @@ public class SocialApiController {
 		this.moodDiaryRepository = moodDiaryRepository;
 	}
 
+	/** 列出当前用户的情绪日记；可选 date 按日期筛选。 */
 	@GetMapping("/me/mood-diaries")
 	public List<MoodDiary> listUserMoodDiaries(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -41,6 +45,7 @@ public class SocialApiController {
 		return moodDiaryRepository.findByUserIdOrderByDateDescCreatedAtDesc(userId);
 	}
 
+	/** 按主键获取当前用户的一条情绪日记。 */
 	@GetMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<MoodDiary> getMoodDiary(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -51,6 +56,7 @@ public class SocialApiController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	/** 新建一条情绪日记。 */
 	@PostMapping("/me/mood-diaries")
 	public ResponseEntity<MoodDiary> createMoodDiary(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -68,6 +74,7 @@ public class SocialApiController {
 		return ResponseEntity.ok(moodDiaryRepository.save(diary));
 	}
 
+	/** 更新当前用户已有的一条情绪日记。 */
 	@PutMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<MoodDiary> updateMoodDiary(
 			@RequestHeader("X-User-Id") String xUserId,
@@ -88,6 +95,7 @@ public class SocialApiController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	/** 删除当前用户的一条情绪日记。 */
 	@DeleteMapping("/me/mood-diaries/{diaryId}")
 	public ResponseEntity<Void> deleteMoodDiary(
 			@RequestHeader("X-User-Id") String xUserId,
