@@ -21,4 +21,16 @@ public final class GatewayAuthSupport {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid X-User-Id");
 		}
 	}
+
+	/** 用于公开读接口：未登录或非法头时返回 null，不抛错。 */
+	public static Long optionalUserId(String xUserId) {
+		if (xUserId == null || xUserId.isBlank()) {
+			return null;
+		}
+		try {
+			return Long.parseLong(xUserId.strip());
+		} catch (NumberFormatException e) {
+			return null;
+		}
+	}
 }
