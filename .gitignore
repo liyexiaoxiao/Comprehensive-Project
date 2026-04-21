@@ -39,6 +39,9 @@ backend/venv/Lib/site-packages/tensorflow/
 
 target/
 
+AI-service/backend/.env
+AI-service/backend/.env.*
+
 user-service/src/main/resources/application-dev.yml
 
 docs/

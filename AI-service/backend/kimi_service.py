@@ -1,8 +1,13 @@
 import os
+
+from dotenv import load_dotenv
 from openai import OpenAI
 
 
+load_dotenv()
+
 KIMI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+KIMI_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 ALLOWED_EMOTIONS = [
     "平静",
     "放松",
@@ -21,8 +26,10 @@ def generate_meditation_guide(emotion_name: str) -> str:
     """根据情绪标签生成冥想引导词。"""
     if emotion_name not in ALLOWED_EMOTIONS:
         raise RuntimeError("不支持的情绪类型")
+    if not KIMI_API_KEY:
+        raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
-    client = OpenAI(api_key="your api key", base_url=KIMI_BASE_URL)
+    client = OpenAI(api_key=KIMI_API_KEY, base_url=KIMI_BASE_URL)
 
     completion = client.chat.completions.create(
         model="kimi-k2.5",

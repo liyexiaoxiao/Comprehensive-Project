@@ -4,6 +4,9 @@ Flask backend — dual-channel fusion with VA mapping and complex emotion infere
 """
 
 import os
+os.environ.setdefault("HF_HOME", "D:/hf_cache")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 import math
 import tempfile
@@ -13,7 +16,6 @@ import torch
 import torchaudio
 from transformers import pipeline
 from langdetect import detect
-from deep_translator import GoogleTranslator
 
 app = Flask(__name__)
 
@@ -58,30 +60,45 @@ TEXT_LABEL_MAP = {
 speech_classifier = None
 speech_to_text = None
 text_classifier = None
+zh_en_translator = None
 
 
 def load_model():
-    global speech_classifier, speech_to_text, text_classifier
+    global speech_classifier, speech_to_text, text_classifier, zh_en_translator
     device = 0 if torch.cuda.is_available() else -1
     print(f"Loading models on {'cuda' if device == 0 else 'cpu'}...")
 
-    speech_classifier = pipeline(
-        "audio-classification",
-        model="prithivMLmods/Speech-Emotion-Classification",
-        device=device
-    )
-    speech_to_text = pipeline(
-        "automatic-speech-recognition",
-        model="openai/whisper-tiny",
-        device=device
-    )
-    text_classifier = pipeline(
-        "text-classification",
-        model="j-hartmann/emotion-english-distilroberta-base",
-        return_all_scores=True,
-        framework="pt",
-        device=device
-    )
+    try:
+        speech_classifier = pipeline(
+            "audio-classification",
+            model="prithivMLmods/Speech-Emotion-Classification",
+            device=device,
+            model_kwargs={"local_files_only": True},
+        )
+        speech_to_text = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            device=device,
+            model_kwargs={"local_files_only": True},
+        )
+        text_classifier = pipeline(
+            "text-classification",
+            model="j-hartmann/emotion-english-distilroberta-base",
+            return_all_scores=True,
+            framework="pt",
+            device=device,
+            model_kwargs={"local_files_only": True},
+        )
+        zh_en_translator = pipeline(
+            "translation",
+            model="Helsinki-NLP/opus-mt-zh-en",
+            device=device,
+            model_kwargs={"local_files_only": True},
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "本地模型加载失败，请确认 Hugging Face 缓存已存在于 D:/hf_cache/hub"
+        ) from exc
     print("Models loaded successfully!")
 
 
@@ -306,7 +323,16 @@ def infer_complex_emotion(p_merged: dict, valence: float, arousal: float,
 # Text helpers
 # ---------------------------------------------------------------------------
 def translate_to_english(text: str) -> str:
-    return GoogleTranslator(source="auto", target="en").translate(text)
+    global zh_en_translator
+    if zh_en_translator is None:
+        return text
+
+    translated = zh_en_translator(text)
+    if isinstance(translated, list) and translated:
+        return translated[0].get("translation_text", text)
+    if isinstance(translated, dict):
+        return translated.get("translation_text", text)
+    return text
 
 
 def analyze_text_emotion(text: str) -> tuple:
@@ -333,7 +359,8 @@ def analyze_text_emotion(text: str) -> tuple:
 
 # ---------------------------------------------------------------------------
 # Flask routes
-# ---------------------------------------------------------------------------@app.route('/predict', methods=['POST'])
+# ---------------------------------------------------------------------------
+@app.route('/predict', methods=['POST'])
 def predict():
     global speech_classifier, speech_to_text, text_classifier
     if speech_classifier is None:
