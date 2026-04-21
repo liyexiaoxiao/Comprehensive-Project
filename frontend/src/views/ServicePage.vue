@@ -85,7 +85,7 @@
           </div>
         </div>
 
-        <div class="player-shell">
+        <div class="player-shell" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
           <div class="now-playing">
             <img :src="currentTrack.cover" :alt="currentTrack.title" />
             <div>
@@ -96,13 +96,13 @@
 
           <div class="player-center">
             <div class="player-actions">
-              <button class="action-button" type="button" @click="playPrevious">
+              <button class="action-button" type="button" @click.stop="playPrevious">
                 <span>上一首</span>
               </button>
-              <button class="primary-button" type="button" @click="togglePlayback">
+              <button class="primary-button" type="button" @click.stop="togglePlayback">
                 <span>{{ isPlaying ? '暂停播放' : '开始播放' }}</span>
               </button>
-              <button class="action-button" type="button" @click="playNext">
+              <button class="action-button" type="button" @click.stop="playNext">
                 <span>下一首</span>
               </button>
             </div>
@@ -115,12 +115,13 @@
                 min="0"
                 :max="currentTrack.duration"
                 step="1"
+                @click.stop
               />
               <span>{{ formatTime(currentTrack.duration) }}</span>
             </div>
           </div>
 
-          <label class="volume-control">
+          <label class="volume-control" @click.stop>
             <span>音量</span>
             <input v-model="volume" type="range" min="0" max="100" />
           </label>
@@ -180,6 +181,16 @@ import { useMusicStore } from '@/stores/musicStore'
 const router = useRouter()
 const route = useRoute()
 const musicStore = useMusicStore()
+const PLAYER_SESSION_KEY = 'emotion-system-active-player'
+
+const defaultCategoryMoodMap = {
+  recommend: ['平静', '晚间', '轻音乐'],
+  guess: ['治愈', '舒缓', '轻音乐'],
+  leaderboard: ['专注', '稳定', '轻音乐'],
+  new: ['清新', '放松', '轻音乐'],
+  favorite: ['喜欢', '珍藏', '轻音乐'],
+  collection: ['温柔', '陪伴', '轻音乐']
+}
 
 // Dynamic computed categories to include custom playlists
 const musicCategories = computed(() => {
@@ -344,6 +355,43 @@ const playPrevious = () => {
   const currentIndex = trackPool.findIndex((track) => track.id === currentTrack.value.id)
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : trackPool.length - 1
   selectTrack(trackPool[prevIndex])
+}
+
+const getTrackTags = (track, categoryId = activeCategory.value?.id) => {
+  if (Array.isArray(track?.tags) && track.tags.length) {
+    return track.tags
+  }
+
+  if (categoryId && defaultCategoryMoodMap[categoryId]) {
+    return defaultCategoryMoodMap[categoryId]
+  }
+
+  return ['轻音乐', '舒缓']
+}
+
+const normalizePlayerTrack = (track) => ({
+  id: track.id,
+  title: track.title,
+  artist: track.artist?.trim() || '佚名',
+  duration: track.duration || 0,
+  cover: track.cover || '/images/feature-img-1.jpg',
+  tags: getTrackTags(track),
+  type: track.file ? '本地上传' : '轻音乐'
+})
+
+const openPlayerPage = () => {
+  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
+  const queuePayload = trackPool.map(item => normalizePlayerTrack(item))
+
+  window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
+    source: 'service',
+    returnTo: '/service',
+    categoryName: activeCategory.value?.name || '音乐空间',
+    track: normalizePlayerTrack(currentTrack.value),
+    queue: queuePayload
+  }))
+
+  router.push({ name: 'music-player' })
 }
 
 const timeStamp = () =>
@@ -920,6 +968,13 @@ onBeforeUnmount(() => {
   background: var(--color-text-primary);
   color: var(--color-bg-primary);
   border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.player-shell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px rgba(32, 43, 40, 0.22);
 }
 
 .now-playing {
