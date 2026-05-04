@@ -3,6 +3,10 @@ package com.donffroodus.meditation_service.service;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -43,5 +47,15 @@ public class MeditationService {
         MeditationLog log = meditationLogRepository.findById(logId)
                 .orElseThrow(() -> new RuntimeException("Meditation log not found"));
         meditationLogRepository.delete(log);
+    }
+
+    @RabbitListener(bindings=@QueueBinding(
+        value = @Queue(value = "meditation.user.delete.queue"),
+        exchange = @Exchange(value = "user.exchange", type = "topic"),
+        key = "user.delete"
+    ))
+    public void handleUserDelete(Long id) {
+        System.out.println("Received user delete message: " + id);
+        meditationLogRepository.deleteByUserId(id);
     }
 }

@@ -1,5 +1,6 @@
 package com.donffroodus.user_service.service;
 
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,9 @@ public class UserService {
 
     @Autowired
     private JwtUtils jwtUtils;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     public UserInfo registerUser(UserRegisterRequest request)
     {
@@ -191,7 +195,11 @@ public class UserService {
         UserInfo userInfo = userInfoRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        Long deletedUserId = userInfo.getId();
         userInfoRepository.delete(userInfo);
+
+        rabbitTemplate.convertAndSend("user.exchange", "user.delete", deletedUserId);
+        System.out.println("User deleted: " + deletedUserId);
     }
 
     public UserInfo getUserInfo(String userId) {
