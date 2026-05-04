@@ -49,6 +49,11 @@ public class MeditationService {
         meditationLogRepository.delete(log);
     }
 
+    private void deleteAllMeditationLogsByUserId(Long userId) {
+        List<MeditationLog> logs = meditationLogRepository.findByUserIdOrderByStartTimeDesc(userId);
+        meditationLogRepository.deleteAll(logs);
+    }
+
     @RabbitListener(bindings=@QueueBinding(
         value = @Queue(value = "meditation.user.delete.queue"),
         exchange = @Exchange(value = "user.exchange", type = "topic"),
@@ -56,5 +61,6 @@ public class MeditationService {
     ))
     public void handleUserDelete(Long id) {
         System.out.println("Received user delete message: " + id);
+        deleteAllMeditationLogsByUserId(id);
     }
 }
