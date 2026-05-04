@@ -19,16 +19,16 @@ spring:
       hibernate:
         format_sql: true
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:123456}
+    
 server:
   port: 8085
 
 jwt:
   secret: ${JWT_SECRET:this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable}
   expiration: ${JWT_EXPIRATION:86400000} # 24 hour in milliseconds
-
-spring:
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:admin}
-    password: ${RABBITMQ_PASSWORD:123456}
+  
