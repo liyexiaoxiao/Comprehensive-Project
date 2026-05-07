@@ -23,6 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.donffroodus.music_service.entity.EmotionTag;
 import com.donffroodus.music_service.entity.MusicResource;
 import com.donffroodus.music_service.entity.MusicTagMapping;
@@ -34,7 +39,9 @@ import com.donffroodus.music_service.repository.UserPreferenceRepository;
 
 /**
  * 音乐服务 HTTP API：曲库与情绪标签、用户偏好，以及基于情绪/上下文的推荐。
+ * <p>Swagger 展示说明需使用 {@link Operation} 等注解。</p>
  */
+@Tag(name = "音乐服务", description = "曲库、情绪标签、用户偏好与推荐。经网关访问时路径前缀为 /api/music")
 @RestController
 @RequestMapping("/api/v1")
 @CrossOrigin(origins = "*")
@@ -57,12 +64,14 @@ public class MusicApiController {
 	}
 
 	/** 列出全部音乐资源。 */
+	@Operation(summary = "列出全部音乐资源")
 	@GetMapping("/music-resources")
 	public List<MusicResource> listMusic() {
 		return musicResourceRepository.findAll();
 	}
 
 	/** 按主键获取单首音乐详情。 */
+	@Operation(summary = "获取单首音乐详情")
 	@GetMapping("/music-resources/{id}")
 	public ResponseEntity<MusicResource> getMusic(@PathVariable("id") Long id) {
 		return musicResourceRepository.findById(id)
@@ -71,6 +80,7 @@ public class MusicApiController {
 	}
 
 	/** 查询某首音乐已绑定的情绪标签及来源。 */
+	@Operation(summary = "查询音乐已绑定的情绪标签", description = "返回 mappingId、tagId、tagName、source")
 	@GetMapping("/music-resources/{id}/tags")
 	public ResponseEntity<List<Map<String, Object>>> getMusicTags(@PathVariable("id") Long id) {
 		if (musicResourceRepository.findById(id).isEmpty()) {
@@ -90,22 +100,26 @@ public class MusicApiController {
 	}
 
 	/** 列出全部情绪标签字典。 */
+	@Operation(summary = "列出全部情绪标签")
 	@GetMapping("/emotion-tags")
 	public List<EmotionTag> listEmotionTags() {
 		return emotionTagRepository.findAll();
 	}
 
 	/** 查询当前用户对各音乐的偏好（喜欢 / 不喜欢）。 */
+	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，-1 不喜欢（黑名单）")
 	@GetMapping("/me/music-preferences")
-	public List<UserPreference> listUserPreferences(@RequestHeader("X-User-Id") String xUserId) {
+	public List<UserPreference> listUserPreferences(
+			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return userPreferenceRepository.findByUserId(userId);
 	}
 
 	/** 创建或更新当前用户对某首音乐的偏好。 */
+	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType 仅允许 1 或 -1")
 	@PostMapping("/me/music-preferences")
 	public ResponseEntity<UserPreference> upsertMusicPreference(
-			@RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MusicPreferenceRequest request) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.musicId() == null || request.preferenceType() == null) {
@@ -125,9 +139,10 @@ public class MusicApiController {
 	}
 
 	/** 删除当前用户对某首音乐的偏好记录。 */
+	@Operation(summary = "删除某首音乐的偏好记录")
 	@DeleteMapping("/me/music-preferences/{musicId}")
 	public ResponseEntity<Void> deleteMusicPreference(
-			@RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("musicId") Long musicId) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, musicId);
@@ -140,9 +155,10 @@ public class MusicApiController {
 	}
 
 	/** 按情绪标签推荐候选曲目，并结合用户偏好排序与过滤黑名单。 */
+	@Operation(summary = "按情绪标签推荐", description = "结合用户偏好：喜欢优先，黑名单排除；limit 默认 10")
 	@PostMapping("/me/music-recommendations/by-emotion")
 	public ResponseEntity<List<MusicResource>> recommendByEmotion(
-			@RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MusicRecommendationRequest request) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.emotionTagId() == null) {
@@ -190,9 +206,10 @@ public class MusicApiController {
 	}
 
 	/** 基于当前播放曲目（及可选情绪标签）推荐下一首，排除当前曲并考虑偏好。 */
+	@Operation(summary = "推荐下一首", description = "可传 emotionTagId，否则根据当前曲目标签推断；limit 默认 1")
 	@PostMapping("/me/music-recommendations/next")
 	public ResponseEntity<List<MusicResource>> recommendNext(
-			@RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@RequestBody NextMusicRequest request) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		if (request == null || request.currentMusicId() == null) {
@@ -258,9 +275,10 @@ public class MusicApiController {
 	}
 
 	/** 新建音乐资源（上传者取自 X-User-Id）。 */
+	@Operation(summary = "新建音乐资源", description = "上传者 uploaderId 取自 X-User-Id；title、fileUrl 必填")
 	@PostMapping("/music-resources")
 	public ResponseEntity<MusicResource> createMusic(
-			@RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MusicResourceWriteRequest request) {
 		if (request == null || request.title() == null || request.fileUrl() == null) {
 			return ResponseEntity.badRequest().build();
@@ -278,6 +296,7 @@ public class MusicApiController {
 	}
 
 	/** 更新已有音乐资源的元数据与文件地址等。 */
+	@Operation(summary = "更新音乐资源元数据", description = "title、fileUrl 必填")
 	@PutMapping("/music-resources/{musicId}")
 	public ResponseEntity<MusicResource> updateMusic(
 			@PathVariable("musicId") Long musicId,
@@ -300,6 +319,7 @@ public class MusicApiController {
 	}
 
 	/** 删除音乐及其标签映射。 */
+	@Operation(summary = "删除音乐资源", description = "同时删除该曲目的标签映射")
 	@DeleteMapping("/music-resources/{musicId}")
 	public ResponseEntity<Void> deleteMusic(@PathVariable("musicId") Long musicId) {
 		if (musicResourceRepository.findById(musicId).isEmpty()) {
@@ -316,6 +336,7 @@ public class MusicApiController {
 	}
 
 	/** 覆盖写入某首音乐的情绪标签绑定（先清空旧映射再保存新标签集）。 */
+	@Operation(summary = "覆盖写入音乐的情绪标签", description = "先清空旧映射；tagIds 须全部存在于字典；source 默认 manual")
 	@PostMapping("/music-resources/{musicId}/tags")
 	@Transactional
 	public ResponseEntity<List<MusicTagMapping>> replaceMusicTags(
@@ -363,6 +384,7 @@ public class MusicApiController {
 	}
 
 	/** 按名称创建情绪标签；已存在则返回已有记录。 */
+	@Operation(summary = "创建情绪标签", description = "同名已存在则返回已有记录，不重复插入")
 	@PostMapping("/emotion-tags")
 	public ResponseEntity<EmotionTag> createEmotionTag(@RequestBody EmotionTagWriteRequest request) {
 		if (request == null || request.tagName() == null || request.tagName().isBlank()) {
@@ -379,6 +401,7 @@ public class MusicApiController {
 	}
 
 	/** 更新情绪标签名称（禁止与其他标签重名）。 */
+	@Operation(summary = "更新情绪标签名称", description = "新名称不得与其他标签重名")
 	@PutMapping("/emotion-tags/{tagId}")
 	public ResponseEntity<EmotionTag> updateEmotionTag(
 			@PathVariable("tagId") Long tagId,
@@ -402,6 +425,7 @@ public class MusicApiController {
 	}
 
 	/** 删除情绪标签并清理相关音乐映射。 */
+	@Operation(summary = "删除情绪标签", description = "同步删除 music_tag_mapping 中相关映射")
 	@DeleteMapping("/emotion-tags/{tagId}")
 	public ResponseEntity<Void> deleteEmotionTag(@PathVariable("tagId") Long tagId) {
 		if (emotionTagRepository.findById(tagId).isEmpty()) {
