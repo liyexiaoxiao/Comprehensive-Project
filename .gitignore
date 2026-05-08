@@ -26,6 +26,8 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+*.class
+/target/
 
 *.tsbuildinfo
 # 忽略虚拟环境
@@ -37,7 +39,10 @@ backend/venv/Lib/site-packages/torch/
 backend/venv/Lib/site-packages/torchlib/
 backend/venv/Lib/site-packages/tensorflow/
 
+target/
+
 user-service/src/main/resources/application-dev.yml
 
 docs/
 api-gateway/src/main/resources/application-dev.yml
+meditation-service/meditation-service/src/main/resources/application-dev.yml

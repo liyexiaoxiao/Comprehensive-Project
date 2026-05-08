@@ -1,12 +1,12 @@
 spring:
   application:
-    name: user-service
+    name: meditation-service
 
   profiles:
     active: dev
 
   datasource:
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:user_db}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:meditation_db}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -18,16 +18,17 @@ spring:
     properties:
       hibernate:
         format_sql: true
-    
+
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:123456}
-
+    
 server:
-  port: 8082
+  port: 8085
 
 jwt:
   secret: ${JWT_SECRET:this-is-a-secret-key-for-development-only-when-using-production-environment-secret-should-be-injected-via-environment-variable}
   expiration: ${JWT_EXPIRATION:86400000} # 24 hour in milliseconds
+  

@@ -27,6 +27,18 @@ spring:
             - Path=/api/social/**
           filters:
             - RewritePath=/api/social/(?<segment>.*), /api/$\{segment}
+        - id: data-service-route
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/data/**
+          filters:
+            - RewritePath=/api/data/(?<segment>.*), /api/$\{segment}
+        - id: meditation-service-route
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/meditation/**
+          filters:
+            - RewritePath=/api/meditation/(?<segment>.*), /api/$\{segment}
 
 # 必须和 User-Service 保持完全一致的密钥，否则网关无法解密
 jwt:
