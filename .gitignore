@@ -26,6 +26,8 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+*.class
+/target/
 
 *.tsbuildinfo
 # 忽略虚拟环境
