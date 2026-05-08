@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """
 Speech Emotion Recognition Microservice
-Flask backend — dual-channel fusion with VA mapping and complex emotion inference
+Flask backend - dual-channel fusion with VA mapping and complex emotion inference
 """
 
 import os
@@ -386,7 +387,6 @@ def predict():
         if sample_rate != 16000:
             waveform = torchaudio.transforms.Resample(sample_rate, 16000)(waveform)
         audio_array = waveform.squeeze().numpy()
-        model_input = {"array": audio_array, "sampling_rate": 16000}
 
         # Edge case: audio too short (< 1 second)
         low_quality = len(audio_array) < 16000
@@ -395,14 +395,25 @@ def predict():
         acoustic_features = extract_acoustic_features(audio_array)
         audio_quality = 0.5 if low_quality else estimate_audio_quality(acoustic_features)
 
-        speech_raw = speech_classifier(model_input, top_k=None)
+        # 直接传递文件路径给 speech_classifier
+        speech_raw = speech_classifier(temp_path, top_k=None)
         p_acoustic = align_speech_probs(speech_raw)
         speech_top_label = max(p_acoustic, key=p_acoustic.get)
         speech_top_score = round(p_acoustic[speech_top_label] * 100, 2)
 
         # --- Text channel ---
-        transcription = speech_to_text(model_input, generate_kwargs={"task": "transcribe"})
-        transcript_text = transcription.get("text", "").strip()
+        # 优先使用前端传来的 transcript，如果没有则使用 Whisper 识别
+        frontend_transcript = request.form.get('transcript', '').strip()
+
+        if frontend_transcript:
+            # 使用前端浏览器识别的文本（更准确）
+            transcript_text = frontend_transcript
+            print(f"使用前端识别的文本: {transcript_text}")
+        else:
+            # 回退到 Whisper 识别
+            transcription = speech_to_text(temp_path, generate_kwargs={"task": "transcribe", "language": "zh"})
+            transcript_text = transcription.get("text", "").strip()
+            print(f"使用 Whisper 识别的文本: {transcript_text}")
 
         p_text = _zero_probs()
         asr_confidence = 0.0

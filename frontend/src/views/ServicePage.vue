@@ -153,6 +153,14 @@
           >
             <span class="message-role">{{ message.role === 'assistant' ? '陪伴助手' : '你' }}</span>
             <p>{{ message.content }}</p>
+            <div v-if="message.emotions" class="emotion-tags">
+              <span v-if="message.emotions.speech" class="emotion-tag speech">
+                🎤 {{ message.emotions.speech }}
+              </span>
+              <span v-if="message.emotions.complex" class="emotion-tag complex">
+                💭 {{ message.emotions.complex }}
+              </span>
+            </div>
             <small>{{ message.timestamp }}</small>
           </article>
         </div>
@@ -188,7 +196,12 @@ const progressSeconds = ref(0)
 const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
+const mediaRecorder = ref(null)
+const audioChunks = ref([])
+const audioCaptureActive = ref(false)
 const recognition = ref(null)
+const interimTranscript = ref('')
+const finalTranscript = ref('')
 
 // Category Scroll Logic
 const categoryScrollRef = ref(null)
@@ -223,6 +236,10 @@ const currentTrack = ref(activeCategory.value.tracks[0])
 let playTimer = null
 
 const voiceSupported = typeof window !== 'undefined'
+  ? Boolean(navigator.mediaDevices?.getUserMedia)
+  : false
+
+const speechRecognitionSupported = typeof window !== 'undefined'
   ? Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   : false
 
@@ -287,24 +304,87 @@ const playPrevious = () => {
 const timeStamp = () =>
   new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
-const pushAssistantMessage = (content) => {
+const pushAssistantMessage = (content, emotions = null) => {
   messages.value.push({
     id: `assistant-${Date.now()}-${Math.random()}`,
     role: 'assistant',
     content,
     timestamp: timeStamp(),
+    emotions,
   })
 }
 
-const askCompanion = async (transcript) => {
-  try {
-    const { data } = await axios.post('http://127.0.0.1:5000/api/companion/chat', {
-      text: transcript,
-    })
+const pushUserMessage = (content) => {
+  const msgId = `user-${Date.now()}-${Math.random()}`
+  messages.value.push({
+    id: msgId,
+    role: 'user',
+    content,
+    timestamp: timeStamp(),
+  })
+  return msgId
+}
 
-    const emotionText = data?.emotion ? `（识别情绪：${data.emotion}）` : ''
+const updateUserMessage = (msgId, content) => {
+  const msg = messages.value.find(m => m.id === msgId)
+  if (msg) {
+    msg.content = content
+  }
+}
+
+const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
+  try {
+    let response;
+
+    // 如果有音频文件，发送音频进行情绪识别
+    if (audioBlob) {
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.wav')
+      // 同时发送浏览器识别的文本，让后端使用更准确的识别结果
+      if (transcript) {
+        formData.append('transcript', transcript)
+      }
+
+      response = await axios.post('http://127.0.0.1:5000/api/companion/chat', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        timeout: 180000  // 3分钟超时
+      })
+    } else {
+      // 否则只发送文本
+      response = await axios.post('http://127.0.0.1:5000/api/companion/chat', {
+        text: transcript,
+      }, {
+        timeout: 180000  // 3分钟超时
+      })
+    }
+
+    const { data } = response
+
+    // 构建情绪信息对象
+    const emotions = {
+      speech: data?.detected_emotion || null,
+      llm: data?.emotion || null,
+      complex: data?.emotion_details?.complex_emotion || null,
+    }
+
     const replyText = data?.reply || '我在这里，先慢慢呼吸，我们可以一点点把感受说出来。'
-    pushAssistantMessage(`${emotionText}${replyText}`)
+
+    // 如果后端返回了转写文本，更新用户消息
+    if (data?.transcript) {
+      if (userMsgId) {
+        // 更新已存在的占位消息
+        updateUserMessage(userMsgId, data.transcript)
+      } else if (!transcript || data.transcript !== transcript) {
+        // 如果没有占位消息且文本不同，添加新消息
+        pushUserMessage(data.transcript)
+      }
+      heardText.value = `已识别：${data.transcript}`
+    }
+
+    // 添加助手回复，附带情绪信息
+    pushAssistantMessage(replyText, emotions)
   } catch (error) {
     console.error(error)
     pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
@@ -312,65 +392,228 @@ const askCompanion = async (transcript) => {
   }
 }
 
-const handleTranscript = (transcript) => {
-  heardText.value = `已识别：${transcript}`
-  messages.value.push({
-    id: `user-${Date.now()}`,
-    role: 'user',
-    content: transcript,
-    timestamp: timeStamp(),
-  })
-
-  askCompanion(transcript)
-}
-
 const stopVoiceRecognition = () => {
-  if (recognition.value && isListening.value) {
-    recognition.value.stop()
-  }
-  isListening.value = false
-}
+  console.log('停止录音和语音识别')
 
-const setupVoiceRecognition = () => {
-  if (!voiceSupported) {
-    return
-  }
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  const instance = new SpeechRecognition()
-  instance.lang = 'zh-CN'
-  instance.interimResults = false
-  instance.maxAlternatives = 1
-
-  instance.onstart = () => {
-    isListening.value = true
-    heardText.value = '正在聆听，请开始说话。'
-  }
-
-  instance.onresult = (event) => {
-    const transcript = event.results?.[0]?.[0]?.transcript?.trim()
-    if (transcript) {
-      handleTranscript(transcript)
+  // 停止语音识别
+  if (recognition.value) {
+    try {
+      recognition.value.stop()
+    } catch (e) {
+      console.warn('停止语音识别失败:', e)
     }
   }
 
-  instance.onerror = () => {
-    isListening.value = false
-    heardText.value = '语音识别暂时失败了，可以稍后再试。'
-    pushAssistantMessage('刚才的语音没有顺利识别，我们也可以先听会儿音乐，再重新开始。')
+  // 停止录音
+  if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
+    console.log('停止 MediaRecorder，状态:', mediaRecorder.value.state)
+    mediaRecorder.value.stop()
   }
-
-  instance.onend = () => {
-    isListening.value = false
-  }
-
-  recognition.value = instance
+  // 注意：isListening 会在 mediaRecorder.onstop 中设置为 false
 }
 
-const toggleVoiceInput = () => {
+const setupMediaRecorder = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const recorder = new MediaRecorder(stream)
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.value.push(event.data)
+      }
+    }
+
+    recorder.onstop = async () => {
+      console.log('录音停止，开始处理音频...')
+      // 合并音频块
+      const audioBlob = new Blob(audioChunks.value, { type: recorder.mimeType })
+      audioChunks.value = []
+      console.log('音频块大小:', audioBlob.size)
+
+      // 停止所有音频轨道
+      stream.getTracks().forEach(track => track.stop())
+
+      // 转换为 WAV 格式
+      if (audioBlob.size > 0) {
+        heardText.value = '正在处理音频...'
+
+        // 先添加用户消息占位符
+        const userText = finalTranscript.value.trim() || '正在识别中...'
+        const userMsgId = pushUserMessage(userText)
+
+        try {
+          const wavBlob = await convertToWav(audioBlob)
+          console.log('WAV 转换完成，大小:', wavBlob.size)
+
+          console.log('准备调用 askCompanion...')
+          // 传递浏览器识别的文本和用户消息ID
+          await askCompanion(finalTranscript.value.trim(), wavBlob, userMsgId)
+          console.log('askCompanion 调用完成')
+        } catch (error) {
+          console.error('音频转换失败:', error)
+          ElMessage.error('音频处理失败，请重试')
+        }
+      } else {
+        console.log('音频块为空，跳过处理')
+      }
+
+      // 重置状态
+      audioCaptureActive.value = false
+      isListening.value = false
+      finalTranscript.value = ''
+      interimTranscript.value = ''
+    }
+
+    mediaRecorder.value = recorder
+    return true
+  } catch (error) {
+    console.error('无法访问麦克风:', error)
+    ElMessage.error('无法访问麦克风，请检查浏览器权限。')
+    return false
+  }
+}
+
+const convertToWav = async (blob) => {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+  const arrayBuffer = await blob.arrayBuffer()
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+  // 转换为 WAV 格式
+  const wavBuffer = audioBufferToWav(audioBuffer)
+  return new Blob([wavBuffer], { type: 'audio/wav' })
+}
+
+const audioBufferToWav = (buffer) => {
+  const numOfChan = buffer.numberOfChannels
+  const length = buffer.length * numOfChan * 2 + 44
+  const bufferArray = new ArrayBuffer(length)
+  const view = new DataView(bufferArray)
+  const channels = []
+  let pos = 0
+
+  // 写入 WAV 文件头
+  setUint32(0x46464952) // "RIFF"
+  setUint32(length - 8) // file length - 8
+  setUint32(0x45564157) // "WAVE"
+
+  setUint32(0x20746d66) // "fmt " chunk
+  setUint32(16) // length = 16
+  setUint16(1) // PCM (uncompressed)
+  setUint16(numOfChan)
+  setUint32(buffer.sampleRate)
+  setUint32(buffer.sampleRate * 2 * numOfChan) // avg. bytes/sec
+  setUint16(numOfChan * 2) // block-align
+  setUint16(16) // 16-bit
+
+  setUint32(0x61746164) // "data" - chunk
+  setUint32(length - pos - 4) // chunk length
+
+  // 写入音频数据
+  for (let i = 0; i < buffer.numberOfChannels; i++) {
+    channels.push(buffer.getChannelData(i))
+  }
+
+  // 交错写入所有声道的样本
+  for (let i = 0; i < buffer.length; i++) {
+    for (let channel = 0; channel < numOfChan; channel++) {
+      const sample = Math.max(-1, Math.min(1, channels[channel][i]))
+      view.setInt16(pos, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
+      pos += 2
+    }
+  }
+
+  return bufferArray
+
+  function setUint16(data) {
+    view.setUint16(pos, data, true)
+    pos += 2
+  }
+
+  function setUint32(data) {
+    view.setUint32(pos, data, true)
+    pos += 4
+  }
+}
+
+const setupSpeechRecognition = () => {
+  if (!speechRecognitionSupported) {
+    console.log('浏览器不支持语音识别')
+    return false
+  }
+
+  try {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognitionInstance = new SpeechRecognition()
+
+    recognitionInstance.continuous = true
+    recognitionInstance.interimResults = true
+    recognitionInstance.lang = 'zh-CN'
+
+    recognitionInstance.onstart = () => {
+      console.log('语音识别已启动')
+      finalTranscript.value = ''
+      interimTranscript.value = ''
+    }
+
+    recognitionInstance.onresult = (event) => {
+      let interim = ''
+      let final = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          final += transcript
+        } else {
+          interim += transcript
+        }
+      }
+
+      if (final) {
+        finalTranscript.value += final
+        console.log('最终识别结果:', finalTranscript.value)
+      }
+
+      interimTranscript.value = interim
+
+      // 更新显示文本
+      const displayText = finalTranscript.value + (interim ? ` ${interim}` : '')
+      if (displayText) {
+        heardText.value = `正在识别：${displayText}`
+      }
+    }
+
+    recognitionInstance.onerror = (event) => {
+      console.error('语音识别错误:', event.error)
+
+      // 处理不同类型的错误
+      if (event.error === 'network') {
+        console.warn('语音识别网络错误（这是正常的，Chrome的语音识别需要网络）')
+        // 不显示错误消息，因为录音仍然可以工作
+      } else if (event.error === 'no-speech') {
+        console.log('未检测到语音')
+      } else if (event.error === 'aborted') {
+        console.log('语音识别被中止')
+      } else {
+        console.error('其他语音识别错误:', event.error)
+      }
+    }
+
+    recognitionInstance.onend = () => {
+      console.log('语音识别已结束')
+    }
+
+    recognition.value = recognitionInstance
+    return true
+  } catch (error) {
+    console.error('初始化语音识别失败:', error)
+    return false
+  }
+}
+
+const toggleVoiceInput = async () => {
   if (!voiceSupported) {
-    ElMessage.warning('当前浏览器暂不支持语音识别。')
-    pushAssistantMessage('这个浏览器还不能直接语音输入，但页面结构已经为后续接口接入预留好了。')
+    ElMessage.warning('当前浏览器暂不支持录音。')
+    pushAssistantMessage('这个浏览器暂时不能录音，可以换用 Chrome 或 Edge 再试一次。')
     return
   }
 
@@ -379,7 +622,31 @@ const toggleVoiceInput = () => {
     return
   }
 
-  recognition.value?.start()
+  // 每次录音前重新初始化 MediaRecorder（因为 stream 在上次录音结束时已关闭）
+  const success = await setupMediaRecorder()
+  if (!success) {
+    return
+  }
+
+  // 尝试启动语音识别（可选功能，失败不影响录音）
+  if (speechRecognitionSupported) {
+    const recognitionReady = setupSpeechRecognition()
+    if (recognitionReady && recognition.value) {
+      try {
+        recognition.value.start()
+        console.log('语音识别已启动')
+      } catch (error) {
+        console.warn('启动语音识别失败（不影响录音）:', error)
+      }
+    }
+  }
+
+  // 开始录音
+  audioChunks.value = []
+  mediaRecorder.value.start()
+  audioCaptureActive.value = true
+  isListening.value = true
+  heardText.value = '正在录音，请开始说话...'
 }
 
 const goToPlaceholder = (target) => {
@@ -441,7 +708,8 @@ watch(
 )
 
 onMounted(() => {
-  setupVoiceRecognition()
+  // 不在 mounted 时初始化，而是在用户点击时初始化
+  // 这样可以避免不必要的权限请求
 })
 
 onBeforeUnmount(() => {
@@ -1022,6 +1290,35 @@ onBeforeUnmount(() => {
   margin-top: 12px;
   font-size: 0.75rem;
   align-self: flex-end;
+}
+
+.emotion-tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.emotion-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-primary);
+}
+
+.emotion-tag.speech {
+  background: rgba(200, 138, 117, 0.2);
+  color: var(--color-accent-terracotta);
+}
+
+.emotion-tag.complex {
+  background: rgba(139, 166, 140, 0.2);
+  color: var(--color-accent-sage);
 }
 
 .voice-box {
