@@ -16,7 +16,7 @@ import lombok.Data;
 public class MeditationRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long record_id;
+    private Long recordId;
 
     private Long userId;
     private LocalDateTime startTime;
