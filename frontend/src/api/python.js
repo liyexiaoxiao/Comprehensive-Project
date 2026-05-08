@@ -1,0 +1,22 @@
+import pythonHttp from './pythonHttp'
+
+export const analyzeEmotionApi = (payload) => pythonHttp.post('/api/analyze', payload)
+
+export const getMusicListApi = () => pythonHttp.get('/api/music/list')
+
+export const getMusicFileUrl = (filename) => {
+  const baseUrl = (import.meta.env.VITE_PYTHON_BASE_URL || 'http://localhost:5000').replace(/\/$/, '')
+  return `${baseUrl}/api/music/file/${encodeURIComponent(filename)}`
+}
+
+export const getEmotionMusicApi = (emotion) =>
+  pythonHttp.get(`/api/music/${emotion}`, { responseType: 'blob' })
+
+export const getMusicFileByNameApi = (filename) =>
+  pythonHttp.get(`/api/music/file/${encodeURIComponent(filename)}`, { responseType: 'blob' })
+
+export const getPreviousEmotionMusicApi = (emotion) =>
+  pythonHttp.get(`/api/music/${emotion}/prev`, { responseType: 'blob' })
+
+export const getNextEmotionMusicApi = (emotion) =>
+  pythonHttp.get(`/api/music/${emotion}/next`, { responseType: 'blob' })

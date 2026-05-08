@@ -111,6 +111,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import {
+  getEmotionMusicApi,
+  getMusicFileByNameApi,
+  getNextEmotionMusicApi,
+  getPreviousEmotionMusicApi,
+} from '@/api/python'
 
 const router = useRouter()
 
@@ -122,8 +129,48 @@ const currentTrack = ref(null)
 const isPlaying = ref(false)
 const progressSeconds = ref(0)
 const volume = ref(72)
+const currentEmotion = ref('neutral')
+const isLoadingAudio = ref(false)
 
 let playTimer = null
+const audioPlayer = new Audio()
+let currentObjectUrl = null
+
+const emotionAliasMap = {
+  joy: 'joy',
+  joyful: 'joy',
+  happy: 'joy',
+  love: 'love',
+  surprise: 'surprise',
+  sadness: 'sadness',
+  sad: 'sadness',
+  lonely: 'sadness',
+  anger: 'anger',
+  angry: 'anger',
+  fear: 'fear',
+  anxiety: 'fear',
+  anxious: 'fear',
+  neutral: 'neutral',
+  calm: 'neutral',
+  relax: 'neutral',
+  focus: 'neutral',
+  tired: 'neutral',
+  hopeful: 'neutral',
+  '喜悦': 'joy',
+  '开心': 'joy',
+  '快乐': 'joy',
+  '平静': 'neutral',
+  '放松': 'neutral',
+  '专注': 'neutral',
+  '疲惫': 'neutral',
+  '焦虑': 'fear',
+  '悲伤': 'sadness',
+  '孤独': 'sadness',
+  '愤怒': 'anger',
+  '希望': 'neutral',
+  '爱': 'love',
+  '惊喜': 'surprise',
+}
 
 const displayTags = computed(() => {
   const tags = currentTrack.value?.tags || []
@@ -146,44 +193,156 @@ const stopTimer = () => {
   }
 }
 
+const cleanupObjectUrl = () => {
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl)
+    currentObjectUrl = null
+  }
+}
+
+const normalizeEmotionValue = (value) => String(value || '').trim().toLowerCase()
+
+const inferEmotionFromText = (value) => {
+  const normalized = normalizeEmotionValue(value)
+  if (!normalized) return null
+
+  for (const [alias, target] of Object.entries(emotionAliasMap)) {
+    if (normalized === alias || normalized.includes(alias)) {
+      return target
+    }
+  }
+
+  return null
+}
+
+const resolveEmotionForTrack = (track) => {
+  const candidates = [
+    window.localStorage.getItem('currentEmotion'),
+    track?.emotion,
+    track?.id,
+    track?.title,
+    track?.artist,
+    track?.type,
+    ...(Array.isArray(track?.tags) ? track.tags : []),
+  ]
+
+  for (const candidate of candidates) {
+    const matchedEmotion = inferEmotionFromText(candidate)
+    if (matchedEmotion) {
+      return matchedEmotion
+    }
+  }
+
+  return 'neutral'
+}
+
+const persistEmotion = (emotion) => {
+  currentEmotion.value = emotion
+  window.localStorage.setItem('currentEmotion', emotion)
+}
+
+const syncTrackWithQueue = (step) => {
+  if (!queue.value.length || !currentTrack.value) return
+
+  const index = queue.value.findIndex((track) => track.id === currentTrack.value.id)
+  const nextIndex =
+    step > 0
+      ? (index >= 0 ? (index + 1) % queue.value.length : 0)
+      : (index > 0 ? index - 1 : queue.value.length - 1)
+
+  currentTrack.value = queue.value[nextIndex]
+}
+
+const loadAudioBlob = async (requestFactory) => {
+  if (isLoadingAudio.value) return
+
+  try {
+    isLoadingAudio.value = true
+    const response = await requestFactory()
+    cleanupObjectUrl()
+    currentObjectUrl = URL.createObjectURL(response.data)
+    audioPlayer.src = currentObjectUrl
+    audioPlayer.currentTime = 0
+    progressSeconds.value = 0
+    audioPlayer.volume = volume.value / 100
+    await audioPlayer.play()
+    isPlaying.value = true
+  } catch (error) {
+    isPlaying.value = false
+    ElMessage.error('音乐播放失败，请确认 Python 音乐服务已启动。')
+    console.error('Audio playback failed:', error)
+  } finally {
+    isLoadingAudio.value = false
+  }
+}
+
 const startTimer = () => {
   stopTimer()
   playTimer = setInterval(() => {
     if (!isPlaying.value || !currentTrack.value) return
 
-    if (progressSeconds.value >= currentTrack.value.duration) {
-      playNext()
-      return
-    }
-
-    progressSeconds.value += 1
+    progressSeconds.value = audioPlayer.currentTime || progressSeconds.value
   }, 1000)
 }
 
-const selectTrack = (track) => {
+const playCurrentTrack = async () => {
+  if (currentTrack.value?.filename) {
+    await loadAudioBlob(() => getMusicFileByNameApi(currentTrack.value.filename))
+    return
+  }
+
+  const emotion = resolveEmotionForTrack(currentTrack.value)
+  persistEmotion(emotion)
+  await loadAudioBlob(() => getEmotionMusicApi(emotion))
+}
+
+const selectTrack = async (track) => {
   currentTrack.value = track
   progressSeconds.value = 0
-  isPlaying.value = true
-  startTimer()
+  await playCurrentTrack()
 }
 
-const togglePlayback = () => {
+const togglePlayback = async () => {
   if (!currentTrack.value) return
-  isPlaying.value = !isPlaying.value
+
+  if (!audioPlayer.src) {
+    await playCurrentTrack()
+    return
+  }
+
+  if (isPlaying.value) {
+    audioPlayer.pause()
+    isPlaying.value = false
+    return
+  }
+
+  try {
+    await audioPlayer.play()
+    isPlaying.value = true
+  } catch (error) {
+    ElMessage.error('无法继续播放当前音频。')
+    console.error('Resume playback failed:', error)
+  }
 }
 
-const playNext = () => {
-  if (!queue.value.length || !currentTrack.value) return
-  const index = queue.value.findIndex((track) => track.id === currentTrack.value.id)
-  const nextIndex = index >= 0 ? (index + 1) % queue.value.length : 0
-  selectTrack(queue.value[nextIndex])
+const playNext = async () => {
+  if (!currentTrack.value) return
+  syncTrackWithQueue(1)
+  if (currentTrack.value?.filename) {
+    await playCurrentTrack()
+    return
+  }
+  await loadAudioBlob(() => getNextEmotionMusicApi(currentEmotion.value))
 }
 
-const playPrevious = () => {
-  if (!queue.value.length || !currentTrack.value) return
-  const index = queue.value.findIndex((track) => track.id === currentTrack.value.id)
-  const prevIndex = index > 0 ? index - 1 : queue.value.length - 1
-  selectTrack(queue.value[prevIndex])
+const playPrevious = async () => {
+  if (!currentTrack.value) return
+  syncTrackWithQueue(-1)
+  if (currentTrack.value?.filename) {
+    await playCurrentTrack()
+    return
+  }
+  await loadAudioBlob(() => getPreviousEmotionMusicApi(currentEmotion.value))
 }
 
 const goBack = () => {
@@ -200,7 +359,9 @@ const loadPayload = () => {
     queue.value = Array.isArray(parsed.queue) ? parsed.queue : []
     currentTrack.value = parsed.track || parsed.queue?.[0] || null
     progressSeconds.value = 0
-    isPlaying.value = Boolean(currentTrack.value)
+    if (currentTrack.value) {
+      persistEmotion(resolveEmotionForTrack(currentTrack.value))
+    }
   } catch (error) {
     console.error('读取播放器数据失败', error)
   }
@@ -215,21 +376,46 @@ watch(isPlaying, (playing) => {
 })
 
 watch(progressSeconds, (value) => {
-  if (!currentTrack.value) return
-  if (value > currentTrack.value.duration) {
-    progressSeconds.value = currentTrack.value.duration
+  if (!currentTrack.value || !audioPlayer.src) return
+  if (Math.abs(audioPlayer.currentTime - value) > 1) {
+    audioPlayer.currentTime = value
   }
 })
 
+watch(volume, (value) => {
+  audioPlayer.volume = value / 100
+})
+
+audioPlayer.onloadedmetadata = () => {
+  const measuredDuration = Number.isFinite(audioPlayer.duration) ? Math.floor(audioPlayer.duration) : 0
+  if (currentTrack.value && measuredDuration > 0) {
+    currentTrack.value = {
+      ...currentTrack.value,
+      duration: measuredDuration,
+    }
+  }
+}
+
+audioPlayer.ontimeupdate = () => {
+  progressSeconds.value = audioPlayer.currentTime
+}
+
+audioPlayer.onended = () => {
+  playNext()
+}
+
 onMounted(() => {
   loadPayload()
-  if (isPlaying.value) {
-    startTimer()
+  if (currentTrack.value) {
+    playCurrentTrack()
   }
 })
 
 onBeforeUnmount(() => {
   stopTimer()
+  audioPlayer.pause()
+  audioPlayer.src = ''
+  cleanupObjectUrl()
 })
 </script>
 

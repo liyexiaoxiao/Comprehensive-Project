@@ -1,6 +1,4 @@
 import os
-from flask import send_file, jsonify
-import random
 
 # 音乐文件目录
 MUSIC_DIR = os.path.join(os.path.dirname(__file__), 'music')
@@ -89,4 +87,22 @@ def get_music_list():
         return [f for f in os.listdir(MUSIC_DIR) if f.endswith('.mp3')]
         
     except Exception:
-        return [] 
+        return []
+
+
+def get_music_file_by_name(filename):
+    """
+    根据文件名返回音乐文件路径
+    """
+    try:
+        safe_name = os.path.basename(filename)
+        if not safe_name.lower().endswith('.mp3'):
+            return None, "仅支持 mp3 文件"
+
+        file_path = os.path.join(MUSIC_DIR, safe_name)
+        if not os.path.exists(file_path):
+            return None, "音乐文件未找到"
+
+        return file_path, None
+    except Exception as e:
+        return None, str(e)

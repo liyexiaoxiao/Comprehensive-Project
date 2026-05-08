@@ -34,8 +34,8 @@
         <div v-if="currentTab === 'profile'" class="tab-content profile-tab">
           <div class="profile-header">
             <h3 class="section-title">个人资料</h3>
-            <button class="action-btn" @click="isEditingProfile = !isEditingProfile">
-              {{ isEditingProfile ? '保存修改' : '编辑资料' }}
+            <button class="action-btn" @click="handleProfileAction" :disabled="isProfileSubmitting">
+              {{ isProfileSubmitting ? '保存中...' : isEditingProfile ? '保存修改' : '编辑资料' }}
             </button>
           </div>
           
@@ -65,20 +65,20 @@
               </div>
               
               <div class="info-group">
-                <label>性别</label>
-                <div v-if="!isEditingProfile" class="info-text">{{ userProfile.gender || '未设置' }}</div>
-                <select v-else v-model="userProfile.gender" class="info-input select-input">
-                  <option value="">请选择</option>
-                  <option value="男">男</option>
-                  <option value="女">女</option>
-                  <option value="保密">保密</option>
-                </select>
+                <label>用户名</label>
+                <div class="info-text id-text">{{ userProfile.username || '未设置' }} (不可修改)</div>
               </div>
               
               <div class="info-group">
-                <label>生日</label>
-                <div v-if="!isEditingProfile" class="info-text">{{ userProfile.birthday || '未设置' }}</div>
-                <input v-else type="date" v-model="userProfile.birthday" class="info-input" />
+                <label>邮箱</label>
+                <div v-if="!isEditingProfile" class="info-text">{{ userProfile.email || '未设置' }}</div>
+                <input v-else type="email" v-model.trim="userProfile.email" class="info-input" />
+              </div>
+
+              <div class="info-group">
+                <label>手机号</label>
+                <div v-if="!isEditingProfile" class="info-text">{{ userProfile.phone || '未设置' }}</div>
+                <input v-else type="text" v-model.trim="userProfile.phone" class="info-input" />
               </div>
               
               <div class="info-group full-width">
@@ -817,20 +817,61 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { useMusicStore } from '@/stores/musicStore'
 import { ElMessage } from 'element-plus'
+import {
+  getCurrentUserApi,
+  getCurrentUserFromStorage,
+  saveCurrentUserToStorage,
+  updateMyProfileApi,
+} from '@/api/user'
+import { getMusicFileUrl, getMusicListApi } from '@/api/python'
+import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
 
 const musicStore = useMusicStore()
+const realMusicFiles = ref([])
+const realMusicDurations = ref({})
 
 // --- Profile State ---
 const userProfile = ref({
-  id: '12345678',
-  name: '用户名',
-  gender: '',
-  birthday: '',
+  id: '',
+  name: '未设置昵称',
+  username: '',
+  email: '',
+  phone: '',
   description: '',
   avatar: ''
 })
 const isEditingProfile = ref(false)
+const isProfileSubmitting = ref(false)
 const avatarInputRef = ref(null)
+
+const mapUserToProfile = (user) => ({
+  id: user?.userId ?? '',
+  name: user?.nickname?.trim() || user?.username?.trim() || '未设置昵称',
+  username: user?.username?.trim() || '',
+  email: user?.email?.trim() || '',
+  phone: user?.phone?.trim() || '',
+  description: user?.bio?.trim() || '',
+  avatar: user?.avatarUrl?.trim() || ''
+})
+
+const loadCurrentUserProfile = async () => {
+  const cachedUser = getCurrentUserFromStorage()
+  if (cachedUser) {
+    userProfile.value = mapUserToProfile(cachedUser)
+  }
+
+  try {
+    const response = await getCurrentUserApi()
+    const user = response.data
+    saveCurrentUserToStorage(user)
+    userProfile.value = mapUserToProfile(user)
+  } catch (error) {
+    console.error('读取当前用户信息失败', error)
+    if (!cachedUser) {
+      ElMessage.error('读取当前用户信息失败')
+    }
+  }
+}
 
 const triggerAvatarUpload = () => {
   avatarInputRef.value.click()
@@ -844,6 +885,35 @@ const handleAvatarUpload = (event) => {
       userProfile.value.avatar = e.target.result
     }
     reader.readAsDataURL(file)
+  }
+}
+
+const handleProfileAction = async () => {
+  if (!isEditingProfile.value) {
+    isEditingProfile.value = true
+    return
+  }
+
+  isProfileSubmitting.value = true
+  try {
+    await updateMyProfileApi({
+      nickname: userProfile.value.name.trim(),
+      email: userProfile.value.email.trim() || null,
+      phone: userProfile.value.phone.trim() || null,
+      avatarUrl: userProfile.value.avatar || null,
+      bio: userProfile.value.description.trim() || null,
+    })
+
+    await loadCurrentUserProfile()
+    isEditingProfile.value = false
+    ElMessage.success('个人资料已更新')
+  } catch (error) {
+    const message = typeof error?.response?.data === 'string'
+      ? error.response.data
+      : '保存个人资料失败'
+    ElMessage.error(message)
+  } finally {
+    isProfileSubmitting.value = false
   }
 }
 
@@ -1247,6 +1317,8 @@ watch(currentTab, (newTab) => {
 })
 
 onMounted(() => {
+  loadCurrentUserProfile()
+  loadRealMusicFiles()
   if (currentTab.value === 'diary') {
     initDiaryWeeklyChart()
   } else if (currentTab.value === 'data') {
@@ -1276,20 +1348,23 @@ const uploadForm = ref({
   tags: []
 })
 
-import { musicCategories } from '@/data/mockContent'
-const allExternalTracks = computed(() => {
-  return musicCategories.flatMap(c => c.tracks)
+const realMusicLibrary = computed(() => {
+  return buildRealMusicCategories(realMusicFiles.value, {
+    likedIds: musicStore.likedTrackIds,
+    collectedIds: musicStore.collectedTrackIds,
+    durationMap: realMusicDurations.value,
+  }).flatMap(category => category.tracks)
 })
 
 const likedTracksList = computed(() => {
   return musicStore.likedTrackIds.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || allExternalTracks.value.find(t => t.id === id)
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
 
 const collectedTracksList = computed(() => {
   return musicStore.collectedTrackIds.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || allExternalTracks.value.find(t => t.id === id)
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
 
@@ -1315,6 +1390,21 @@ const formatPlaylistMeta = (playlist) => {
   const totalSeconds = playlist.tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
   const totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
   return `${playlist.tracks.length} 首 · ${totalMinutes} 分钟`
+}
+
+const loadRealMusicFiles = async () => {
+  try {
+    const response = await getMusicListApi()
+    realMusicFiles.value = Array.isArray(response?.data?.music_files) ? response.data.music_files : []
+    const durationEntries = await Promise.all(
+      realMusicFiles.value.map(async (filename) => [filename, await readRemoteAudioDuration(getMusicFileUrl(filename))]),
+    )
+    realMusicDurations.value = Object.fromEntries(durationEntries)
+  } catch (error) {
+    realMusicFiles.value = []
+    realMusicDurations.value = {}
+    console.error('Personal space real music load failed:', error)
+  }
 }
 
 const handleAudioSelect = (event) => {
@@ -1399,7 +1489,7 @@ const submitUpload = () => {
     artist: uploadForm.value.artist.trim(),
     duration: uploadForm.value.duration || 180,
     tags: [...uploadForm.value.tags],
-    cover: '/images/feature-img-1.jpg',
+    cover: getRealMusicCover(uploadForm.value.tags[0] || 'neutral'),
     file: uploadForm.value.file
   }
   

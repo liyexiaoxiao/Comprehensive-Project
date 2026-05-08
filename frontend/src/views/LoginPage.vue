@@ -94,20 +94,14 @@
           <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
           <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
 
-          <button class="btn-premium submit-btn" type="submit">
-            {{ mode === 'login' ? '进入花园' : '完成注册' }}
+          <button class="btn-premium submit-btn" type="submit" :disabled="isSubmitting">
+            {{ isSubmitting ? '提交中...' : mode === 'login' ? '进入花园' : '完成注册' }}
           </button>
         </form>
 
         <button class="mode-hint" type="button" @click="switchMode(mode === 'login' ? 'register' : 'login')">
           {{ mode === 'login' ? '还没有账号？去注册' : '已有账号？返回登录' }}
         </button>
-
-        <div class="demo-notes">
-          <span>Secure Demo</span>
-          <span class="dot">·</span>
-          <span>前端演示版本</span>
-        </div>
       </main>
     </div>
   </div>
@@ -116,11 +110,13 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
+import { AUTH_TOKEN_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/api/http'
+import { getMeApi, loginApi, registerApi } from '@/api/auth'
 
 const router = useRouter()
-const REGISTER_STORAGE_KEY = 'emotion-garden-demo-users'
 
 const mode = ref('login')
+const isSubmitting = ref(false)
 
 const loginForm = reactive({
   username: '',
@@ -141,26 +137,23 @@ const resetMessages = () => {
   successMessage.value = ''
 }
 
+const getErrorMessage = (error, fallbackMessage) => {
+  const responseData = error?.response?.data
+  if (typeof responseData === 'string' && responseData.trim()) {
+    return responseData
+  }
+  if (responseData?.message) {
+    return responseData.message
+  }
+  return fallbackMessage
+}
+
 const switchMode = (nextMode) => {
   mode.value = nextMode
   resetMessages()
 }
 
-const getRegisteredUsers = () => {
-  try {
-    const raw = window.localStorage.getItem(REGISTER_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch (error) {
-    console.error('读取注册用户失败', error)
-    return []
-  }
-}
-
-const saveRegisteredUsers = (users) => {
-  window.localStorage.setItem(REGISTER_STORAGE_KEY, JSON.stringify(users))
-}
-
-const handleSubmit = () => {
+const handleSubmit = async () => {
   resetMessages()
 
   if (mode.value === 'login') {
@@ -169,15 +162,31 @@ const handleSubmit = () => {
       return
     }
 
-    const users = getRegisteredUsers()
-    const matchedUser = users.find((user) => user.username === loginForm.username)
+    isSubmitting.value = true
+    try {
+      const loginResponse = await loginApi({
+        username: loginForm.username,
+        password: loginForm.password,
+      })
 
-    if (users.length && (!matchedUser || matchedUser.password !== loginForm.password)) {
-      errorMessage.value = '账号或密码不正确，请重新输入。'
-      return
+      const token = typeof loginResponse.data === 'string' ? loginResponse.data : ''
+      if (!token) {
+        throw new Error('登录返回的 token 无效')
+      }
+
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+
+      const currentUserResponse = await getMeApi()
+      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(currentUserResponse.data))
+
+      router.push('/service')
+    } catch (error) {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+      window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+      errorMessage.value = getErrorMessage(error, '登录失败，请稍后再试。')
+    } finally {
+      isSubmitting.value = false
     }
-
-    router.push('/service')
     return
   }
 
@@ -192,30 +201,26 @@ const handleSubmit = () => {
     return
   }
 
-  const users = getRegisteredUsers()
-  const duplicatedUser = users.some(
-    (user) => user.username === registerForm.username || user.email === registerForm.email,
-  )
+  isSubmitting.value = true
+  try {
+    await registerApi({
+      username: registerForm.username,
+      email: registerForm.email,
+      password: registerForm.password,
+    })
 
-  if (duplicatedUser) {
-    errorMessage.value = '该用户名或邮箱已注册，请直接登录。'
-    return
+    loginForm.username = registerForm.username
+    loginForm.password = ''
+    registerForm.username = ''
+    registerForm.email = ''
+    registerForm.password = ''
+    mode.value = 'login'
+    successMessage.value = '注册成功，请使用新账号登录。'
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error, '注册失败，请稍后再试。')
+  } finally {
+    isSubmitting.value = false
   }
-
-  users.push({
-    username: registerForm.username,
-    email: registerForm.email,
-    password: registerForm.password,
-  })
-  saveRegisteredUsers(users)
-
-  loginForm.username = registerForm.username
-  loginForm.password = ''
-  registerForm.username = ''
-  registerForm.email = ''
-  registerForm.password = ''
-  mode.value = 'login'
-  successMessage.value = '注册成功，请使用新账号登录。'
 }
 </script>
 
@@ -439,6 +444,11 @@ const handleSubmit = () => {
   width: 100%;
   padding: 18px;
   font-size: 1.1rem;
+}
+
+.submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .mode-hint {
