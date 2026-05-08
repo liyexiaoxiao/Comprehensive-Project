@@ -57,12 +57,11 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+import { analyzeEmotionApi } from '@/api/python'
 import { useSpeechStore } from '@/stores/speech'
 import { useRouter } from 'vue-router'
-import { onMounted } from 'vue'
 const speechStore = useSpeechStore()
 const router = useRouter()
 
@@ -91,7 +90,7 @@ function startListening() {
     listening.value = false
 
     try {
-      const res = await axios.post('http://localhost:5000/api/analyze', { text: spokenText })
+      const res = await analyzeEmotionApi({ text: spokenText })
       result.value.emotion = res.data.emotion
 
       speechStore.setEmotion(res.data.emotion)
@@ -100,7 +99,7 @@ function startListening() {
 
       // 成功后跳转
       setTimeout(() => {
-        router.push('/meditation')
+        router.push('/meditation-room')
       }, 5000)
 
     } catch (err) {

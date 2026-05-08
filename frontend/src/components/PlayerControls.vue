@@ -41,8 +41,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue';
-import axios from 'axios';
+import { ref, onMounted, onUnmounted } from 'vue';
+import {
+    getEmotionMusicApi,
+    getNextEmotionMusicApi,
+    getPreviousEmotionMusicApi,
+} from '@/api/python';
 
 import '@fortawesome/fontawesome-free/css/all.css';
 
@@ -57,24 +61,10 @@ const isListening = ref(false);
 const recognition = ref(null);
 const currentLanguage = ref('zh-CN'); // 默认使用中文
 
-const fetchAndPlay = async (endpoint) => {
-    try {
-        const res = await axios.get(endpoint);
-        currentTrack.value = res.data;
-        audio.src = res.data.url;
-        audio.play();
-        isPlaying.value = true;
-    } catch (e) {
-        console.error("播放失败", e);
-    }
-};
-
 // 根据情绪播放音乐
 const playEmotionMusic = async (emotion) => {
     try {
-        const response = await axios.get(`http://localhost:5000/api/music/${emotion}`, {
-            responseType: 'blob'
-        });
+        const response = await getEmotionMusicApi(emotion);
         
         const url = URL.createObjectURL(response.data);
         audio.src = url;
@@ -103,9 +93,7 @@ const toggleMute = () => {
 
 const prev = async () => {
     try {
-        const response = await axios.get(`http://localhost:5000/api/music/${currentEmotion.value}/prev`, {
-            responseType: 'blob'
-        });
+        const response = await getPreviousEmotionMusicApi(currentEmotion.value);
         
         const url = URL.createObjectURL(response.data);
         audio.src = url;
@@ -118,9 +106,7 @@ const prev = async () => {
 
 const next = async () => {
     try {
-        const response = await axios.get(`http://localhost:5000/api/music/${currentEmotion.value}/next`, {
-            responseType: 'blob'
-        });
+        const response = await getNextEmotionMusicApi(currentEmotion.value);
         
         const url = URL.createObjectURL(response.data);
         audio.src = url;
