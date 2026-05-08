@@ -90,6 +90,13 @@ public class MeditationController {
         return ResponseEntity.ok("Meditation session stopped for user ID: " + userId);
     }
 
+    @GetMapping("/countdown-left")
+    public ResponseEntity<?> getCountdownLeft() {
+        Long userId = getUserIdFromSecurityContext();
+        Integer leftDuration = meditationService.getSessionLeftDuration(userId);
+        return ResponseEntity.ok(leftDuration);
+    }
+
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/admin/meditation-logs/{user_id}")
     public ResponseEntity<?> getAdminLogs(@PathVariable Long user_id) {

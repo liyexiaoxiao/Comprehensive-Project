@@ -93,6 +93,15 @@ public class MeditationService {
         return newSession;
     }
 
+    public Integer getSessionLeftDuration(Long userId) {
+        return meditationSessionRepository.findByUserId(userId)
+                .map(session -> {
+                    long elapsed = ChronoUnit.SECONDS.between(session.getStartTime(), LocalDateTime.now());
+                    return Math.max(0, session.getTargetDuration() - (int) elapsed);
+                })
+                .orElse(0);
+    }
+
     @Transactional
     public void finishCountDownSession(Long userId) {
         meditationSessionRepository.findByUserId(userId).ifPresent(session -> {
