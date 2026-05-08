@@ -36,17 +36,12 @@ public class RabbitMQConfig {
 
     @Bean
     public MessageConverter jsonMessageConverter() {
-        // 1. 自己 new 一个 ObjectMapper
         ObjectMapper objectMapper = new ObjectMapper();
         
-        // 2. 亲手给它装上 Java 8 时间模块（解决 LocalDateTime 报错的核心）
         objectMapper.registerModule(new JavaTimeModule());
         
-        // 3. 强烈建议加这行：让时间变成 "2026-05-08T10:30:00" 这种人类可读的字符串，
-        // 而不是变成毫无意义的时间戳数组 [2026, 5, 8, 10, 30, 0]
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         
-        // 4. 将组装好的装填进 RabbitMQ 转换器
         return new Jackson2JsonMessageConverter(objectMapper);
     }
 }
