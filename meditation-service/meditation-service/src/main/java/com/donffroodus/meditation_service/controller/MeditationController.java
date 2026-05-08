@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.donffroodus.meditation_service.dto.MeditationCountDownStartRequest;
 import com.donffroodus.meditation_service.dto.MeditationLogDeleteRequest;
 import com.donffroodus.meditation_service.dto.MeditationRequest;
 import com.donffroodus.meditation_service.service.MeditationService;
@@ -74,6 +75,19 @@ public class MeditationController {
         Long userId = getUserIdFromSecurityContext();
         meditationService.userDeleteMeditationLog(userId, request.getLogId());
         return ResponseEntity.ok("Deleted meditation log with ID: " + request.getLogId());
+    }
+
+    @PostMapping("/start-countdown")
+    public ResponseEntity<?> startCountdown(@RequestBody MeditationCountDownStartRequest request) {
+        Long userId = getUserIdFromSecurityContext();
+        return ResponseEntity.ok(meditationService.startCountDownSession(userId, request));
+    }
+
+    @PostMapping("/stop-countdown")
+    public ResponseEntity<?> stopCountdown() {
+        Long userId = getUserIdFromSecurityContext();
+        meditationService.finishCountDownSession(userId);
+        return ResponseEntity.ok("Meditation session stopped for user ID: " + userId);
     }
 
     @PreAuthorize("hasRole('ADMIN')")

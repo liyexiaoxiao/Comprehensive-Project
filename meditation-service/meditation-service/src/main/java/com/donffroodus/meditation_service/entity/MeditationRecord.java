@@ -25,8 +25,8 @@ public class MeditationRecord {
     // 我们定义一个简单的 String 或 Enum 来存储状态
     private String status; 
     
-    private Integer musicId;
-    private Integer imageId;
+    private Long musicId;
+    private Long imageId;
 
     @Column(insertable = false, updatable = false)
     private LocalDateTime createdAt;

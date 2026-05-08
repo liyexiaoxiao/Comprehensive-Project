@@ -20,6 +20,6 @@ public class MeditationSession {
     private Long userId;
     private LocalDateTime startTime;
     private Integer targetDuration;
-    private Integer musicId;
-    private Integer imageId;
+    private Long musicId;
+    private Long imageId;
 }
