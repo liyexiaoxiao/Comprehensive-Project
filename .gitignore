@@ -47,3 +47,4 @@ user-service/src/main/resources/application-dev.yml
 docs/
 api-gateway/src/main/resources/application-dev.yml
 backend/.venv/
+__pycache__/
