@@ -8,11 +8,11 @@
       <section class="music-panel surface warm-surface">
         <div class="panel-top-bar">
           <div class="portal-actions">
-            <button class="portal-btn" type="button" @click="goToPlaceholder('meditation-room')">
+            <button class="portal-btn" type="button" @click="$router.push({ name: 'meditation-room' })">
               <span class="portal-icon">🌌</span>
               <span>冥想室</span>
             </button>
-            <button class="portal-btn" type="button" @click="goToPlaceholder('personal-space')">
+            <button class="portal-btn" type="button" @click="$router.push({ name: 'personal-space' })">
               <span class="portal-icon">🌿</span>
               <span>个人空间</span>
             </button>
@@ -85,7 +85,7 @@
           </div>
         </div>
 
-        <div class="player-shell">
+        <div class="player-shell" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
           <div class="now-playing">
             <img :src="currentTrack.cover" :alt="currentTrack.title" />
             <div>
@@ -96,13 +96,13 @@
 
           <div class="player-center">
             <div class="player-actions">
-              <button class="action-button" type="button" @click="playPrevious">
+              <button class="action-button" type="button" @click.stop="playPrevious">
                 <span>上一首</span>
               </button>
-              <button class="primary-button" type="button" @click="togglePlayback">
+              <button class="primary-button" type="button" @click.stop="togglePlayback">
                 <span>{{ isPlaying ? '暂停播放' : '开始播放' }}</span>
               </button>
-              <button class="action-button" type="button" @click="playNext">
+              <button class="action-button" type="button" @click.stop="playNext">
                 <span>下一首</span>
               </button>
             </div>
@@ -115,12 +115,13 @@
                 min="0"
                 :max="currentTrack.duration"
                 step="1"
+                @click.stop
               />
               <span>{{ formatTime(currentTrack.duration) }}</span>
             </div>
           </div>
 
-          <label class="volume-control">
+          <label class="volume-control" @click.stop>
             <span>音量</span>
             <input v-model="volume" type="range" min="0" max="100" />
           </label>
@@ -183,12 +184,36 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
-import { initialMessages, musicCategories } from '@/data/mockContent'
+import { initialMessages } from '@/data/mockContent'
+import { getMusicFileByNameApi, getMusicFileUrl, getMusicListApi } from '@/api/python'
+import { useMusicStore } from '@/stores/musicStore'
+import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
 
 const router = useRouter()
 const route = useRoute()
+const musicStore = useMusicStore()
+const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
-const activeCategoryId = ref(musicCategories[0].id)
+const emptyTrack = {
+  id: '',
+  title: '暂无音乐',
+  artist: '',
+  duration: 0,
+  cover: getRealMusicCover('neutral'),
+  tags: ['平静'],
+  type: '真实音乐',
+}
+
+const defaultCategoryMoodMap = {
+  recommend: ['平静', '晚间', '真实音乐'],
+  guess: ['治愈', '舒缓', '真实音乐'],
+  leaderboard: ['专注', '稳定', '真实音乐'],
+  new: ['清新', '放松', '真实音乐'],
+  favorite: ['喜欢', '珍藏', '真实音乐'],
+  collection: ['温柔', '陪伴', '真实音乐'],
+}
+
+const activeCategoryId = ref('recommend')
 const searchText = ref('')
 const volume = ref(68)
 const isPlaying = ref(false)
@@ -202,38 +227,15 @@ const audioCaptureActive = ref(false)
 const recognition = ref(null)
 const interimTranscript = ref('')
 const finalTranscript = ref('')
-
-// Category Scroll Logic
 const categoryScrollRef = ref(null)
+const realMusicFiles = ref([])
+const realMusicDurations = ref({})
+const currentTrack = ref({ ...emptyTrack })
+const isLoadingAudio = ref(false)
 
-const handleWheel = (e) => {
-  if (categoryScrollRef.value) {
-    // Translate vertical scroll (deltaY) to horizontal scroll
-    const scrollAmount = e.deltaY > 0 ? 300 : -300
-    categoryScrollRef.value.scrollBy({
-      left: scrollAmount,
-      behavior: 'smooth'
-    })
-  }
-}
-
-const activeCategory = computed(
-  () => musicCategories.find((category) => category.id === activeCategoryId.value) || musicCategories[0],
-)
-
-const filteredTracks = computed(() => {
-  const keyword = searchText.value.toLowerCase()
-  if (!keyword) {
-    return activeCategory.value.tracks
-  }
-
-  return activeCategory.value.tracks.filter((track) => {
-    return track.title.toLowerCase().includes(keyword) || track.artist.toLowerCase().includes(keyword)
-  })
-})
-
-const currentTrack = ref(activeCategory.value.tracks[0])
-let playTimer = null
+const audioPlayer = new Audio()
+let currentObjectUrl = null
+let lastLoadedTrackId = ''
 
 const voiceSupported = typeof window !== 'undefined'
   ? Boolean(navigator.mediaDevices?.getUserMedia)
@@ -243,6 +245,42 @@ const speechRecognitionSupported = typeof window !== 'undefined'
   ? Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   : false
 
+const musicCategories = computed(() => {
+  const realCategories = buildRealMusicCategories(realMusicFiles.value, {
+    likedIds: musicStore.likedTrackIds,
+    collectedIds: musicStore.collectedTrackIds,
+    durationMap: realMusicDurations.value,
+  })
+  const customCats = musicStore.customPlaylists.map((playlist) => ({
+    id: playlist.id,
+    name: playlist.name,
+    description: playlist.description || '自建歌单',
+    tracks: playlist.tracks,
+  }))
+  return [...realCategories, ...customCats]
+})
+
+const activeCategory = computed(
+  () => musicCategories.value.find((category) => category.id === activeCategoryId.value) || musicCategories.value[0] || {
+    id: 'empty',
+    name: '真实音乐',
+    description: '暂无音乐可播放',
+    tracks: [],
+  },
+)
+
+const filteredTracks = computed(() => {
+  const keyword = searchText.value.toLowerCase()
+  if (!keyword) {
+    return activeCategory.value.tracks || []
+  }
+
+  return (activeCategory.value.tracks || []).filter((track) => {
+    const fields = [track.title, track.artist, track.filename, track.emotion, ...(track.tags || [])]
+    return fields.some((field) => String(field || '').toLowerCase().includes(keyword))
+  })
+})
+
 const formatTime = (seconds) => {
   const safeValue = Number.isFinite(seconds) ? seconds : 0
   const minutes = Math.floor(safeValue / 60)
@@ -250,55 +288,212 @@ const formatTime = (seconds) => {
   return `${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`
 }
 
-const stopTimer = () => {
-  if (playTimer) {
-    clearInterval(playTimer)
-    playTimer = null
+const handleWheel = (event) => {
+  if (categoryScrollRef.value) {
+    const scrollAmount = event.deltaY > 0 ? 300 : -300
+    categoryScrollRef.value.scrollBy({
+      left: scrollAmount,
+      behavior: 'smooth',
+    })
   }
 }
 
-const startTimer = () => {
-  stopTimer()
-  playTimer = setInterval(() => {
-    if (!isPlaying.value) {
-      return
-    }
-
-    if (progressSeconds.value >= currentTrack.value.duration) {
-      playNext()
-      return
-    }
-
-    progressSeconds.value += 1
-  }, 1000)
+const cleanupObjectUrl = () => {
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl)
+    currentObjectUrl = null
+  }
 }
 
-const selectTrack = (track) => {
-  currentTrack.value = track
+const resetAudioState = () => {
+  audioPlayer.pause()
+  audioPlayer.src = ''
   progressSeconds.value = 0
-  isPlaying.value = true
+  isPlaying.value = false
+  lastLoadedTrackId = ''
+  cleanupObjectUrl()
 }
 
-const togglePlayback = () => {
-  isPlaying.value = !isPlaying.value
+const ensureCurrentTrack = () => {
+  const availableTracks = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
+  if (!availableTracks.length) {
+    currentTrack.value = { ...emptyTrack }
+    resetAudioState()
+    return
+  }
+
+  const currentExists = availableTracks.some((track) => track.id === currentTrack.value.id)
+  if (!currentExists) {
+    currentTrack.value = { ...availableTracks[0] }
+    progressSeconds.value = 0
+    resetAudioState()
+  }
 }
 
-const playNext = () => {
-  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
+const loadRealMusicLibrary = async () => {
+  try {
+    const response = await getMusicListApi()
+    realMusicFiles.value = Array.isArray(response?.data?.music_files) ? response.data.music_files : []
+    const durationEntries = await Promise.all(
+      realMusicFiles.value.map(async (filename) => [filename, await readRemoteAudioDuration(getMusicFileUrl(filename))]),
+    )
+    realMusicDurations.value = Object.fromEntries(durationEntries)
+    if (!musicCategories.value.some((category) => category.id === activeCategoryId.value)) {
+      activeCategoryId.value = musicCategories.value[0]?.id || 'recommend'
+    }
+    ensureCurrentTrack()
+  } catch (error) {
+    realMusicFiles.value = []
+    realMusicDurations.value = {}
+    currentTrack.value = { ...emptyTrack }
+    ElMessage.error('真实音乐目录加载失败，请确认 Python backend 已启动。')
+    console.error('Load real music list failed:', error)
+  }
+}
+
+const syncCurrentTrackSnapshot = () => {
+  if (!currentTrack.value?.id) return
+  const sourceTracks = musicCategories.value.flatMap((category) => category.tracks || [])
+  const matchedTrack = sourceTracks.find((track) => track.id === currentTrack.value.id)
+  if (!matchedTrack) return
+  currentTrack.value = {
+    ...matchedTrack,
+    duration: progressSeconds.value > 0
+      ? Math.max(matchedTrack.duration || 0, currentTrack.value.duration || 0)
+      : matchedTrack.duration || currentTrack.value.duration || 0,
+  }
+}
+
+const loadAudioForTrack = async (track, autoplay = true) => {
+  if (!track?.id || isLoadingAudio.value) return
+
+  try {
+    isLoadingAudio.value = true
+    let sourceBlob = null
+
+    if (track.file) {
+      sourceBlob = track.file
+    } else if (track.filename) {
+      const response = await getMusicFileByNameApi(track.filename)
+      sourceBlob = response.data
+    }
+
+    if (!sourceBlob) {
+      throw new Error('missing audio source')
+    }
+
+    cleanupObjectUrl()
+    currentObjectUrl = URL.createObjectURL(sourceBlob)
+    audioPlayer.src = currentObjectUrl
+    audioPlayer.currentTime = progressSeconds.value || 0
+    audioPlayer.volume = volume.value / 100
+    lastLoadedTrackId = track.id
+
+    if (autoplay) {
+      await audioPlayer.play()
+      isPlaying.value = true
+    }
+  } catch (error) {
+    isPlaying.value = false
+    ElMessage.error('音乐播放失败，请确认 Python backend 已启动。')
+    console.error('Service audio playback failed:', error)
+  } finally {
+    isLoadingAudio.value = false
+  }
+}
+
+const selectTrack = async (track) => {
+  if (!track?.id) return
+
+  if (currentTrack.value.id === track.id && audioPlayer.src) {
+    await togglePlayback()
+    return
+  }
+
+  currentTrack.value = { ...track }
+  progressSeconds.value = 0
+  await loadAudioForTrack(currentTrack.value, true)
+}
+
+const togglePlayback = async () => {
+  if (!currentTrack.value?.id) return
+
+  if (!audioPlayer.src || lastLoadedTrackId !== currentTrack.value.id) {
+    progressSeconds.value = 0
+    await loadAudioForTrack(currentTrack.value, true)
+    return
+  }
+
+  if (isPlaying.value) {
+    audioPlayer.pause()
+    isPlaying.value = false
+    return
+  }
+
+  try {
+    await audioPlayer.play()
+    isPlaying.value = true
+  } catch (error) {
+    ElMessage.error('无法继续播放当前音频。')
+    console.error('Resume service playback failed:', error)
+  }
+}
+
+const playNext = async () => {
+  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
+  if (!trackPool.length) return
   const currentIndex = trackPool.findIndex((track) => track.id === currentTrack.value.id)
   const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % trackPool.length : 0
-  currentTrack.value = trackPool[nextIndex]
-  progressSeconds.value = 0
-  isPlaying.value = true
+  await selectTrack(trackPool[nextIndex])
 }
 
-const playPrevious = () => {
-  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
+const playPrevious = async () => {
+  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
+  if (!trackPool.length) return
   const currentIndex = trackPool.findIndex((track) => track.id === currentTrack.value.id)
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : trackPool.length - 1
-  currentTrack.value = trackPool[prevIndex]
-  progressSeconds.value = 0
-  isPlaying.value = true
+  await selectTrack(trackPool[prevIndex])
+}
+
+const getTrackTags = (track, categoryId = activeCategory.value?.id) => {
+  if (Array.isArray(track?.tags) && track.tags.length) {
+    return track.tags
+  }
+
+  if (categoryId && defaultCategoryMoodMap[categoryId]) {
+    return defaultCategoryMoodMap[categoryId]
+  }
+
+  return ['真实音乐', '舒缓']
+}
+
+const normalizePlayerTrack = (track) => ({
+  id: track.id,
+  title: track.title,
+  artist: track.artist?.trim() || '佚名',
+  duration: track.duration || 0,
+  cover: track.cover || getRealMusicCover(track.emotion || 'neutral'),
+  tags: getTrackTags(track),
+  type: track.file ? '本地上传' : '真实音乐',
+  emotion: track.emotion || 'neutral',
+  filename: track.filename,
+})
+
+const openPlayerPage = () => {
+  if (!currentTrack.value?.id) return
+
+  const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
+  const queuePayload = trackPool.map((item) => normalizePlayerTrack(item))
+
+  window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
+    source: 'service',
+    returnTo: '/service',
+    categoryName: activeCategory.value?.name || '音乐空间',
+    track: normalizePlayerTrack(currentTrack.value),
+    queue: queuePayload,
+  }))
+
+  router.push({ name: 'music-player' })
 }
 
 const timeStamp = () =>
@@ -649,48 +844,55 @@ const toggleVoiceInput = async () => {
   heardText.value = '正在录音，请开始说话...'
 }
 
-const goToPlaceholder = (target) => {
-  if (target === 'meditation-room') {
-    router.push('/meditation-room')
-  } else {
-    ElMessage.success(`准备前往: ${target}，功能暂未完全开放。`)
-  }
-}
-
 watch(activeCategoryId, () => {
-  const availableTracks = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks
-  currentTrack.value = availableTracks[0]
-  progressSeconds.value = 0
-  isPlaying.value = false
+  ensureCurrentTrack()
 })
 
 watch(searchText, () => {
-  const availableTracks = filteredTracks.value
-  if (!availableTracks.length) {
-    isPlaying.value = false
-    progressSeconds.value = 0
-    return
-  }
-
-  const currentExists = availableTracks.some((track) => track.id === currentTrack.value.id)
-  if (!currentExists) {
-    currentTrack.value = availableTracks[0]
-    progressSeconds.value = 0
-    isPlaying.value = false
-  }
+  ensureCurrentTrack()
 })
 
-watch(isPlaying, (playing) => {
-  if (playing) {
-    startTimer()
-  } else {
-    stopTimer()
-  }
+watch(
+  () => musicStore.customPlaylists,
+  () => {
+    if (!musicCategories.value.some((category) => category.id === activeCategoryId.value)) {
+      activeCategoryId.value = musicCategories.value[0]?.id || 'recommend'
+    }
+    ensureCurrentTrack()
+  },
+  { deep: true },
+)
+
+watch(
+  () => [musicStore.likedTrackIds, musicStore.collectedTrackIds],
+  () => {
+    ensureCurrentTrack()
+  },
+  { deep: true },
+)
+
+watch(
+  musicCategories,
+  () => {
+    syncCurrentTrackSnapshot()
+  },
+  { deep: true },
+)
+
+watch(volume, (newVol) => {
+  audioPlayer.volume = newVol / 100
 })
 
 watch(progressSeconds, (value) => {
-  if (value > currentTrack.value.duration) {
-    progressSeconds.value = currentTrack.value.duration
+  if (!audioPlayer.src) return
+  const safeMax = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : currentTrack.value.duration
+  if (value > safeMax) {
+    progressSeconds.value = safeMax
+    return
+  }
+
+  if (Math.abs(audioPlayer.currentTime - value) > 1) {
+    audioPlayer.currentTime = value
   }
 })
 
@@ -707,14 +909,33 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => {
-  // 不在 mounted 时初始化，而是在用户点击时初始化
-  // 这样可以避免不必要的权限请求
+audioPlayer.onloadedmetadata = () => {
+  const measuredDuration = Number.isFinite(audioPlayer.duration) ? Math.floor(audioPlayer.duration) : 0
+  if (measuredDuration > 0) {
+    currentTrack.value = {
+      ...currentTrack.value,
+      duration: measuredDuration,
+    }
+  }
+}
+
+audioPlayer.ontimeupdate = () => {
+  progressSeconds.value = audioPlayer.currentTime
+}
+
+audioPlayer.onended = () => {
+  playNext()
+}
+
+onMounted(async () => {
+  await loadRealMusicLibrary()
 })
 
 onBeforeUnmount(() => {
-  stopTimer()
   stopVoiceRecognition()
+  audioPlayer.pause()
+  audioPlayer.src = ''
+  cleanupObjectUrl()
 })
 </script>
 
@@ -1139,6 +1360,13 @@ onBeforeUnmount(() => {
   background: var(--color-text-primary);
   color: var(--color-bg-primary);
   border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.player-shell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px rgba(32, 43, 40, 0.22);
 }
 
 .now-playing {

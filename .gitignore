@@ -26,6 +26,8 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+*.class
+/target/
 
 *.tsbuildinfo
 # 忽略虚拟环境
@@ -46,4 +48,7 @@ user-service/src/main/resources/application-dev.yml
 
 docs/
 api-gateway/src/main/resources/application-dev.yml
+
 backend/.venv/
+
+meditation-service/meditation-service/src/main/resources/application-dev.yml

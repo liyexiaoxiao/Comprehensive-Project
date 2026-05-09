@@ -14,11 +14,13 @@
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
     "axios": "^1.9.0",
+    "echarts": "^6.0.0",
     "element-plus": "^2.9.11",
     "pinia": "^3.0.2",
     "three": "^0.177.0",
     "vanta": "^0.5.24",
     "vue": "^3.5.13",
+    "vue-echarts": "^8.0.1",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {

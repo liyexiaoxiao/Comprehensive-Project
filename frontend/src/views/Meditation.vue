@@ -70,7 +70,7 @@
             </transition>
           </div>
 
-          <div class="player-controls">
+          <div class="player-controls" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
             <div class="now-playing-info" v-if="currentTrack">
               <strong>{{ currentTrack.name }}</strong>
               <span>{{ formatTime(progressSeconds) }} / {{ formatTime(currentTrack.duration) }}</span>
@@ -81,13 +81,13 @@
             </div>
 
             <div class="control-buttons">
-              <button class="ctrl-btn" @click="playPrevious" :disabled="!currentTrack">
+              <button class="ctrl-btn" @click.stop="playPrevious" :disabled="!currentTrack">
                 <font-awesome-icon icon="backward-step" />
               </button>
-              <button class="ctrl-btn play-btn" @click="togglePlayback" :disabled="!currentTrack">
+              <button class="ctrl-btn play-btn" @click.stop="togglePlayback" :disabled="!currentTrack">
                 <font-awesome-icon :icon="isPlaying ? 'pause' : 'play'" />
               </button>
-              <button class="ctrl-btn" @click="playNext" :disabled="!currentTrack">
+              <button class="ctrl-btn" @click.stop="playNext" :disabled="!currentTrack">
                 <font-awesome-icon icon="forward-step" />
               </button>
             </div>
@@ -170,6 +170,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import CircleTimer from '@/components/CircleTimer.vue'
+
+const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
 const emotions = [
   { id: 'calm', name: '平静', title: '平静之声', artist: 'Emotion Healing', duration: 1800 },
@@ -390,6 +392,30 @@ const playPrevious = () => {
   const idx = emotions.findIndex(t => t.id === currentTrack.value.id)
   const prevIdx = idx > 0 ? idx - 1 : emotions.length - 1
   selectTrack(emotions[prevIdx])
+}
+
+const normalizeMeditationTrack = (track) => ({
+  id: track.id,
+  title: track.title,
+  artist: track.artist?.trim() || 'Emotion Healing',
+  duration: track.duration || 0,
+  cover: `/images/feature-img-${(emotions.findIndex(item => item.id === track.id) % 4 + 1)}.jpg`,
+  tags: [track.name, '冥想', '背景音'],
+  type: '冥想背景音'
+})
+
+const openPlayerPage = () => {
+  if (!currentTrack.value) return
+
+  window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
+    source: 'meditation',
+    returnTo: '/meditation-room',
+    categoryName: '冥想背景音',
+    track: normalizeMeditationTrack(currentTrack.value),
+    queue: emotions.map(item => normalizeMeditationTrack(item))
+  }))
+
+  router.push({ name: 'music-player' })
 }
 
 onMounted(() => {
@@ -716,6 +742,13 @@ onBeforeUnmount(() => {
   align-items: center;
   color: #fff;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.player-controls:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 34px rgba(44, 48, 46, 0.16);
 }
 
 .now-playing-info {

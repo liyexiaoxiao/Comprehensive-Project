@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: data-service
+
+  profiles:
+    active: dev
+
+  data:
+    mongodb:
+      uri: ${MONGO_URI:mongodb://127.0.0.1:27017/emohealing_log_db}
+
+  messages:
+    encoding: UTF-8
+
+server:
+  port: 8084
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
