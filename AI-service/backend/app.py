@@ -3,15 +3,38 @@ import requests
 import tempfile
 import os
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from qwen_service import query_qwen_companion
+from tts_service import synthesize_speech
 
 app = Flask(__name__)
 CORS(app)
 
 # 情绪识别服务的地址
 EMOTION_SERVICE_URL = "http://localhost:5003/predict"
+AUDIO_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_audio")
+os.makedirs(AUDIO_OUTPUT_DIR, exist_ok=True)
+
+
+def build_tts_payload(reply: str):
+    try:
+        audio_filename = synthesize_speech(reply, AUDIO_OUTPUT_DIR)
+        return {
+            "audio_url": f"/api/audio/{audio_filename}",
+            "tts_error": None,
+        }
+    except Exception as e:
+        print(f"TTS generation failed: {e}")
+        return {
+            "audio_url": None,
+            "tts_error": str(e),
+        }
+
+
+@app.route('/api/audio/<path:filename>', methods=['GET'])
+def generated_audio(filename):
+    return send_from_directory(AUDIO_OUTPUT_DIR, filename, mimetype='audio/mpeg')
 
 @app.route('/api/companion/chat', methods=['POST', 'OPTIONS'])
 def companion_chat():
@@ -74,6 +97,7 @@ def companion_chat():
                 reply = parsed.get('reply', reply)
             except Exception:
                 pass
+            tts_payload = build_tts_payload(reply)
 
             return jsonify({
                 'emotion': emotion,
@@ -81,6 +105,7 @@ def companion_chat():
                 'raw': model_raw,
                 'detected_emotion': detected_emotion,
                 'transcript': transcript,
+                **tts_payload,
                 'emotion_details': emotion_data,  # 返回完整的情绪识别结果
             })
 
@@ -115,12 +140,14 @@ def companion_chat():
                 reply = parsed.get('reply', reply)
             except Exception:
                 pass
+            tts_payload = build_tts_payload(reply)
 
             return jsonify({
                 'emotion': emotion,
                 'reply': reply,
                 'raw': model_raw,
                 'detected_emotion': detected_emotion,
+                **tts_payload,
             })
         except Exception as e:
             return jsonify({'error': str(e)}), 500

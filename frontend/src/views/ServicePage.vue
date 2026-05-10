@@ -234,6 +234,7 @@ const currentTrack = ref({ ...emptyTrack })
 const isLoadingAudio = ref(false)
 
 const audioPlayer = new Audio()
+const assistantSpeechPlayer = new Audio()
 let currentObjectUrl = null
 let lastLoadedTrackId = ''
 
@@ -527,6 +528,23 @@ const updateUserMessage = (msgId, content) => {
   }
 }
 
+const playAssistantSpeech = async (audioUrl) => {
+  if (!audioUrl) return
+
+  const sourceUrl = audioUrl.startsWith('http')
+    ? audioUrl
+    : `http://127.0.0.1:5000${audioUrl}`
+
+  try {
+    assistantSpeechPlayer.pause()
+    assistantSpeechPlayer.src = sourceUrl
+    assistantSpeechPlayer.currentTime = 0
+    await assistantSpeechPlayer.play()
+  } catch (error) {
+    console.error('AI speech playback failed:', error)
+  }
+}
+
 const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
   try {
     let response;
@@ -580,6 +598,7 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
 
     // 添加助手回复，附带情绪信息
     pushAssistantMessage(replyText, emotions)
+    await playAssistantSpeech(data?.audio_url)
   } catch (error) {
     console.error(error)
     pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
@@ -933,6 +952,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopVoiceRecognition()
+  assistantSpeechPlayer.pause()
+  assistantSpeechPlayer.src = ''
   audioPlayer.pause()
   audioPlayer.src = ''
   cleanupObjectUrl()

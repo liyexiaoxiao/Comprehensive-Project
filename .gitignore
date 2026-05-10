@@ -43,6 +43,7 @@ target/
 
 AI-service/backend/.env
 AI-service/backend/.env.*
+AI-service/backend/generated_audio/
 
 user-service/src/main/resources/application-dev.yml
 
