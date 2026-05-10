@@ -17,9 +17,9 @@ AUDIO_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_audio")
 os.makedirs(AUDIO_OUTPUT_DIR, exist_ok=True)
 
 
-def build_tts_payload(reply: str):
+def build_tts_payload(reply: str, voice: str = None):
     try:
-        audio_filename = synthesize_speech(reply, AUDIO_OUTPUT_DIR)
+        audio_filename = synthesize_speech(reply, AUDIO_OUTPUT_DIR, voice)
         return {
             "audio_url": f"/api/audio/{audio_filename}",
             "tts_error": None,
@@ -61,6 +61,7 @@ def companion_chat():
 
             # 获取前端传来的 transcript（如果有）
             frontend_transcript = request.form.get('transcript', '').strip()
+            tts_voice = request.form.get('tts_voice', '').strip()
 
             files = {'audio': ('recording.wav', audio_content, 'audio/wav')}
             data = {'transcript': frontend_transcript} if frontend_transcript else {}
@@ -97,7 +98,7 @@ def companion_chat():
                 reply = parsed.get('reply', reply)
             except Exception:
                 pass
-            tts_payload = build_tts_payload(reply)
+            tts_payload = build_tts_payload(reply, tts_voice)
 
             return jsonify({
                 'emotion': emotion,
@@ -123,6 +124,7 @@ def companion_chat():
         data = request.get_json() or {}
         user_text = (data.get('text') or '').strip()
         detected_emotion = (data.get('detected_emotion') or '').strip()
+        tts_voice = (data.get('tts_voice') or '').strip()
 
         if not user_text:
             return jsonify({'error': 'No text or audio provided'}), 400
@@ -140,7 +142,7 @@ def companion_chat():
                 reply = parsed.get('reply', reply)
             except Exception:
                 pass
-            tts_payload = build_tts_payload(reply)
+            tts_payload = build_tts_payload(reply, tts_voice)
 
             return jsonify({
                 'emotion': emotion,

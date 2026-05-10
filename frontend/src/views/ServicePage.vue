@@ -167,6 +167,18 @@
         </div>
 
         <div class="voice-box">
+          <label class="voice-selector">
+            <span>AI 声线</span>
+            <select v-model="selectedTtsVoice">
+              <option
+                v-for="voice in ttsVoiceOptions"
+                :key="voice.value"
+                :value="voice.value"
+              >
+                {{ voice.label }}
+              </option>
+            </select>
+          </label>
           <button class="primary-button full" type="button" @click="toggleVoiceInput">
             <span>{{ isListening ? '结束语音输入' : '开始语音输入' }}</span>
           </button>
@@ -221,6 +233,7 @@ const progressSeconds = ref(0)
 const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
+const selectedTtsVoice = ref('claire')
 const mediaRecorder = ref(null)
 const audioChunks = ref([])
 const audioCaptureActive = ref(false)
@@ -232,6 +245,17 @@ const realMusicFiles = ref([])
 const realMusicDurations = ref({})
 const currentTrack = ref({ ...emptyTrack })
 const isLoadingAudio = ref(false)
+
+const ttsVoiceOptions = [
+  { value: 'claire', label: 'Claire 温柔女声' },
+  { value: 'anna', label: 'Anna 沉稳女声' },
+  { value: 'bella', label: 'Bella 明亮女声' },
+  { value: 'diana', label: 'Diana 欢快女声' },
+  { value: 'alex', label: 'Alex 男声' },
+  { value: 'benjamin', label: 'Benjamin 男声' },
+  { value: 'charles', label: 'Charles 男声' },
+  { value: 'david', label: 'David 男声' },
+]
 
 const audioPlayer = new Audio()
 const assistantSpeechPlayer = new Audio()
@@ -557,6 +581,7 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
       if (transcript) {
         formData.append('transcript', transcript)
       }
+      formData.append('tts_voice', selectedTtsVoice.value)
 
       response = await axios.post('http://127.0.0.1:5000/api/companion/chat', formData, {
         headers: {
@@ -568,6 +593,7 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
       // 否则只发送文本
       response = await axios.post('http://127.0.0.1:5000/api/companion/chat', {
         text: transcript,
+        tts_voice: selectedTtsVoice.value,
       }, {
         timeout: 180000  // 3分钟超时
       })
@@ -1583,6 +1609,30 @@ onBeforeUnmount(() => {
   color: var(--color-bg-primary);
   padding: 16px;
   font-size: 1.1rem;
+}
+
+.voice-selector {
+  display: grid;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.voice-selector select {
+  width: 100%;
+  border: 1px solid rgba(92, 78, 61, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--color-text-primary);
+  padding: 12px 14px;
+  font: inherit;
+  outline: none;
+}
+
+.voice-selector select:focus {
+  border-color: var(--color-accent-sage);
+  box-shadow: 0 0 0 3px rgba(139, 166, 140, 0.18);
 }
 
 @keyframes spin {
