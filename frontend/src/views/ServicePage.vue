@@ -332,20 +332,49 @@ const updateUserMessage = (msgId, content) => {
   }
 }
 
+const getCompanionSessionId = () => {
+  const storageKey = 'companion_session_id'
+  let sid = localStorage.getItem(storageKey)
+  if (!sid) {
+    sid = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    localStorage.setItem(storageKey, sid)
+  }
+  return sid
+}
+
+const getCurrentUserId = () => {
+  const candidates = [
+    localStorage.getItem('userId'),
+    localStorage.getItem('user_id'),
+    localStorage.getItem('uid'),
+  ]
+  for (const item of candidates) {
+    const n = Number(item)
+    if (Number.isInteger(n) && n > 0) {
+      return n
+    }
+  }
+  return 10001
+}
+
 const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
   try {
-    let response;
+    let response
+    const userId = getCurrentUserId()
+    const sessionId = getCompanionSessionId()
 
     // 如果有音频文件，发送音频进行情绪识别
     if (audioBlob) {
       const formData = new FormData()
+      formData.append('userId', String(userId))
+      formData.append('sessionId', sessionId)
       formData.append('audio', audioBlob, 'recording.wav')
       // 同时发送浏览器识别的文本，让后端使用更准确的识别结果
       if (transcript) {
         formData.append('transcript', transcript)
       }
 
-      response = await axios.post('http://127.0.0.1:5000/api/companion/chat', formData, {
+      response = await axios.post('/py-api/api/companion/chat', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         },
@@ -353,7 +382,9 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
       })
     } else {
       // 否则只发送文本
-      response = await axios.post('http://127.0.0.1:5000/api/companion/chat', {
+      response = await axios.post('/py-api/api/companion/chat', {
+        userId,
+        sessionId,
         text: transcript,
       }, {
         timeout: 180000  // 3分钟超时

@@ -48,3 +48,7 @@ docs/
 api-gateway/src/main/resources/application-dev.yml
 backend/.venv/
 __pycache__/
+__pycache__/
+*.pyc
+.venv/
+.env
