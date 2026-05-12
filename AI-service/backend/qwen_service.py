@@ -9,16 +9,16 @@ load_dotenv()
 QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 
 
-def build_companion_prompt(user_text: str, detected_emotion: str = None):
-    """构建陪伴式回复提示词。
+def build_companion_prompt(user_text: str, detected_emotion: str = None, history: list = None):
+    """构建陪伴式回复提示词（支持多轮历史）。
 
     Args:
         user_text: 用户输入的文本
         detected_emotion: 从语音识别出的情绪（可选）
+        history: 历史消息列表，元素格式: {"role": "user|assistant", "content": "..."}
     """
     emotion_context = ""
     if detected_emotion:
-        # 将英文情绪标签映射为中文描述
         emotion_map = {
             "joy": "开心、愉悦",
             "anger": "愤怒、生气",
@@ -43,7 +43,7 @@ def build_companion_prompt(user_text: str, detected_emotion: str = None):
         emotion_desc = emotion_map.get(detected_emotion, detected_emotion)
         emotion_context = f"\n\n【语音情绪分析】用户当前的语音情绪倾向为：{emotion_desc}。请结合这一情绪状态给出更贴合的回复。"
 
-    return [
+    messages = [
         {
             "role": "system",
             "content": (
@@ -51,16 +51,22 @@ def build_companion_prompt(user_text: str, detected_emotion: str = None):
                 "任务：根据用户话语判断其大致情绪，并给出简短开导与陪伴建议。"
                 "请严格使用 JSON 回复，格式为："
                 '{"emotion":"情绪标签","reply":"给用户的话"}。'
-                "其中 emotion 仅从 [平静, 焦虑, 悲伤力大, 开心, 迷茫, 孤独] 中选一个最贴近的。"
+                "其中 emotion 仅从 [平静, 焦虑, 压力大, 开心, 迷茫, 孤独] 中选一个最贴近的。"
                 "reply 语气温暖，不说教，不超过120字。"
                 + emotion_context
             ),
-        },
-        {
-            "role": "user",
-            "content": user_text,
-        },
+        }
     ]
+
+    if history:
+        for item in history:
+            role = item.get("role")
+            content = item.get("content")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": user_text})
+    return messages
 
 
 def analyze_emotion_by_qwen(user_text: str):
@@ -89,12 +95,13 @@ def analyze_emotion_by_qwen(user_text: str):
     return (content or "平静").strip()
 
 
-def query_qwen_companion(user_text: str, detected_emotion: str = None):
+def query_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
     """调用 DashScope 兼容 OpenAI 接口，返回模型原始文本。
 
     Args:
         user_text: 用户输入的文本
         detected_emotion: 从语音识别出的情绪（可选）
+        history: 历史消息列表
     """
     if not QWEN_API_KEY:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
@@ -103,7 +110,7 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None):
 
     completion = client.chat.completions.create(
         model="qwen3.5-plus",
-        messages=build_companion_prompt(user_text, detected_emotion),
+        messages=build_companion_prompt(user_text, detected_emotion, history),
         extra_body={"enable_thinking": True},
     )
 

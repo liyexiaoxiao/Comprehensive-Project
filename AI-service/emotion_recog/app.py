@@ -395,8 +395,9 @@ def predict():
         acoustic_features = extract_acoustic_features(audio_array)
         audio_quality = 0.5 if low_quality else estimate_audio_quality(acoustic_features)
 
-        # 直接传递文件路径给 speech_classifier
-        speech_raw = speech_classifier(temp_path, top_k=None)
+        # 传递 waveform 数组给 pipeline，避免不同后端对文件格式解析差异
+        model_audio_input = {"array": audio_array, "sampling_rate": 16000}
+        speech_raw = speech_classifier(model_audio_input, top_k=None)
         p_acoustic = align_speech_probs(speech_raw)
         speech_top_label = max(p_acoustic, key=p_acoustic.get)
         speech_top_score = round(p_acoustic[speech_top_label] * 100, 2)
@@ -410,8 +411,8 @@ def predict():
             transcript_text = frontend_transcript
             print(f"使用前端识别的文本: {transcript_text}")
         else:
-            # 回退到 Whisper 识别
-            transcription = speech_to_text(temp_path, generate_kwargs={"task": "transcribe", "language": "zh"})
+            # 回退到 Whisper 识别（同样传数组避免文件后端问题）
+            transcription = speech_to_text(model_audio_input, generate_kwargs={"task": "transcribe", "language": "zh"})
             transcript_text = transcription.get("text", "").strip()
             print(f"使用 Whisper 识别的文本: {transcript_text}")
 

@@ -1,20 +1,37 @@
 import json
-import requests
-import tempfile
 import os
+import tempfile
+from datetime import datetime, timezone
 
-from flask import Flask, request, jsonify, send_from_directory
+import requests
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from pymongo import MongoClient
 from qwen_service import query_qwen_companion
 from tts_service import synthesize_speech
 
 app = Flask(__name__)
 CORS(app)
 
-# 情绪识别服务的地址
-EMOTION_SERVICE_URL = "http://localhost:5003/predict"
+# Emotion recognition service
+EMOTION_SERVICE_URL = os.getenv("EMOTION_SERVICE_URL", "http://localhost:5003/predict")
+
+# Generated TTS audio
 AUDIO_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_audio")
 os.makedirs(AUDIO_OUTPUT_DIR, exist_ok=True)
+
+# MongoDB config
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_DB = os.getenv("MONGO_DB", "comprehensive_project")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "ai_chat_log")
+
+mongo_client = MongoClient(MONGO_URI)
+mongo_db = mongo_client[MONGO_DB]
+ai_chat_log_collection = mongo_db[MONGO_COLLECTION]
+
+
+def now_utc():
+    return datetime.now(timezone.utc)
 
 
 def build_tts_payload(reply: str, voice: str = None):
@@ -32,129 +49,184 @@ def build_tts_payload(reply: str, voice: str = None):
         }
 
 
+def parse_history_items(logs):
+    """Convert stored DB messages into the format expected by the LLM."""
+    history = []
+    for log in logs:
+        role = log.get("role")
+        content = log.get("content")
+        if role in ("user", "assistant") and content:
+            history.append({"role": role, "content": content})
+    return history
+
+
+def fetch_history(session_id: str, limit: int = 20):
+    cursor = (
+        ai_chat_log_collection
+        .find({"sessionId": session_id})
+        .sort("createdAt", 1)
+    )
+    logs = list(cursor)
+    if limit > 0 and len(logs) > limit:
+        logs = logs[-limit:]
+    return logs
+
+
+def save_chat_log(user_id: int, session_id: str, role: str, content: str, emotion_label: str = None):
+    doc = {
+        "userId": user_id,
+        "sessionId": session_id,
+        "role": role,
+        "content": content,
+        "emotionLabel": emotion_label,
+        "createdAt": now_utc(),
+    }
+    ai_chat_log_collection.insert_one(doc)
+
+
 @app.route('/api/audio/<path:filename>', methods=['GET'])
 def generated_audio(filename):
     return send_from_directory(AUDIO_OUTPUT_DIR, filename, mimetype='audio/mpeg')
 
+
 @app.route('/api/companion/chat', methods=['POST', 'OPTIONS'])
 def companion_chat():
-    """接收音频文件，调用情绪识别服务，然后生成对话回复"""
+    """Support text/audio chat, emotion recognition, TTS, and MongoDB history."""
     if request.method == 'OPTIONS':
         return '', 200
 
-    # 检查是否有音频文件
-    if 'audio' in request.files:
-        audio_file = request.files['audio']
-        if audio_file.filename == '':
-            return jsonify({'error': 'No audio file selected'}), 400
+    try:
+        payload = request.get_json(silent=True) if request.is_json else {}
+        payload = payload or {}
 
-        temp_path = None
+        user_id_raw = payload.get('userId') or request.form.get('userId')
+        session_id = (payload.get('sessionId') or request.form.get('sessionId') or '').strip()
+        tts_voice = (payload.get('tts_voice') or request.form.get('tts_voice') or '').strip()
+
+        if user_id_raw is None:
+            return jsonify({'error': 'userId is required'}), 400
+        if not session_id:
+            return jsonify({'error': 'sessionId is required'}), 400
+
         try:
-            # 保存音频文件到临时位置
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                temp_path = temp_file.name
-                audio_file.save(temp_path)
+            user_id = int(user_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'userId must be integer'}), 400
 
-            # 读取文件内容并发送到情绪识别服务
-            with open(temp_path, 'rb') as f:
-                audio_content = f.read()
+        detected_emotion = None
+        emotion_data = {}
+        transcript = ''
 
-            # 获取前端传来的 transcript（如果有）
-            frontend_transcript = request.form.get('transcript', '').strip()
-            tts_voice = request.form.get('tts_voice', '').strip()
+        if 'audio' in request.files:
+            audio_file = request.files['audio']
+            if audio_file.filename == '':
+                return jsonify({'error': 'No audio file selected'}), 400
 
-            files = {'audio': ('recording.wav', audio_content, 'audio/wav')}
-            data = {'transcript': frontend_transcript} if frontend_transcript else {}
-            emotion_response = requests.post(EMOTION_SERVICE_URL, files=files, data=data, timeout=30)
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                    temp_path = temp_file.name
+                    audio_file.save(temp_path)
 
-            if emotion_response.status_code != 200:
-                error_detail = emotion_response.text
-                return jsonify({'error': f'Emotion recognition service failed: {error_detail}'}), 500
+                with open(temp_path, 'rb') as f:
+                    audio_content = f.read()
 
-            emotion_data = emotion_response.json()
+                frontend_transcript = (request.form.get('transcript') or '').strip()
+                files = {'audio': ('recording.wav', audio_content, 'audio/wav')}
+                data = {'transcript': frontend_transcript} if frontend_transcript else {}
 
-            # 打印情绪识别服务返回的完整结果
-            print("=" * 60)
-            print("情绪识别服务返回结果:")
-            print(json.dumps(emotion_data, ensure_ascii=False, indent=2))
-            print("=" * 60)
+                emotion_response = requests.post(EMOTION_SERVICE_URL, files=files, data=data, timeout=30)
+                if emotion_response.status_code != 200:
+                    return jsonify({'error': f'Emotion recognition service failed: {emotion_response.text}'}), 500
 
-            # 提取识别结果
-            detected_emotion = emotion_data.get('complex_emotion', emotion_data.get('basic_emotion', 'neutral'))
-            transcript = emotion_data.get('transcript', '')
+                emotion_data = emotion_response.json()
+                detected_emotion = emotion_data.get('complex_emotion', emotion_data.get('basic_emotion', 'neutral'))
+                transcript = (emotion_data.get('transcript') or frontend_transcript).strip()
 
+                if not transcript:
+                    return jsonify({'error': 'No transcript from audio'}), 400
+
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+        else:
+            transcript = (payload.get('text') or '').strip()
+            detected_emotion = (payload.get('detected_emotion') or '').strip() or None
             if not transcript:
-                return jsonify({'error': 'No transcript from audio'}), 400
+                return jsonify({'error': 'No text or audio provided'}), 400
 
-            # 调用 LLM 生成回复
-            model_raw = query_qwen_companion(transcript, detected_emotion)
+        logs = fetch_history(session_id, limit=20)
+        history = parse_history_items(logs)
 
-            # 解析 LLM 返回的 JSON
-            emotion = '平静'
-            reply = model_raw
-            try:
-                parsed = json.loads(model_raw)
-                emotion = parsed.get('emotion', emotion)
-                reply = parsed.get('reply', reply)
-            except Exception:
-                pass
-            tts_payload = build_tts_payload(reply, tts_voice)
+        save_chat_log(
+            user_id=user_id,
+            session_id=session_id,
+            role='user',
+            content=transcript,
+            emotion_label=detected_emotion,
+        )
 
-            return jsonify({
-                'emotion': emotion,
-                'reply': reply,
-                'raw': model_raw,
-                'detected_emotion': detected_emotion,
-                'transcript': transcript,
-                **tts_payload,
-                'emotion_details': emotion_data,  # 返回完整的情绪识别结果
-            })
+        model_raw = query_qwen_companion(transcript, detected_emotion, history)
 
-        except requests.exceptions.RequestException as e:
-            return jsonify({'error': f'Failed to call emotion service: {str(e)}'}), 500
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
-        finally:
-            # 清理临时文件
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-    # 兼容旧的文本接口（如果前端直接发送文本）
-    else:
-        data = request.get_json() or {}
-        user_text = (data.get('text') or '').strip()
-        detected_emotion = (data.get('detected_emotion') or '').strip()
-        tts_voice = (data.get('tts_voice') or '').strip()
-
-        if not user_text:
-            return jsonify({'error': 'No text or audio provided'}), 400
-
+        emotion = '平静'
+        reply = model_raw
         try:
-            # 将情绪参数传递给 LLM
-            model_raw = query_qwen_companion(user_text, detected_emotion if detected_emotion else None)
+            parsed = json.loads(model_raw)
+            emotion = parsed.get('emotion', emotion)
+            reply = parsed.get('reply', reply)
+        except Exception:
+            pass
 
-            # 优先按 JSON 解析；如果模型偶发不按 JSON 返回，则回退为兜底结构
-            emotion = '平静'
-            reply = model_raw
-            try:
-                parsed = json.loads(model_raw)
-                emotion = parsed.get('emotion', emotion)
-                reply = parsed.get('reply', reply)
-            except Exception:
-                pass
-            tts_payload = build_tts_payload(reply, tts_voice)
+        save_chat_log(
+            user_id=user_id,
+            session_id=session_id,
+            role='assistant',
+            content=reply,
+            emotion_label=emotion,
+        )
 
-            return jsonify({
-                'emotion': emotion,
-                'reply': reply,
-                'raw': model_raw,
-                'detected_emotion': detected_emotion,
-                **tts_payload,
-            })
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        tts_payload = build_tts_payload(reply, tts_voice)
+
+        return jsonify({
+            'userId': user_id,
+            'sessionId': session_id,
+            'emotion': emotion,
+            'reply': reply,
+            'raw': model_raw,
+            'detected_emotion': detected_emotion,
+            'transcript': transcript,
+            'emotion_details': emotion_data,
+            **tts_payload,
+        })
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Failed to call emotion service: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companion/history', methods=['GET'])
+def companion_history():
+    session_id = (request.args.get('sessionId') or '').strip()
+    if not session_id:
+        return jsonify({'error': 'sessionId is required'}), 400
+
+    logs = fetch_history(session_id, limit=200)
+    result = []
+    for log in logs:
+        result.append({
+            'id': str(log.get('_id')),
+            'userId': log.get('userId'),
+            'sessionId': log.get('sessionId'),
+            'role': log.get('role'),
+            'content': log.get('content'),
+            'emotionLabel': log.get('emotionLabel'),
+            'createdAt': log.get('createdAt').isoformat() if log.get('createdAt') else None,
+        })
+
+    return jsonify({'sessionId': session_id, 'messages': result})
 
 
 if __name__ == '__main__':
-    print("🚀 Flask running...")
+    print('Flask running...')
     app.run(host='0.0.0.0', port=5000, debug=True)
