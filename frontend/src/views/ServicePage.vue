@@ -594,68 +594,150 @@ const getCurrentUserId = () => {
   return 10001
 }
 
+const createAssistantPlaceholder = () => {
+  const id = `assistant-${Date.now()}-${Math.random()}`
+  const msg = {
+    id,
+    role: 'assistant',
+    content: '正在思考中...',
+    timestamp: timeStamp(),
+    emotions: null,
+  }
+  messages.value.push(msg)
+  return id
+}
+
+const updateAssistantMessage = (msgId, content, emotions = null) => {
+  const msg = messages.value.find(m => m.id === msgId)
+  if (!msg) return
+  msg.content = content
+  if (emotions) {
+    msg.emotions = emotions
+  }
+}
+
+const readStreamAsText = async (streamResponse, assistantMsgId) => {
+  const reader = streamResponse.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let collectedText = ''
+  let finalDone = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() || ''
+
+    for (const chunk of chunks) {
+      const line = chunk.split('\n').find(l => l.startsWith('data: '))
+      if (!line) continue
+
+      const raw = line.slice(6)
+      if (!raw) continue
+
+      let payload
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        continue
+      }
+
+      if (payload.type === 'delta') {
+        collectedText += payload.text || ''
+        updateAssistantMessage(assistantMsgId, collectedText || '正在思考中...')
+      } else if (payload.type === 'done') {
+        finalDone = payload
+      } else if (payload.type === 'error') {
+        throw new Error(payload.error || 'stream error')
+      }
+    }
+  }
+
+  return { collectedText, finalDone }
+}
+
 const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
   try {
-    let response
     const userId = getCurrentUserId()
     const sessionId = getCompanionSessionId()
 
-    // 如果有音频文件，发送音频进行情绪识别
+    let finalTranscript = (transcript || '').trim()
+    let detectedEmotion = null
+    let emotionDetails = null
+
+    // 阶段1：语音先做识别与情绪分析
     if (audioBlob) {
       const formData = new FormData()
-      formData.append('userId', String(userId))
-      formData.append('sessionId', sessionId)
       formData.append('audio', audioBlob, 'recording.wav')
-      // 同时发送浏览器识别的文本，让后端使用更准确的识别结果
-      if (transcript) {
-        formData.append('transcript', transcript)
+      if (finalTranscript) {
+        formData.append('transcript', finalTranscript)
       }
-      formData.append('tts_voice', selectedTtsVoice.value)
 
-      response = await axios.post('/py-api/api/companion/chat', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        timeout: 180000  // 3分钟超时
+      const analyzeResp = await axios.post('/py-api/api/companion/audio/analyze', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000,
       })
-    } else {
-      // 否则只发送文本
-      response = await axios.post('/py-api/api/companion/chat', {
+
+      const analyzeData = analyzeResp.data || {}
+      finalTranscript = (analyzeData.transcript || finalTranscript).trim()
+      detectedEmotion = analyzeData.detected_emotion || null
+      emotionDetails = analyzeData.emotion_details || null
+
+      if (!finalTranscript) {
+        throw new Error('No transcript from audio analyze')
+      }
+
+      if (userMsgId) {
+        updateUserMessage(userMsgId, finalTranscript)
+      } else {
+        pushUserMessage(finalTranscript)
+      }
+      heardText.value = `已识别：${finalTranscript}`
+    }
+
+    // 阶段2：流式聊天
+    const assistantMsgId = createAssistantPlaceholder()
+
+    const streamResponse = await fetch('/py-api/api/companion/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         userId,
         sessionId,
-        text: transcript,
-        tts_voice: selectedTtsVoice.value,
-      }, {
-        timeout: 180000  // 3分钟超时
-      })
+        text: finalTranscript,
+        detected_emotion: detectedEmotion,
+      }),
+    })
+
+    if (!streamResponse.ok || !streamResponse.body) {
+      throw new Error(`HTTP ${streamResponse.status}`)
     }
 
-    const { data } = response
+    const { collectedText, finalDone } = await readStreamAsText(streamResponse, assistantMsgId)
+    let replyText = collectedText || '我在这里。'
+    let llmEmotion = null
 
-    // 构建情绪信息对象
+    if (finalDone) {
+      replyText = finalDone.reply || replyText
+      llmEmotion = finalDone.emotion || null
+    }
+
     const emotions = {
-      speech: data?.detected_emotion || null,
-      llm: data?.emotion || null,
-      complex: data?.emotion_details?.complex_emotion || null,
+      speech: detectedEmotion,
+      llm: llmEmotion,
+      complex: emotionDetails?.complex_emotion || null,
     }
+    updateAssistantMessage(assistantMsgId, replyText, emotions)
 
-    const replyText = data?.reply || '我在这里，先慢慢呼吸，我们可以一点点把感受说出来。'
-
-    // 如果后端返回了转写文本，更新用户消息
-    if (data?.transcript) {
-      if (userMsgId) {
-        // 更新已存在的占位消息
-        updateUserMessage(userMsgId, data.transcript)
-      } else if (!transcript || data.transcript !== transcript) {
-        // 如果没有占位消息且文本不同，添加新消息
-        pushUserMessage(data.transcript)
-      }
-      heardText.value = `已识别：${data.transcript}`
-    }
-
-    // 添加助手回复，附带情绪信息
-    pushAssistantMessage(replyText, emotions)
-    await playAssistantSpeech(data?.audio_url)
+    // 阶段3：异步 TTS（不阻塞流式文字）
+    const ttsResp = await axios.post('/py-api/api/companion/tts', {
+      text: replyText,
+      tts_voice: selectedTtsVoice.value,
+    }, { timeout: 120000 })
+    await playAssistantSpeech(ttsResp?.data?.audio_url)
   } catch (error) {
     console.error(error)
     pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')

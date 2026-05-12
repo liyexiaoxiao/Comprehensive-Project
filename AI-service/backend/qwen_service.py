@@ -96,13 +96,7 @@ def analyze_emotion_by_qwen(user_text: str):
 
 
 def query_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
-    """调用 DashScope 兼容 OpenAI 接口，返回模型原始文本。
-
-    Args:
-        user_text: 用户输入的文本
-        detected_emotion: 从语音识别出的情绪（可选）
-        history: 历史消息列表
-    """
+    """调用 DashScope 兼容 OpenAI 接口，返回模型原始文本。"""
     if not QWEN_API_KEY:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
@@ -118,3 +112,25 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None, history: 
     if not content:
         raise RuntimeError("模型未返回内容")
     return content
+
+
+def stream_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
+    """流式调用 Qwen，逐段产出文本 token。"""
+    if not QWEN_API_KEY:
+        raise RuntimeError("未配置 DASHSCOPE_API_KEY")
+
+    client = OpenAI(api_key=QWEN_API_KEY, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+
+    stream = client.chat.completions.create(
+        model="qwen3.5-plus",
+        messages=build_companion_prompt(user_text, detected_emotion, history),
+        stream=True,
+        extra_body={"enable_thinking": True},
+    )
+
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta and getattr(delta, "content", None):
+            yield delta.content

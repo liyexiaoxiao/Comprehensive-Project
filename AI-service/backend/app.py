@@ -4,10 +4,10 @@ import tempfile
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
-from qwen_service import query_qwen_companion
+from qwen_service import query_qwen_companion, stream_qwen_companion
 from tts_service import synthesize_speech
 
 app = Flask(__name__)
@@ -124,7 +124,8 @@ def companion_chat():
 
             temp_path = None
             try:
-                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                file_suffix = os.path.splitext(audio_file.filename)[1] or '.wav'
+                with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as temp_file:
                     temp_path = temp_file.name
                     audio_file.save(temp_path)
 
@@ -132,10 +133,12 @@ def companion_chat():
                     audio_content = f.read()
 
                 frontend_transcript = (request.form.get('transcript') or '').strip()
-                files = {'audio': ('recording.wav', audio_content, 'audio/wav')}
+                upload_name = audio_file.filename or f"recording{file_suffix}"
+                upload_mime = audio_file.mimetype or 'application/octet-stream'
+                files = {'audio': (upload_name, audio_content, upload_mime)}
                 data = {'transcript': frontend_transcript} if frontend_transcript else {}
 
-                emotion_response = requests.post(EMOTION_SERVICE_URL, files=files, data=data, timeout=30)
+                emotion_response = requests.post(EMOTION_SERVICE_URL, files=files, data=data, timeout=60)
                 if emotion_response.status_code != 200:
                     return jsonify({'error': f'Emotion recognition service failed: {emotion_response.text}'}), 500
 
@@ -203,6 +206,162 @@ def companion_chat():
         return jsonify({'error': f'Failed to call emotion service: {str(e)}'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companion/chat/stream', methods=['POST', 'OPTIONS'])
+def companion_chat_stream():
+    """SSE: 流式返回 AI 回复文本，并在结束后落库与可选 TTS。"""
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        payload = request.get_json(silent=True) or {}
+        user_id_raw = payload.get('userId')
+        session_id = (payload.get('sessionId') or '').strip()
+        transcript = (payload.get('text') or '').strip()
+        detected_emotion = (payload.get('detected_emotion') or '').strip() or None
+        tts_voice = (payload.get('tts_voice') or '').strip()
+
+        if user_id_raw is None:
+            return jsonify({'error': 'userId is required'}), 400
+        if not session_id:
+            return jsonify({'error': 'sessionId is required'}), 400
+        if not transcript:
+            return jsonify({'error': 'text is required for stream mode'}), 400
+
+        try:
+            user_id = int(user_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'userId must be integer'}), 400
+
+        logs = fetch_history(session_id, limit=20)
+        history = parse_history_items(logs)
+
+        save_chat_log(
+            user_id=user_id,
+            session_id=session_id,
+            role='user',
+            content=transcript,
+            emotion_label=detected_emotion,
+        )
+
+        def event_stream():
+            try:
+                raw_text = ''
+                for token in stream_qwen_companion(transcript, detected_emotion, history):
+                    raw_text += token
+                    yield f"data: {json.dumps({'type': 'delta', 'text': token}, ensure_ascii=False)}\n\n"
+
+                emotion = '平静'
+                reply = raw_text
+                try:
+                    parsed = json.loads(raw_text)
+                    emotion = parsed.get('emotion', emotion)
+                    reply = parsed.get('reply', reply)
+                except Exception:
+                    pass
+
+                save_chat_log(
+                    user_id=user_id,
+                    session_id=session_id,
+                    role='assistant',
+                    content=reply,
+                    emotion_label=emotion,
+                )
+
+                done_payload = {
+                    'type': 'done',
+                    'emotion': emotion,
+                    'reply': reply,
+                    'raw': raw_text,
+                }
+                yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return Response(
+            event_stream(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+            },
+        )
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companion/audio/analyze', methods=['POST', 'OPTIONS'])
+def companion_audio_analyze():
+    """阶段1：仅做语音识别+情绪识别，返回 transcript 与 detected_emotion。"""
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    if 'audio' not in request.files:
+        return jsonify({'error': 'audio file is required'}), 400
+
+    audio_file = request.files['audio']
+    if audio_file.filename == '':
+        return jsonify({'error': 'No audio file selected'}), 400
+
+    temp_path = None
+    try:
+        file_suffix = os.path.splitext(audio_file.filename)[1] or '.wav'
+        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as temp_file:
+            temp_path = temp_file.name
+            audio_file.save(temp_path)
+
+        with open(temp_path, 'rb') as f:
+            audio_content = f.read()
+
+        frontend_transcript = (request.form.get('transcript') or '').strip()
+        upload_name = audio_file.filename or f"recording{file_suffix}"
+        upload_mime = audio_file.mimetype or 'application/octet-stream'
+        files = {'audio': (upload_name, audio_content, upload_mime)}
+        data = {'transcript': frontend_transcript} if frontend_transcript else {}
+
+        emotion_response = requests.post(EMOTION_SERVICE_URL, files=files, data=data, timeout=60)
+        if emotion_response.status_code != 200:
+            return jsonify({'error': f'Emotion recognition service failed: {emotion_response.text}'}), 500
+
+        emotion_data = emotion_response.json()
+        detected_emotion = emotion_data.get('complex_emotion', emotion_data.get('basic_emotion', 'neutral'))
+        transcript = (emotion_data.get('transcript') or frontend_transcript).strip()
+
+        if not transcript:
+            return jsonify({'error': 'No transcript from audio'}), 400
+
+        return jsonify({
+            'transcript': transcript,
+            'detected_emotion': detected_emotion,
+            'emotion_details': emotion_data,
+        })
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Failed to call emotion service: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+@app.route('/api/companion/tts', methods=['POST', 'OPTIONS'])
+def companion_tts():
+    """阶段3：异步 TTS 生成，不阻塞流式文字输出。"""
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    payload = request.get_json(silent=True) or {}
+    text = (payload.get('text') or '').strip()
+    tts_voice = (payload.get('tts_voice') or '').strip() or None
+
+    if not text:
+        return jsonify({'error': 'text is required'}), 400
+
+    tts_payload = build_tts_payload(text, tts_voice)
+    return jsonify(tts_payload)
 
 
 @app.route('/api/companion/history', methods=['GET'])
