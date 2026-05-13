@@ -15,14 +15,14 @@ public class PlaylistTrack {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "playlist_track_id")
+	@Column(name = "track_id")
 	private Long id;
 
 	@Column(name = "playlist_id", nullable = false)
 	private Long playlistId;
 
 	@Column(name = "music_id", nullable = false)
-	private Long musicId;
+	private String musicId;
 
 	@Column(name = "sort_order", nullable = false)
 	private Integer sortOrder;
@@ -46,11 +46,11 @@ public class PlaylistTrack {
 		this.playlistId = playlistId;
 	}
 
-	public Long getMusicId() {
+	public String getMusicId() {
 		return musicId;
 	}
 
-	public void setMusicId(Long musicId) {
+	public void setMusicId(String musicId) {
 		this.musicId = musicId;
 	}
 

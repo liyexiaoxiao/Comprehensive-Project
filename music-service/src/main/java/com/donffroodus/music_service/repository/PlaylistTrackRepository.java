@@ -17,11 +17,15 @@ public interface PlaylistTrackRepository extends JpaRepository<PlaylistTrack, Lo
 
 	List<PlaylistTrack> findByPlaylistIdInOrderBySortOrderAscIdAsc(List<Long> playlistIds);
 
-	Optional<PlaylistTrack> findByPlaylistIdAndMusicId(Long playlistId, Long musicId);
+	Optional<PlaylistTrack> findByPlaylistIdAndMusicId(Long playlistId, String musicId);
 
-	boolean existsByPlaylistIdAndMusicId(Long playlistId, Long musicId);
+	boolean existsByPlaylistIdAndMusicId(Long playlistId, String musicId);
+
+	void deleteByPlaylistIdAndMusicId(Long playlistId, String musicId);
 
 	void deleteByPlaylistId(Long playlistId);
+
+	List<PlaylistTrack> findByPlaylistId(Long playlistId);
 
 	@Query("SELECT COALESCE(MAX(t.sortOrder), 0) FROM PlaylistTrack t WHERE t.playlistId = :playlistId")
 	int findMaxSortOrderByPlaylistId(@Param("playlistId") Long playlistId);

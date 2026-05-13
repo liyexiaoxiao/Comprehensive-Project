@@ -13,5 +13,7 @@ public interface PlaylistRepository extends JpaRepository<Playlist, Long> {
 
 	List<Playlist> findByUserIdOrderByIdDesc(Long userId);
 
+	List<Playlist> findByUserId(Long userId);
+
 	Optional<Playlist> findByIdAndUserId(Long id, Long userId);
 }

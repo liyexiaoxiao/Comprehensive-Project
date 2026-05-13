@@ -110,9 +110,14 @@ public class PlaylistApiController {
         if (request == null || request.musicId() == null) {
             return ResponseEntity.badRequest().build();
         }
+        if (playlistTrackRepository.existsByPlaylistIdAndMusicId(id, request.musicId())) {
+            return ResponseEntity.status(409).build();
+        }
+        int nextOrder = playlistTrackRepository.findMaxSortOrderByPlaylistId(id) + 1;
         PlaylistTrack track = new PlaylistTrack();
         track.setPlaylistId(id);
         track.setMusicId(request.musicId());
+        track.setSortOrder(nextOrder);
         return ResponseEntity.ok(playlistTrackRepository.save(track));
     }
 

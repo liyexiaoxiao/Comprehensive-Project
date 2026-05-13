@@ -288,7 +288,7 @@ public class MusicApiController {
 	@GetMapping("/me/music-preferences/by-music/{musicId}")
 	public ResponseEntity<UserPreference> getMusicPreferenceForMusic(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
-			@PathVariable("musicId") Long musicId) {
+			@PathVariable("musicId") String musicId) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return userPreferenceRepository.findByUserIdAndMusicId(userId, musicId)
 				.map(ResponseEntity::ok)
@@ -323,18 +323,18 @@ public class MusicApiController {
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
 		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 提升排序靠前
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(m.getId())))
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(String.valueOf(m.getId()))))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(m.getId())) ? 0 : 1)
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(String.valueOf(m.getId()))) ? 0 : 1)
 						.thenComparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 							if (t != null && t == 1) {
 								return 0;
 							}
@@ -396,18 +396,18 @@ public class MusicApiController {
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
 		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 排在前面
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(m.getId())))
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(String.valueOf(m.getId()))))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(m.getId())) ? 0 : 1)
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(String.valueOf(m.getId()))) ? 0 : 1)
 						.thenComparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 							if (t != null && t == 1) {
 								return 0;
 							}
@@ -681,9 +681,11 @@ public class MusicApiController {
 
 		Set<Long> referencedMusicIds = allTracks.stream()
 				.map(PlaylistTrack::getMusicId)
+				.filter(id -> id != null && id.matches("\\d+"))
+				.map(Long::valueOf)
 				.collect(Collectors.toCollection(HashSet::new));
-		Map<Long, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
-				.collect(Collectors.toMap(MusicResource::getId, m -> m, (a, b) -> a, HashMap::new));
+		Map<String, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
+				.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
 
 		Map<Long, List<PlaylistTrackResponse>> tracksByPlaylist = new HashMap<>();
 		for (PlaylistTrack t : allTracks) {
@@ -715,9 +717,11 @@ public class MusicApiController {
 				.findByPlaylistIdOrderBySortOrderAscIdAsc(playlistId);
 		Set<Long> referencedMusicIds = tracks.stream()
 				.map(PlaylistTrack::getMusicId)
+				.filter(id -> id != null && id.matches("\\d+"))
+				.map(Long::valueOf)
 				.collect(Collectors.toCollection(HashSet::new));
-		Map<Long, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
-				.collect(Collectors.toMap(MusicResource::getId, m -> m, (a, b) -> a, HashMap::new));
+		Map<String, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
+				.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
 
 		List<PlaylistTrackResponse> trackBodies = tracks.stream()
 				.map(t -> PlaylistTrackResponse.of(t, musicById.get(t.getMusicId())))
@@ -765,9 +769,11 @@ public class MusicApiController {
 					List<PlaylistTrack> tracks = playlistTrackRepository
 							.findByPlaylistIdOrderBySortOrderAscIdAsc(playlistId);
 					Set<Long> ids = tracks.stream().map(PlaylistTrack::getMusicId)
+							.filter(id -> id != null && id.matches("\\d+"))
+							.map(Long::valueOf)
 							.collect(Collectors.toCollection(HashSet::new));
-					Map<Long, MusicResource> musicById = musicResourceRepository.findAllById(ids).stream()
-							.collect(Collectors.toMap(MusicResource::getId, m -> m, (a, b) -> a, HashMap::new));
+					Map<String, MusicResource> musicById = musicResourceRepository.findAllById(ids).stream()
+							.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
 					List<PlaylistTrackResponse> body = tracks.stream()
 							.map(t -> PlaylistTrackResponse.of(t, musicById.get(t.getMusicId())))
 							.toList();
@@ -810,9 +816,9 @@ public class MusicApiController {
 		if (playlist.isEmpty()) {
 			return ResponseEntity.notFound().build();
 		}
-		Optional<MusicResource> music = musicResourceRepository.findById(request.musicId());
-		if (music.isEmpty()) {
-			return ResponseEntity.notFound().build();
+		MusicResource music = null;
+		if (request.musicId() != null && request.musicId().matches("\\d+")) {
+			music = musicResourceRepository.findById(Long.valueOf(request.musicId())).orElse(null);
 		}
 		if (playlistTrackRepository.existsByPlaylistIdAndMusicId(playlistId, request.musicId())) {
 			return ResponseEntity.status(409).build();
@@ -824,7 +830,7 @@ public class MusicApiController {
 		track.setMusicId(request.musicId());
 		track.setSortOrder(nextOrder);
 		PlaylistTrack saved = playlistTrackRepository.save(track);
-		return ResponseEntity.ok(PlaylistTrackResponse.of(saved, music.get()));
+		return ResponseEntity.ok(PlaylistTrackResponse.of(saved, music));
 	}
 
 	/** 从当前用户的歌单移除某首曲目（按 musicId）。 */
@@ -834,7 +840,7 @@ public class MusicApiController {
 	public ResponseEntity<Void> removeTrackFromMyPlaylist(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("playlistId") Long playlistId,
-			@PathVariable("musicId") Long musicId) {
+			@PathVariable("musicId") String musicId) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		Optional<Playlist> playlist = playlistRepository.findByIdAndUserId(playlistId, userId);
 		if (playlist.isEmpty()) {
@@ -855,13 +861,13 @@ public class MusicApiController {
 	}
 
 	public static record PlaylistTrackWriteRequest(
-			Long musicId) {
+			String musicId) {
 	}
 
 	public static record PlaylistTrackResponse(
 			Long playlistTrackId,
 			Long playlistId,
-			Long musicId,
+			String musicId,
 			Integer sortOrder,
 			LocalDateTime createdAt,
 			MusicResource music) {
@@ -902,7 +908,7 @@ public class MusicApiController {
 		}
 	}
 
-	public static record MusicPreferenceRequest(Long musicId, Integer preferenceType) {
+	public static record MusicPreferenceRequest(String musicId, Integer preferenceType) {
 	}
 
 	public static record MusicRecommendationRequest(Long emotionTagId, Integer limit) {
