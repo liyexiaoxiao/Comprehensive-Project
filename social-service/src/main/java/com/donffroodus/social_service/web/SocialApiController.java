@@ -27,9 +27,11 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import com.donffroodus.social_service.entity.Friendship;
 import com.donffroodus.social_service.entity.MoodDiary;
 import com.donffroodus.social_service.entity.SocialInteraction;
 import com.donffroodus.social_service.entity.SocialPost;
+import com.donffroodus.social_service.repository.FriendshipRepository;
 import com.donffroodus.social_service.repository.MoodDiaryRepository;
 import com.donffroodus.social_service.repository.SocialInteractionRepository;
 import com.donffroodus.social_service.repository.SocialPostRepository;
@@ -48,14 +50,17 @@ public class SocialApiController {
 	private final MoodDiaryRepository moodDiaryRepository;
 	private final SocialPostRepository socialPostRepository;
 	private final SocialInteractionRepository socialInteractionRepository;
+	private final FriendshipRepository friendshipRepository;
 
 	public SocialApiController(
 			MoodDiaryRepository moodDiaryRepository,
 			SocialPostRepository socialPostRepository,
-			SocialInteractionRepository socialInteractionRepository) {
+			SocialInteractionRepository socialInteractionRepository,
+			FriendshipRepository friendshipRepository) {
 		this.moodDiaryRepository = moodDiaryRepository;
 		this.socialPostRepository = socialPostRepository;
 		this.socialInteractionRepository = socialInteractionRepository;
+		this.friendshipRepository = friendshipRepository;
 	}
 
 	// --- mood_diary ---
@@ -324,6 +329,97 @@ public class SocialApiController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	// --- friendship ---
+
+	private static boolean isValidIntimacy(Integer level) {
+		return level != null && level >= 1 && level <= 3;
+	}
+
+	/** 当前用户好友列表。 */
+	@Operation(summary = "我的好友列表")
+	@GetMapping("/me/friends")
+	public List<FriendshipResponse> listMyFriends(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return friendshipRepository.findByUserIdOrderByCreatedAtDesc(userId)
+				.stream()
+				.map(FriendshipResponse::from)
+				.toList();
+	}
+
+	/** 新增好友（双向落地）。 */
+	@Operation(summary = "新增好友", description = "双向落地：同时新增 A->B 与 B->A，两侧亲密度默认同值")
+	@PostMapping("/me/friends")
+	@Transactional
+	public ResponseEntity<FriendshipResponse> addFriend(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@RequestBody FriendshipCreateRequest request) {
+		if (request == null || request.friendUserId() == null) {
+			return ResponseEntity.badRequest().build();
+		}
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		if (request.friendUserId().equals(userId)) {
+			return ResponseEntity.badRequest().build();
+		}
+		if (friendshipRepository.existsByUserIdAndFriendUserId(userId, request.friendUserId())) {
+			return ResponseEntity.status(409).build();
+		}
+		Integer intimacyLevel = request.intimacyLevel() == null ? 1 : request.intimacyLevel();
+		if (!isValidIntimacy(intimacyLevel)) {
+			return ResponseEntity.badRequest().build();
+		}
+		Friendship selfSide = new Friendship();
+		selfSide.setUserId(userId);
+		selfSide.setFriendUserId(request.friendUserId());
+		selfSide.setIntimacyLevel(intimacyLevel);
+		Friendship savedSelfSide = friendshipRepository.save(selfSide);
+
+		if (!friendshipRepository.existsByUserIdAndFriendUserId(request.friendUserId(), userId)) {
+			Friendship peerSide = new Friendship();
+			peerSide.setUserId(request.friendUserId());
+			peerSide.setFriendUserId(userId);
+			peerSide.setIntimacyLevel(intimacyLevel);
+			friendshipRepository.save(peerSide);
+		}
+		return ResponseEntity.ok(FriendshipResponse.from(savedSelfSide));
+	}
+
+	/** 更新好友亲密度（1~3）。 */
+	@Operation(summary = "更新好友亲密度", description = "亲密度仅允许 1~3")
+	@PutMapping("/me/friends/{friendshipId}/intimacy")
+	public ResponseEntity<FriendshipResponse> updateFriendIntimacy(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("friendshipId") Long friendshipId,
+			@RequestBody FriendshipIntimacyUpdateRequest request) {
+		if (request == null || !isValidIntimacy(request.intimacyLevel())) {
+			return ResponseEntity.badRequest().build();
+		}
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return friendshipRepository.findByIdAndUserId(friendshipId, userId)
+				.map(existing -> {
+					existing.setIntimacyLevel(request.intimacyLevel());
+					return ResponseEntity.ok(FriendshipResponse.from(friendshipRepository.save(existing)));
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	/** 删除好友关系（双向删除）。 */
+	@Operation(summary = "删除好友")
+	@DeleteMapping("/me/friends/{friendshipId}")
+	@Transactional
+	public ResponseEntity<Void> deleteFriend(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("friendshipId") Long friendshipId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return friendshipRepository.findByIdAndUserId(friendshipId, userId)
+				.map(existing -> {
+					friendshipRepository.deleteByUserIdAndFriendUserId(existing.getFriendUserId(), existing.getUserId());
+					friendshipRepository.delete(existing);
+					return ResponseEntity.ok().<Void>build();
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
 	public static record MoodDiaryWriteRequest(
 			LocalDate date,
 			String dominantEmotion,
@@ -380,5 +476,33 @@ public class SocialApiController {
 	}
 
 	public static record CommentWriteRequest(String comment) {
+	}
+
+	public static record FriendshipCreateRequest(
+			Long friendUserId,
+			Integer intimacyLevel) {
+	}
+
+	public static record FriendshipIntimacyUpdateRequest(
+			Integer intimacyLevel) {
+	}
+
+	public static record FriendshipResponse(
+			Long friendshipId,
+			Long userId,
+			Long friendUserId,
+			Integer intimacyLevel,
+			LocalDateTime createdAt,
+			LocalDateTime updatedAt) {
+
+		static FriendshipResponse from(Friendship f) {
+			return new FriendshipResponse(
+					f.getId(),
+					f.getUserId(),
+					f.getFriendUserId(),
+					f.getIntimacyLevel(),
+					f.getCreatedAt(),
+					f.getUpdatedAt());
+		}
 	}
 }

@@ -1,7 +1,11 @@
 package com.donffroodus.user_service.service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -224,6 +228,62 @@ public class UserService {
         safeUser.setAvatarUrl(user.getAvatarUrl());
         safeUser.setBio(user.getBio());
 
+        return safeUser;
+    }
+
+    public List<UserInfoRequest> searchUsers(String keyword, int limit, Long excludeUserId) {
+        String q = keyword == null ? "" : keyword.trim();
+        if (q.isEmpty()) {
+            return List.of();
+        }
+        int boundedLimit = Math.min(Math.max(limit, 1), 50);
+        List<UserInfoRequest> result = new ArrayList<>();
+        List<Long> seenUserIds = new ArrayList<>();
+
+        try {
+            Long exactId = Long.valueOf(q);
+            userInfoRepository.findById(exactId).ifPresent(user -> {
+                if ((excludeUserId == null || !excludeUserId.equals(user.getId()))) {
+                    result.add(toSafeUserInfo(user));
+                    seenUserIds.add(user.getId());
+                }
+            });
+        } catch (NumberFormatException ex) {
+            // q is not an id
+        }
+
+        int remain = boundedLimit - result.size();
+        if (remain <= 0) {
+            return result;
+        }
+
+        userInfoRepository.findByUsernameContainingIgnoreCaseOrNicknameContainingIgnoreCase(
+                q,
+                q,
+                PageRequest.of(0, remain))
+                .forEach(user -> {
+                    if (excludeUserId != null && excludeUserId.equals(user.getId())) {
+                        return;
+                    }
+                    if (seenUserIds.contains(user.getId())) {
+                        return;
+                    }
+                    result.add(toSafeUserInfo(user));
+                    seenUserIds.add(user.getId());
+                });
+
+        return result;
+    }
+
+    private static UserInfoRequest toSafeUserInfo(UserInfo user) {
+        UserInfoRequest safeUser = new UserInfoRequest();
+        safeUser.setUserId(user.getId());
+        safeUser.setUsername(user.getUsername());
+        safeUser.setNickname(user.getNickname());
+        safeUser.setEmail(user.getEmail());
+        safeUser.setPhone(user.getPhone());
+        safeUser.setAvatarUrl(user.getAvatarUrl());
+        safeUser.setBio(user.getBio());
         return safeUser;
     }
 }

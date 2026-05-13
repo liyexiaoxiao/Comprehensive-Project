@@ -27,7 +27,6 @@ import com.donffroodus.user_service.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -57,6 +56,17 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
         return ResponseEntity.ok(userService.getUserById(userId));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> searchUsers(
+            @RequestParam("q") String keyword,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestHeader(value = "X-User-Id", required = false) Long currentUserId) {
+        if (limit <= 0) {
+            return ResponseEntity.badRequest().body("limit must be positive");
+        }
+        return ResponseEntity.ok(userService.searchUsers(keyword, limit, currentUserId));
     }
 
     @PreAuthorize("hasRole('ADMIN')") 
