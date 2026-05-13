@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -482,6 +483,25 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
+	private static final int MAX_BATCH_TAG_ITEMS = 100;
+
+	/** 覆盖写入：先删该曲全部映射，再写入；调用方须已校验 music 存在且 tagIds 非空且均在字典中。 */
+	private List<MusicTagMapping> applyReplaceTagsForMusic(Long musicId, Set<Long> distinctTagIds, String source) {
+		List<MusicTagMapping> oldMappings = musicTagMappingRepository.findByMusicId(musicId);
+		if (!oldMappings.isEmpty()) {
+			musicTagMappingRepository.deleteAll(oldMappings);
+		}
+		List<MusicTagMapping> saved = new ArrayList<>();
+		for (Long tagId : distinctTagIds) {
+			MusicTagMapping mapping = new MusicTagMapping();
+			mapping.setMusicId(musicId);
+			mapping.setTagId(tagId);
+			mapping.setSource(source);
+			saved.add(musicTagMappingRepository.save(mapping));
+		}
+		return saved;
+	}
+
 	/** 覆盖写入某首音乐的情绪标签绑定（先清空旧映射再保存新标签集）。 */
 	@Operation(summary = "覆盖写入音乐的情绪标签", description = "先清空旧映射；tagIds 须全部存在于字典；source 默认 manual")
 	@PostMapping("/music-resources/{musicId}/tags")
@@ -513,21 +533,75 @@ public class MusicApiController {
 			source = "manual";
 		}
 
-		// 覆盖写入
-		List<MusicTagMapping> oldMappings = musicTagMappingRepository.findByMusicId(musicId);
-		if (!oldMappings.isEmpty()) {
-			musicTagMappingRepository.deleteAll(oldMappings);
+		return ResponseEntity.ok(applyReplaceTagsForMusic(musicId, distinctTagIds, source));
+	}
+
+	/**
+	 * 批量覆盖写入多首音乐的情绪标签（语义与单首 POST /music-resources/{musicId}/tags 一致）。
+	 * 同一请求内若出现重复 musicId，以后出现的条目为准。全部校验通过后再一次性提交事务。
+	 */
+	@Operation(summary = "批量覆盖写入音乐情绪标签", description = "最多 100 条；每项须 musicId + 非空 tagIds；tagIds 须全部存在于字典；source 可逐项省略，默认 manual")
+	@PostMapping("/music-resources/tags/batch")
+	@Transactional
+	public ResponseEntity<BatchReplaceMusicTagsResponse> batchReplaceMusicTags(
+			@RequestBody BatchReplaceMusicTagsRequest body) {
+		if (body == null || body.items() == null || body.items().isEmpty()) {
+			return ResponseEntity.badRequest().build();
 		}
-		List<MusicTagMapping> saved = new ArrayList<>();
-		for (Long tagId : distinctTagIds) {
-			MusicTagMapping mapping = new MusicTagMapping();
-			mapping.setMusicId(musicId);
-			mapping.setTagId(tagId);
-			mapping.setSource(source);
-			saved.add(musicTagMappingRepository.save(mapping));
+		if (body.items().size() > MAX_BATCH_TAG_ITEMS) {
+			return ResponseEntity.badRequest().build();
 		}
 
-		return ResponseEntity.ok(saved);
+		// 同 batch 内重复 musicId：保留最后一次
+		List<BatchReplaceMusicTagsItem> normalized = new ArrayList<>();
+		Map<Long, BatchReplaceMusicTagsItem> byMusic = new LinkedHashMap<>();
+		for (BatchReplaceMusicTagsItem item : body.items()) {
+			if (item == null || item.musicId() == null || item.tagIds() == null || item.tagIds().isEmpty()) {
+				return ResponseEntity.badRequest().build();
+			}
+			byMusic.put(item.musicId(), item);
+		}
+		normalized.addAll(byMusic.values());
+
+		Set<Long> allMusicIds = new HashSet<>();
+		Set<Long> allTagIds = new HashSet<>();
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			allMusicIds.add(item.musicId());
+			allTagIds.addAll(new HashSet<>(item.tagIds()));
+		}
+
+		List<MusicResource> musics = musicResourceRepository.findAllById(allMusicIds);
+		if (musics.size() != allMusicIds.size()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		List<EmotionTag> tags = emotionTagRepository.findAllById(allTagIds);
+		Set<Long> existingTagIds = tags.stream().map(EmotionTag::getId).collect(Collectors.toSet());
+		if (existingTagIds.size() != allTagIds.size()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			Set<Long> distinct = new HashSet<>(item.tagIds());
+			if (distinct.isEmpty()) {
+				return ResponseEntity.badRequest().build();
+			}
+			if (!existingTagIds.containsAll(distinct)) {
+				return ResponseEntity.badRequest().build();
+			}
+		}
+
+		List<BatchReplaceMusicTagsResultItem> results = new ArrayList<>();
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			Set<Long> distinct = new HashSet<>(item.tagIds());
+			String source = item.source();
+			if (source == null || source.isBlank()) {
+				source = "manual";
+			}
+			List<MusicTagMapping> saved = applyReplaceTagsForMusic(item.musicId(), distinct, source);
+			results.add(new BatchReplaceMusicTagsResultItem(item.musicId(), saved.size()));
+		}
+		return ResponseEntity.ok(new BatchReplaceMusicTagsResponse(results));
 	}
 
 	/** 按名称创建情绪标签；已存在则返回已有记录。 */
@@ -851,6 +925,25 @@ public class MusicApiController {
 	public static record MusicTagsWriteRequest(
 			List<Long> tagIds,
 			String source) {
+	}
+
+	public static record BatchReplaceMusicTagsItem(
+			Long musicId,
+			List<Long> tagIds,
+			String source) {
+	}
+
+	public static record BatchReplaceMusicTagsRequest(
+			List<BatchReplaceMusicTagsItem> items) {
+	}
+
+	public static record BatchReplaceMusicTagsResultItem(
+			Long musicId,
+			int mappingCount) {
+	}
+
+	public static record BatchReplaceMusicTagsResponse(
+			List<BatchReplaceMusicTagsResultItem> results) {
 	}
 
 	public static record EmotionTagWriteRequest(
