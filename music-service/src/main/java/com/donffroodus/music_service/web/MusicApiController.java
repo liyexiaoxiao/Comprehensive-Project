@@ -1,8 +1,9 @@
 package com.donffroodus.music_service.web;
 
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,11 +65,90 @@ public class MusicApiController {
 		this.userPreferenceRepository = userPreferenceRepository;
 	}
 
-	/** 列出全部音乐资源。 */
-	@Operation(summary = "列出全部音乐资源")
+	/** preference_type：1=喜欢，2=收藏（推荐排序与喜欢同等加权），-1=黑名单。 */
+	private static boolean isValidPreferenceType(Integer t) {
+		return t != null && (t == 1 || t == 2 || t == -1);
+	}
+
+	/** 喜欢或收藏：推荐时均视为正向偏好（收藏默认享受“喜欢”级排序）。 */
+	private static boolean isBoostPreference(Integer t) {
+		return t != null && (t == 1 || t == 2);
+	}
+
+	private static boolean isBlocked(Integer t) {
+		return t != null && t == -1;
+	}
+
+	/** 解析逗号分隔的 Long id；去重且保持首次出现顺序；最多 max 个。非法片段跳过。 */
+	private static List<Long> parseCommaSeparatedIds(String raw, int max) {
+		if (raw == null || raw.isBlank()) {
+			return List.of();
+		}
+		List<Long> out = new ArrayList<>();
+		for (String part : raw.split(",")) {
+			String s = part.strip();
+			if (s.isEmpty()) {
+				continue;
+			}
+			try {
+				long id = Long.parseLong(s);
+				if (out.contains(id)) {
+					continue;
+				}
+				out.add(id);
+				if (out.size() >= max) {
+					break;
+				}
+			} catch (NumberFormatException ex) {
+				// skip invalid token
+			}
+		}
+		return out;
+	}
+
+	/** 列出音乐资源；可选 q 按标题或艺人模糊匹配（不区分大小写）。 */
+	@Operation(summary = "列出音乐资源", description = "无 q 时返回全部；有 q 时在标题或 artist 中模糊匹配")
 	@GetMapping("/music-resources")
-	public List<MusicResource> listMusic() {
-		return musicResourceRepository.findAll();
+	public List<MusicResource> listMusic(
+			@Parameter(name = "q", description = "关键词，匹配 title 或 artist", in = ParameterIn.QUERY) @RequestParam(value = "q", required = false) String q) {
+		if (q == null || q.isBlank()) {
+			return musicResourceRepository.findAll();
+		}
+		String keyword = q.strip();
+		return musicResourceRepository.searchByTitleOrArtistIgnoreCase(keyword);
+	}
+
+	/** 当前用户上传的音乐列表（按 music_id 降序）。 */
+	@Operation(summary = "列出当前用户上传的音乐", description = "uploaderId 与 X-User-Id 一致")
+	@GetMapping("/me/music-resources")
+	public List<MusicResource> listMyUploadedMusic(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return musicResourceRepository.findByUploaderIdOrderByIdDesc(userId);
+	}
+
+	/**
+	 * 按多个主键批量查询音乐；顺序与请求 ids 中首次出现的 id 一致；不存在的 id 跳过。
+	 * 路径放在 /music-resources/{id} 之前，避免 "by-ids" 被当成 id。
+	 */
+	@Operation(summary = "按 id 批量查询音乐", description = "ids 为逗号分隔，如 1,2,3；最多 200 个；非法片段忽略")
+	@GetMapping("/music-resources/by-ids")
+	public ResponseEntity<List<MusicResource>> listMusicByIds(
+			@Parameter(name = "ids", description = "逗号分隔的 music_id", in = ParameterIn.QUERY, required = true) @RequestParam("ids") String ids) {
+		List<Long> idList = parseCommaSeparatedIds(ids, 200);
+		if (idList.isEmpty()) {
+			return ResponseEntity.badRequest().build();
+		}
+		Map<Long, MusicResource> byId = musicResourceRepository.findAllById(idList).stream()
+				.collect(Collectors.toMap(MusicResource::getId, m -> m, (a, b) -> a, HashMap::new));
+		List<MusicResource> ordered = new ArrayList<>();
+		for (Long id : idList) {
+			MusicResource m = byId.get(id);
+			if (m != null) {
+				ordered.add(m);
+			}
+		}
+		return ResponseEntity.ok(ordered);
 	}
 
 	/** 按主键获取单首音乐详情。 */
@@ -99,6 +180,21 @@ public class MusicApiController {
 		return ResponseEntity.ok(body);
 	}
 
+	/** 删除某首音乐的一条标签映射（须 mapping 属于该 musicId）。 */
+	@Operation(summary = "删除单条音乐-标签映射", description = "mapping 不属于该曲目时返回 404，避免误删")
+	@DeleteMapping("/music-resources/{musicId}/tags/{mappingId}")
+	@Transactional
+	public ResponseEntity<Void> deleteOneMusicTagMapping(
+			@PathVariable("musicId") Long musicId,
+			@PathVariable("mappingId") Long mappingId) {
+		Optional<MusicTagMapping> row = musicTagMappingRepository.findById(mappingId);
+		if (row.isEmpty() || !Objects.equals(row.get().getMusicId(), musicId)) {
+			return ResponseEntity.notFound().build();
+		}
+		musicTagMappingRepository.delete(row.get());
+		return ResponseEntity.ok().build();
+	}
+
 	/** 列出全部情绪标签字典。 */
 	@Operation(summary = "列出全部情绪标签")
 	@GetMapping("/emotion-tags")
@@ -106,17 +202,37 @@ public class MusicApiController {
 		return emotionTagRepository.findAll();
 	}
 
-	/** 查询当前用户对各音乐的偏好（喜欢 / 不喜欢）。 */
-	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，-1 不喜欢（黑名单）")
+	/** 按精确标签名查询一条情绪标签（唯一约束）。 */
+	@Operation(summary = "按名称查询情绪标签", description = "精确匹配 tag_name；不存在返回 404")
+	@GetMapping("/emotion-tags/by-name")
+	public ResponseEntity<EmotionTag> getEmotionTagByName(
+			@Parameter(name = "name", description = "标签名，精确匹配", in = ParameterIn.QUERY, required = true) @RequestParam("name") String name) {
+		if (name == null || name.isBlank()) {
+			return ResponseEntity.badRequest().build();
+		}
+		return emotionTagRepository.findByTagName(name.strip())
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	/** 查询当前用户对各音乐的偏好；可选按类型筛选。 */
+	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，2 收藏（推荐与喜欢同等加权），-1 黑名单；可选 query preferenceType 筛选")
 	@GetMapping("/me/music-preferences")
-	public List<UserPreference> listUserPreferences(
-			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+	public ResponseEntity<List<UserPreference>> listUserPreferences(
+			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "preferenceType", description = "可选：1、2、-1", in = ParameterIn.QUERY) @RequestParam(value = "preferenceType", required = false) Integer preferenceType) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		return userPreferenceRepository.findByUserId(userId);
+		if (preferenceType != null) {
+			if (!isValidPreferenceType(preferenceType)) {
+				return ResponseEntity.badRequest().build();
+			}
+			return ResponseEntity.ok(userPreferenceRepository.findByUserIdAndPreferenceType(userId, preferenceType));
+		}
+		return ResponseEntity.ok(userPreferenceRepository.findByUserId(userId));
 	}
 
 	/** 创建或更新当前用户对某首音乐的偏好。 */
-	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType 仅允许 1 或 -1")
+	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType：1 喜欢，2 收藏，-1 黑名单；收藏在推荐排序中与喜欢同等优先")
 	@PostMapping("/me/music-preferences")
 	public ResponseEntity<UserPreference> upsertMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -125,7 +241,7 @@ public class MusicApiController {
 		if (request == null || request.musicId() == null || request.preferenceType() == null) {
 			return ResponseEntity.badRequest().build();
 		}
-		if (request.preferenceType() != 1 && request.preferenceType() != -1) {
+		if (!isValidPreferenceType(request.preferenceType())) {
 			return ResponseEntity.badRequest().build();
 		}
 
@@ -154,8 +270,20 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
+	/** 查询当前用户对指定曲目的偏好（一行或不存在）。 */
+	@Operation(summary = "查询当前用户对某首音乐的偏好")
+	@GetMapping("/me/music-preferences/by-music/{musicId}")
+	public ResponseEntity<UserPreference> getMusicPreferenceForMusic(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("musicId") Long musicId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return userPreferenceRepository.findByUserIdAndMusicId(userId, musicId)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
 	/** 按情绪标签推荐候选曲目，并结合用户偏好排序与过滤黑名单。 */
-	@Operation(summary = "按情绪标签推荐", description = "结合用户偏好：喜欢优先，黑名单排除；limit 默认 10")
+	@Operation(summary = "按情绪标签推荐", description = "结合用户偏好：喜欢/收藏优先，黑名单排除；limit 默认 10")
 	@PostMapping("/me/music-recommendations/by-emotion")
 	public ResponseEntity<List<MusicResource>> recommendByEmotion(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -181,7 +309,7 @@ public class MusicApiController {
 
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
-		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 提升排序靠前
+		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 提升排序靠前
 		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
@@ -189,14 +317,18 @@ public class MusicApiController {
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
-					return t == null || t != -1;
-				})
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(m.getId())))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> {
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(m.getId())) ? 0 : 1)
+						.thenComparingInt((MusicResource m) -> {
 							Integer t = preferenceTypeByMusicId.get(m.getId());
-							return (t != null && t == 1) ? 0 : 1;
+							if (t != null && t == 1) {
+								return 0;
+							}
+							if (t != null && t == 2) {
+								return 1;
+							}
+							return 2;
 						})
 						.thenComparing(MusicResource::getId))
 				.limit(limit)
@@ -206,7 +338,7 @@ public class MusicApiController {
 	}
 
 	/** 基于当前播放曲目（及可选情绪标签）推荐下一首，排除当前曲并考虑偏好。 */
-	@Operation(summary = "推荐下一首", description = "可传 emotionTagId，否则根据当前曲目标签推断；limit 默认 1")
+	@Operation(summary = "推荐下一首", description = "可传 emotionTagId，否则根据当前曲目标签推断；limit 默认 1；喜欢/收藏优先，黑名单排除")
 	@PostMapping("/me/music-recommendations/next")
 	public ResponseEntity<List<MusicResource>> recommendNext(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -250,7 +382,7 @@ public class MusicApiController {
 
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
-		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 排在前面
+		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 排在前面
 		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
@@ -258,14 +390,18 @@ public class MusicApiController {
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
-					return t == null || t != -1;
-				})
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(m.getId())))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> {
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(m.getId())) ? 0 : 1)
+						.thenComparingInt((MusicResource m) -> {
 							Integer t = preferenceTypeByMusicId.get(m.getId());
-							return (t != null && t == 1) ? 0 : 1;
+							if (t != null && t == 1) {
+								return 0;
+							}
+							if (t != null && t == 2) {
+								return 1;
+							}
+							return 2;
 						})
 						.thenComparing(MusicResource::getId))
 				.limit(limit)
