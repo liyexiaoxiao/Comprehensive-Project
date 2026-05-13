@@ -8,6 +8,6 @@ import lombok.Data;
 public class MeditationRequest {
     private LocalDateTime startTime; // 格式为 ISO 8601，例如 "2024-06-01T14:30:00"
     private Integer duration;
-    private Long musicId;
+    private String musicId;
     private Long imageId;
 }

@@ -22,7 +22,7 @@ public class UserPreference {
 	private Long userId;
 
 	@Column(name = "music_id", nullable = false)
-	private Long musicId;
+	private String musicId;
 
 	@Column(name = "preference_type", nullable = false)
 	private Integer preferenceType;
@@ -46,11 +46,11 @@ public class UserPreference {
 		this.userId = userId;
 	}
 
-	public Long getMusicId() {
+	public String getMusicId() {
 		return musicId;
 	}
 
-	public void setMusicId(Long musicId) {
+	public void setMusicId(String musicId) {
 		this.musicId = musicId;
 	}
 

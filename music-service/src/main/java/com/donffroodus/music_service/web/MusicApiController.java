@@ -257,7 +257,7 @@ public class MusicApiController {
 			return ResponseEntity.badRequest().build();
 		}
 
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, request.musicId());
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, request.musicId(), request.preferenceType());
 		UserPreference pref = existing.orElseGet(UserPreference::new);
 		pref.setUserId(userId);
 		pref.setMusicId(request.musicId());
@@ -268,12 +268,13 @@ public class MusicApiController {
 
 	/** 删除当前用户对某首音乐的偏好记录。 */
 	@Operation(summary = "删除某首音乐的偏好记录")
-	@DeleteMapping("/me/music-preferences/{musicId}")
+	@DeleteMapping("/me/music-preferences/{musicId}/{preferenceType}")
 	public ResponseEntity<Void> deleteMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
-			@PathVariable("musicId") Long musicId) {
+			@PathVariable("musicId") String musicId,
+			@PathVariable("preferenceType") Integer preferenceType) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, musicId);
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, musicId, preferenceType);
 		if (existing.isEmpty()) {
 			return ResponseEntity.notFound().build();
 		}

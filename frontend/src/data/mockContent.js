@@ -27,7 +27,7 @@ export const homeScenes = [
 export const musicCategories = [
   {
     id: 'recommend',
-    name: '今日推荐30首',
+    name: '今日推荐20首',
     description: '为你精选的今日放松旋律。',
     tracks: [
       {

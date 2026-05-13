@@ -407,9 +407,6 @@
                     </div>
                     <div class="track-action-row">
                       <button class="icon-btn" @click="musicStore.toggleLike(track.id)" title="取消喜欢">💔</button>
-                      <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" :title="musicStore.collectedTrackIds.includes(track.id) ? '取消收藏' : '收藏'">
-                        <span :class="{ 'active-icon': musicStore.collectedTrackIds.includes(track.id) }">⭐</span>
-                      </button>
                       <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
                     </div>
                   </article>
@@ -445,9 +442,6 @@
                     </div>
                     <div class="track-action-row">
                       <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" title="取消收藏">❌</button>
-                      <button class="icon-btn" @click="musicStore.toggleLike(track.id)" :title="musicStore.likedTrackIds.includes(track.id) ? '取消喜欢' : '喜欢'">
-                        <span :class="{ 'active-icon': musicStore.likedTrackIds.includes(track.id) }">❤️</span>
-                      </button>
                       <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
                     </div>
                   </article>
@@ -742,24 +736,35 @@
       </div>
 
       <div v-if="showAddToPlaylistModal" class="modal-overlay" @click.self="showAddToPlaylistModal = false">
-        <div class="modal-content glass-panel">
+        <div class="modal-content glass-panel music-modal-card playlist-detail-modal-card">
           <div class="modal-header">
-            <h3>加入歌单</h3>
+            <div class="playlist-detail-modal-title">
+              <span class="playlist-focus-label">操作</span>
+              <h3>加入歌单</h3>
+            </div>
             <button class="close-btn" @click="showAddToPlaylistModal = false">&times;</button>
           </div>
           <div class="modal-body">
-            <div v-if="musicStore.customPlaylists.length === 0" class="empty-state">
+            <div v-if="musicStore.customPlaylists.length === 0" class="empty-state compact-empty-state">
               暂无歌单，请先创建歌单。
             </div>
-            <div v-else class="playlist-select-list">
-              <button
-                v-for="pl in musicStore.customPlaylists" 
-                :key="pl.id" 
-                class="modal-btn secondary-btn full-width-btn"
-                @click="confirmAddToPlaylist(pl.id)"
-              >
-                {{ pl.name }}
-              </button>
+            <div v-else class="playlist-track-scroll-area">
+              <div class="playlist-track-list">
+                <button
+                  v-for="pl in musicStore.customPlaylists" 
+                  :key="pl.id" 
+                  class="playlist-track-row add-to-pl-row"
+                  @click="confirmAddToPlaylist(pl.id)"
+                >
+                  <div class="playlist-track-main">
+                    <strong>{{ pl.name }}</strong>
+                    <span>{{ pl.description || '自建歌单' }}</span>
+                  </div>
+                  <div class="playlist-track-side">
+                    <span class="add-icon">➕</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -825,6 +830,18 @@ import {
 } from '@/api/user'
 import { getMusicFileUrl, getMusicListApi } from '@/api/python'
 import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
+import { 
+  getMyMoodDiariesApi, 
+  createMoodDiaryApi, 
+  updateMoodDiaryApi, 
+  deleteMoodDiaryApi,
+  getPostsApi,
+  createPostApi,
+  likePostApi,
+  commentPostApi
+} from '@/api/social'
+
+import { getMyMeditationLogsApi } from '@/api/meditation'
 
 const musicStore = useMusicStore()
 const realMusicFiles = ref([])
@@ -953,11 +970,26 @@ const selectedDateStr = computed(() => {
 })
 
 // Mock Diaries
-const mockDiaries = ref({
-  '2026-04-01': { emotions: ['Happy', 'Calm'], content: '今天天气很好，出去散步了，心情很不错！' },
-  '2026-04-03': { emotions: ['Sad', 'Angry'], content: '工作遇到了一些挫折，感觉有点沮丧，还跟同事吵了一架。' },
-  '2026-04-05': { emotions: ['Calm'], content: '安静地看了一下午书，内心很平静。' }
-})
+const mockDiaries = ref({})
+
+const fetchDiaries = async () => {
+  try {
+    const res = await getMyMoodDiariesApi()
+    const diariesMap = {}
+    if (res.data && Array.isArray(res.data)) {
+      res.data.forEach(diary => {
+        diariesMap[diary.date] = {
+          id: diary.id,
+          emotions: diary.dominantEmotion ? diary.dominantEmotion.split(',') : [],
+          content: diary.context
+        }
+      })
+    }
+    mockDiaries.value = diariesMap
+  } catch (e) {
+    console.error('Failed to fetch diaries:', e)
+  }
+}
 
 const hasDiary = (dateStr) => !!mockDiaries.value[dateStr]
 const selectedDiary = computed(() => mockDiaries.value[selectedDateStr.value])
@@ -979,15 +1011,28 @@ const toggleEmotion = (emotion) => {
 const editDiary = () => {
   if (selectedDiary.value) {
     newDiary.value = { ...selectedDiary.value, emotions: [...selectedDiary.value.emotions] }
-    // Temporarily remove to show edit form
-    delete mockDiaries.value[selectedDateStr.value]
   }
 }
 
-const saveDiary = () => {
+const saveDiary = async () => {
   if (!newDiary.value.content.trim()) return
-  mockDiaries.value[selectedDateStr.value] = { ...newDiary.value, emotions: [...newDiary.value.emotions] }
-  newDiary.value = { emotions: ['Happy'], content: '' }
+  try {
+    const payload = {
+      date: selectedDateStr.value,
+      dominantEmotion: newDiary.value.emotions.join(','),
+      context: newDiary.value.content
+    }
+    if (selectedDiary.value && selectedDiary.value.id) {
+      await updateMoodDiaryApi(selectedDiary.value.id, payload)
+    } else {
+      await createMoodDiaryApi(payload)
+    }
+    ElMessage.success('日记保存成功')
+    await fetchDiaries()
+    newDiary.value = { emotions: ['Happy'], content: '' }
+  } catch (e) {
+    ElMessage.error('保存失败')
+  }
 }
 
 // --- Tab 2: Data State & Charts ---
@@ -1005,10 +1050,39 @@ const weeklyComment = computed(() => {
 })
 
 // --- Meditation Data Logic ---
-const weeklyMeditationData = [15, 30, 0, 45, 20, 60, 10]
+const weeklyMeditationData = ref([0, 0, 0, 0, 0, 0, 0])
+
+const fetchMeditationLogs = async () => {
+  try {
+    const res = await getMyMeditationLogsApi()
+    if (res.data && Array.isArray(res.data)) {
+      // Mock grouping logic: in real app you group by Date
+      // For now, just sum the durations (in minutes) for the past 7 days based on startTime
+      const data = [0, 0, 0, 0, 0, 0, 0]
+      const now = new Date()
+      res.data.forEach(log => {
+        const logDate = new Date(log.startTime)
+        const diffTime = Math.abs(now - logDate)
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+        if (diffDays < 7) {
+          // Map today to the last index (6), yesterday to 5, etc.
+          // Or just simple mock mapping if we want to show weekly data
+          const index = 6 - diffDays
+          if (index >= 0) {
+            data[index] += log.duration || 0
+          }
+        }
+      })
+      weeklyMeditationData.value = data
+    }
+  } catch (e) {
+    console.error('Failed to fetch meditation logs:', e)
+  }
+}
+
 const weeklyAverageMeditation = computed(() => {
-  const sum = weeklyMeditationData.reduce((a, b) => a + b, 0)
-  return (sum / weeklyMeditationData.length).toFixed(1)
+  const sum = weeklyMeditationData.value.reduce((a, b) => a + b, 0)
+  return (sum / weeklyMeditationData.value.length).toFixed(1)
 })
 const meditationComment = computed(() => {
   const avg = parseFloat(weeklyAverageMeditation.value)
@@ -1308,23 +1382,37 @@ const initCharts = () => {
 
 watch(currentTab, (newTab) => {
   if (newTab === 'diary') {
-    initDiaryWeeklyChart()
+    fetchDiaries().then(() => {
+      initDiaryWeeklyChart()
+    })
   } else if (newTab === 'data') {
     initCharts()
   } else if (newTab === 'meditation') {
-    initMeditationCharts()
+    fetchMeditationLogs().then(() => {
+      initMeditationCharts()
+    })
+  } else if (newTab === 'social') {
+    fetchSocialPosts()
   }
 })
 
 onMounted(() => {
   loadCurrentUserProfile()
-  loadRealMusicFiles()
+  loadRealMusicFiles().then(() => {
+    musicStore.fetchUserData()
+  })
   if (currentTab.value === 'diary') {
-    initDiaryWeeklyChart()
+    fetchDiaries().then(() => {
+      initDiaryWeeklyChart()
+    })
   } else if (currentTab.value === 'data') {
     initCharts()
   } else if (currentTab.value === 'meditation') {
-    initMeditationCharts()
+    fetchMeditationLogs().then(() => {
+      initMeditationCharts()
+    })
+  } else if (currentTab.value === 'social') {
+    fetchSocialPosts()
   }
 })
 
@@ -1368,7 +1456,12 @@ const collectedTracksList = computed(() => {
   }).filter(Boolean)
 })
 
-const playlistModalTracks = computed(() => activePlaylist.value?.tracks ?? [])
+const playlistModalTracks = computed(() => {
+  const ids = activePlaylist.value?.trackIds || []
+  return ids.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+  }).filter(Boolean)
+})
 
 const getTrackTags = (track) => {
   if (track.tags?.length) return track.tags.slice(0, 2)
@@ -1387,9 +1480,13 @@ const formatDuration = (seconds) => {
 }
 
 const formatPlaylistMeta = (playlist) => {
-  const totalSeconds = playlist.tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
+  const ids = playlist?.trackIds || []
+  const tracks = ids.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+  }).filter(Boolean)
+  const totalSeconds = tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
   const totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
-  return `${playlist.tracks.length} 首 · ${totalMinutes} 分钟`
+  return `${tracks.length} 首 · ${totalMinutes} 分钟`
 }
 
 const loadRealMusicFiles = async () => {
@@ -1587,51 +1684,35 @@ const socialDraft = ref({
   content: '',
   mood: ''
 })
-const socialPosts = ref([
-  createSocialPost({
-    id: 'post_1',
-    authorName: '小明',
-    authorRole: '好友',
-    timeLabel: '10 分钟前',
-    mood: '轻松',
-    content: '今天下课后沿着操场走了一圈，风很舒服，感觉整个人都慢下来了一点。',
-    highlights: ['散步', '晚风'],
-    likes: 18,
-    likedByMe: false,
-    comments: [
-      { id: 'comment_1', author: 'Alice', content: '听起来很治愈，我也想去走走。', timeLabel: '8 分钟前' },
-      { id: 'comment_2', author: '我', content: '这种慢下来的时刻真的很难得。', timeLabel: '5 分钟前' }
-    ]
-  }),
-  createSocialPost({
-    id: 'post_2',
-    authorName: 'Alice',
-    authorRole: '好友',
-    timeLabel: '32 分钟前',
-    mood: '期待',
-    content: '把这周的任务清单整理完了，晚上准备听点歌，给明天留一点盼头。',
-    highlights: ['计划感', '夜晚歌单'],
-    likes: 25,
-    likedByMe: true,
-    comments: [
-      { id: 'comment_3', author: '李华', content: '完成清单的成就感最适合配音乐。', timeLabel: '20 分钟前' }
-    ]
-  }),
-  createSocialPost({
-    id: 'post_3',
-    authorName: '李华',
-    authorRole: '好友',
-    timeLabel: '1 小时前',
-    mood: '平静',
-    content: '午后在图书馆坐了很久，什么都没急着做，只是把手头的内容一点点收完。',
-    highlights: ['图书馆', '专注'],
-    likes: 12,
-    likedByMe: false,
-    comments: [
-      { id: 'comment_4', author: '小明', content: '这种节奏感很舒服。', timeLabel: '56 分钟前' }
-    ]
-  })
-])
+const socialPosts = ref([])
+
+const fetchSocialPosts = async () => {
+  try {
+    const res = await getPostsApi(0, 50)
+    if (res.data && res.data.content) {
+      socialPosts.value = res.data.content.map(post => ({
+        id: post.id,
+        authorName: post.authorName || '匿名',
+        authorRole: post.authorUserId === userProfile.value.id ? '我' : '好友',
+        timeLabel: new Date(post.createdAt).toLocaleString(),
+        mood: post.moodTag || '未知',
+        content: post.content,
+        highlights: post.highlightTags || [],
+        likes: post.likeCount || 0,
+        likedByMe: post.likedByViewer || false,
+        comments: (post.comments || []).map(c => ({
+          id: c.id,
+          author: c.authorName || '匿名',
+          content: c.content,
+          timeLabel: new Date(c.createdAt).toLocaleString()
+        })),
+        commentDraft: ''
+      }))
+    }
+  } catch (e) {
+    console.error('Failed to fetch social posts:', e)
+  }
+}
 
 const socialSummary = computed(() => {
   return socialPosts.value.reduce((summary, post) => {
@@ -1666,44 +1747,43 @@ const closeSocialComposer = () => {
   resetSocialDraft()
 }
 
-const toggleSocialLike = (post) => {
-  post.likedByMe = !post.likedByMe
-  post.likes += post.likedByMe ? 1 : -1
+const toggleSocialLike = async (post) => {
+  try {
+    await likePostApi(post.id)
+    post.likedByMe = !post.likedByMe
+    post.likes += post.likedByMe ? 1 : -1
+  } catch (e) {
+    ElMessage.error('点赞失败')
+  }
 }
 
-const submitSocialComment = (post) => {
+const submitSocialComment = async (post) => {
   const content = post.commentDraft.trim()
   if (!content) return
 
-  post.comments.push({
-    id: `comment_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
-    author: userProfile.value.name || '我',
-    content,
-    timeLabel: '刚刚'
-  })
-  post.commentDraft = ''
-  ElMessage.success('评论成功')
+  try {
+    await commentPostApi(post.id, { content })
+    post.commentDraft = ''
+    ElMessage.success('评论成功')
+    await fetchSocialPosts()
+  } catch (e) {
+    ElMessage.error('评论失败')
+  }
 }
 
-const submitSocialPost = () => {
+const submitSocialPost = async () => {
   const content = socialDraft.value.content.trim()
   const mood = socialDraft.value.mood.trim()
   if (!content || !mood) return
 
-  socialPosts.value.unshift(createSocialPost({
-    id: `post_${Date.now()}`,
-    authorName: userProfile.value.name || '我',
-    authorRole: '我',
-    timeLabel: '刚刚',
-    mood,
-    content,
-    highlights: [mood],
-    likes: 0,
-    likedByMe: false,
-    comments: []
-  }))
-  closeSocialComposer()
-  ElMessage.success('动态发布成功')
+  try {
+    await createPostApi({ content, moodTag: mood })
+    ElMessage.success('发布成功')
+    closeSocialComposer()
+    await fetchSocialPosts()
+  } catch (e) {
+    ElMessage.error('发布失败')
+  }
 }
 
 // --- Tab 6: Friends State ---
@@ -1764,7 +1844,7 @@ const initMeditationCharts = () => {
           splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }
         },
         series: [{
-          data: weeklyMeditationData,
+          data: weeklyMeditationData.value,
           type: 'bar',
           barWidth: '40%',
           itemStyle: {
@@ -4066,6 +4146,28 @@ window.addEventListener('resize', () => {
   width: 100%;
   margin-bottom: 10px;
   justify-content: flex-start;
+}
+
+.add-to-pl-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.add-to-pl-row:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.add-icon {
+  font-size: 1.2rem;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.add-to-pl-row:hover .add-icon {
+  opacity: 1;
 }
 
 .playlist-select-list {
