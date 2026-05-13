@@ -19,12 +19,12 @@ const EMOTION_LABEL_MAP = {
 }
 
 const REAL_CATEGORY_CONFIG = [
-  { id: 'recommend', name: '今日推荐30首', description: '基于真实音乐目录生成的推荐列表。', emotions: ['neutral', 'joy'] },
-  { id: 'guess', name: '猜你喜欢', description: '根据情绪风格聚合的真实曲目。', emotions: ['love', 'surprise'] },
-  { id: 'leaderboard', name: '排行榜', description: '近期最常展示的真实音乐。', emotions: ['joy', 'anger'] },
-  { id: 'new', name: '新音乐', description: '从真实音乐目录中整理的新曲目。', emotions: ['fear', 'surprise'] },
-  { id: 'favorite', name: '我喜欢', description: '来自真实音乐目录的喜欢列表。', emotions: ['joy', 'love'] },
-  { id: 'collection', name: '我收藏', description: '来自真实音乐目录的收藏列表。', emotions: ['neutral', 'sadness'] },
+  { id: 'recommend', name: '今日推荐20首', description: '为您定制的推荐列表', emotions: ['neutral', 'joy'] },
+  { id: 'guess', name: '猜你喜欢', description: '根据近期情绪推荐', emotions: ['love', 'surprise'] },
+  { id: 'leaderboard', name: '排行榜', description: '大家都爱听', emotions: ['joy', 'anger'] },
+  { id: 'new', name: '新音乐', description: '系统上新音乐', emotions: ['fear', 'surprise'] },
+  { id: 'favorite', name: '我喜欢', description: '加入喜欢列表的音乐', emotions: ['joy', 'love'] },
+  { id: 'collection', name: '我收藏', description: '加入收藏列表的音乐', emotions: ['neutral', 'sadness'] },
 ]
 
 const normalizeEmotion = (value) => {
@@ -92,17 +92,40 @@ export const buildRealMusicCategories = (filenames, options = {}) => {
   const likedIds = new Set(options.likedIds || [])
   const collectedIds = new Set(options.collectedIds || [])
 
+  // 简单的伪随机打乱函数（根据当天的日期字符串生成固定的随机序列）
+  const getDailyShuffled = (array, seedStr) => {
+    let seed = 0
+    for (let i = 0; i < seedStr.length; i++) {
+      seed += seedStr.charCodeAt(i)
+    }
+    const random = () => {
+      let x = Math.sin(seed++) * 10000
+      return x - Math.floor(x)
+    }
+    const shuffled = [...array]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }
+
+  const todayStr = new Date().toDateString()
+
   return REAL_CATEGORY_CONFIG.map((category, categoryIndex) => {
     let categoryTracks = category.emotions.flatMap((emotion) => tracksByEmotion[emotion] || [])
 
-    if (category.id === 'favorite') {
+    if (category.id === 'recommend' || category.id === 'leaderboard') {
+      // 每日随机获取 20 首
+      categoryTracks = getDailyShuffled(tracks, todayStr + category.id).slice(0, 20)
+    } else if (category.id === 'favorite') {
       categoryTracks = tracks.filter((track) => likedIds.has(track.id))
     } else if (category.id === 'collection') {
       categoryTracks = tracks.filter((track) => collectedIds.has(track.id))
-    }
-
-    if (!categoryTracks.length && category.id !== 'favorite' && category.id !== 'collection') {
-      categoryTracks = tracks.filter((_, index) => index % REAL_CATEGORY_CONFIG.length === categoryIndex)
+    } else {
+      if (!categoryTracks.length) {
+        categoryTracks = tracks.filter((_, index) => index % REAL_CATEGORY_CONFIG.length === categoryIndex)
+      }
     }
 
     return {

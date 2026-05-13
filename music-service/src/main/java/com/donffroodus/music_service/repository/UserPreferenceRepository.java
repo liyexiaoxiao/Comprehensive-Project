@@ -13,7 +13,7 @@ public interface UserPreferenceRepository extends JpaRepository<UserPreference, 
 
 	List<UserPreference> findByUserId(Long userId);
 
-	Optional<UserPreference> findByUserIdAndMusicId(Long userId, Long musicId);
+	Optional<UserPreference> findByUserIdAndMusicIdAndPreferenceType(Long userId, String musicId, Integer preferenceType);
 
-	void deleteByUserIdAndMusicId(Long userId, Long musicId);
+	void deleteByUserIdAndMusicIdAndPreferenceType(Long userId, String musicId, Integer preferenceType);
 }

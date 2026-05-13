@@ -107,7 +107,7 @@ public class MusicApiController {
 	}
 
 	/** 查询当前用户对各音乐的偏好（喜欢 / 不喜欢）。 */
-	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，-1 不喜欢（黑名单）")
+	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，-1 不喜欢（黑名单），2 收藏")
 	@GetMapping("/me/music-preferences")
 	public List<UserPreference> listUserPreferences(
 			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
@@ -116,7 +116,7 @@ public class MusicApiController {
 	}
 
 	/** 创建或更新当前用户对某首音乐的偏好。 */
-	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType 仅允许 1 或 -1")
+	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType 允许 1(喜欢), -1(不喜欢), 2(收藏)")
 	@PostMapping("/me/music-preferences")
 	public ResponseEntity<UserPreference> upsertMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -125,11 +125,11 @@ public class MusicApiController {
 		if (request == null || request.musicId() == null || request.preferenceType() == null) {
 			return ResponseEntity.badRequest().build();
 		}
-		if (request.preferenceType() != 1 && request.preferenceType() != -1) {
+		if (request.preferenceType() != 1 && request.preferenceType() != -1 && request.preferenceType() != 2) {
 			return ResponseEntity.badRequest().build();
 		}
 
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, request.musicId());
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, request.musicId(), request.preferenceType());
 		UserPreference pref = existing.orElseGet(UserPreference::new);
 		pref.setUserId(userId);
 		pref.setMusicId(request.musicId());
@@ -140,12 +140,13 @@ public class MusicApiController {
 
 	/** 删除当前用户对某首音乐的偏好记录。 */
 	@Operation(summary = "删除某首音乐的偏好记录")
-	@DeleteMapping("/me/music-preferences/{musicId}")
+	@DeleteMapping("/me/music-preferences/{musicId}/{preferenceType}")
 	public ResponseEntity<Void> deleteMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
-			@PathVariable("musicId") Long musicId) {
+			@PathVariable("musicId") String musicId,
+			@PathVariable("preferenceType") Integer preferenceType) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, musicId);
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, musicId, preferenceType);
 		if (existing.isEmpty()) {
 			return ResponseEntity.notFound().build();
 		}
@@ -182,7 +183,7 @@ public class MusicApiController {
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
 		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 提升排序靠前
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
@@ -190,12 +191,12 @@ public class MusicApiController {
 
 		List<MusicResource> result = candidates.stream()
 				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
+					Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 					return t == null || t != -1;
 				})
 				.sorted(Comparator
 						.comparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 							return (t != null && t == 1) ? 0 : 1;
 						})
 						.thenComparing(MusicResource::getId))
@@ -251,7 +252,7 @@ public class MusicApiController {
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
 		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 排在前面
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
@@ -259,12 +260,12 @@ public class MusicApiController {
 
 		List<MusicResource> result = candidates.stream()
 				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
+					Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 					return t == null || t != -1;
 				})
 				.sorted(Comparator
 						.comparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
 							return (t != null && t == 1) ? 0 : 1;
 						})
 						.thenComparing(MusicResource::getId))
@@ -440,7 +441,7 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
-	public static record MusicPreferenceRequest(Long musicId, Integer preferenceType) {
+	public record MusicPreferenceRequest(String musicId, Integer preferenceType) {
 	}
 
 	public static record MusicRecommendationRequest(Long emotionTagId, Integer limit) {

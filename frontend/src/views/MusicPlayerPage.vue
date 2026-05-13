@@ -15,10 +15,8 @@
       <section class="cover-zone">
         <div class="cover-shell">
           <div class="record-disc" :class="{ spinning: isPlaying }">
+            <img :src="currentTrack.cover" :alt="currentTrack.title" class="vinyl-cover" />
             <div class="record-center"></div>
-          </div>
-          <div class="cover-card">
-            <img :src="currentTrack.cover" :alt="currentTrack.title" />
           </div>
         </div>
 
@@ -26,6 +24,33 @@
           <span class="brief-label">正在播放</span>
           <h1>{{ currentTrack.title }}</h1>
           <p>{{ currentTrack.artist }}</p>
+          
+          <div class="track-actions">
+            <button class="action-icon-btn" :class="{ active: isLiked }" @click="handleLike" title="喜欢">
+              <font-awesome-icon icon="heart" />
+            </button>
+            <button class="action-icon-btn" :class="{ active: isCollected }" @click="handleCollect" title="收藏">
+              <font-awesome-icon icon="star" />
+            </button>
+            
+            <el-dropdown trigger="click" @command="handleAddToPlaylist" placement="top">
+              <button class="action-icon-btn" title="添加到歌单">
+                <font-awesome-icon icon="folder-plus" />
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="!musicStore.customPlaylists.length" disabled>暂无自建歌单</el-dropdown-item>
+                  <el-dropdown-item 
+                    v-for="playlist in musicStore.customPlaylists" 
+                    :key="playlist.id" 
+                    :command="playlist.id"
+                  >
+                    {{ playlist.name }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
       </section>
 
@@ -81,7 +106,7 @@
       <section class="bottom-controls">
         <div class="progress-block">
           <span>{{ formatTime(progressSeconds) }}</span>
-          <input v-model="progressSeconds" type="range" min="0" :max="currentTrack.duration" step="1" />
+          <input v-model.number="progressSeconds" type="range" min="0" :max="currentTrack.duration || 0" step="1" />
           <span>{{ formatTime(currentTrack.duration) }}</span>
         </div>
 
@@ -94,7 +119,7 @@
 
           <label class="volume-box">
             <span>音量</span>
-            <input v-model="volume" type="range" min="0" max="100" />
+            <input v-model.number="volume" type="range" min="0" max="100" />
           </label>
         </div>
       </section>
@@ -112,6 +137,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useMusicStore } from '@/stores/musicStore'
 import {
   getEmotionMusicApi,
   getMusicFileByNameApi,
@@ -120,6 +146,7 @@ import {
 } from '@/api/python'
 
 const router = useRouter()
+const musicStore = useMusicStore()
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
@@ -131,6 +158,27 @@ const progressSeconds = ref(0)
 const volume = ref(72)
 const currentEmotion = ref('neutral')
 const isLoadingAudio = ref(false)
+
+const isLiked = computed(() => currentTrack.value && musicStore.likedTrackIds.includes(currentTrack.value.id))
+const isCollected = computed(() => currentTrack.value && musicStore.collectedTrackIds.includes(currentTrack.value.id))
+
+const handleLike = async () => {
+  if (currentTrack.value) {
+    await musicStore.toggleLike(currentTrack.value.id)
+  }
+}
+
+const handleCollect = async () => {
+  if (currentTrack.value) {
+    await musicStore.toggleCollect(currentTrack.value.id)
+  }
+}
+
+const handleAddToPlaylist = async (playlistId) => {
+  if (currentTrack.value) {
+    await musicStore.addTrackToPlaylist(playlistId, currentTrack.value)
+  }
+}
 
 let playTimer = null
 const audioPlayer = new Audio()
@@ -421,12 +469,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .music-player-page {
-  min-height: 100vh;
+  height: 100vh;
   padding: 24px;
   position: relative;
   overflow: hidden;
   background:
     linear-gradient(90deg, #dfe4ff 0%, #e5e2ff 42%, #f6dce9 100%);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
 .player-glow {
@@ -460,6 +511,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .back-btn {
@@ -496,12 +548,14 @@ onBeforeUnmount(() => {
 }
 
 .player-stage {
-  min-height: calc(100vh - 110px);
+  flex: 1;
+  min-height: 0;
   padding: 36px;
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-columns: 1fr 1.6fr;
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 26px 32px;
+  gap: 26px 48px;
+  box-sizing: border-box;
 }
 
 .cover-zone,
@@ -517,7 +571,7 @@ onBeforeUnmount(() => {
 }
 
 .cover-shell {
-  width: min(100%, 520px);
+  width: min(100%, 400px);
   aspect-ratio: 1 / 1;
   position: relative;
   display: flex;
@@ -531,32 +585,56 @@ onBeforeUnmount(() => {
   inset: 9%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at center, #3b3340 0 8%, #ececf1 8.5% 16%, #5c5761 17% 23%, #cfd2da 24% 54%, #8e9098 55% 63%, #d8dae0 64% 100%);
-  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.22), 0 22px 42px rgba(82, 84, 117, 0.18);
+    radial-gradient(circle at center, #111 0 35%, #222 36% 40%, #111 41% 45%, #222 46% 50%, #111 51% 100%);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5), 0 22px 42px rgba(82, 84, 117, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.record-disc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 45deg,
+    rgba(255, 255, 255, 0.1) 0deg,
+    rgba(255, 255, 255, 0) 45deg,
+    rgba(255, 255, 255, 0) 135deg,
+    rgba(255, 255, 255, 0.1) 180deg,
+    rgba(255, 255, 255, 0) 225deg,
+    rgba(255, 255, 255, 0) 315deg,
+    rgba(255, 255, 255, 0.1) 360deg
+  );
+  pointer-events: none;
 }
 
 .record-disc.spinning {
   animation: spinRecord 10s linear infinite;
 }
 
+.vinyl-cover {
+  width: 50%;
+  height: 50%;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 4px #1a1a1a;
+}
+
 .record-center {
   position: absolute;
-  inset: 42%;
+  width: 10%;
+  height: 10%;
   border-radius: 50%;
   background: #f7f7f9;
-  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
 }
 
-.cover-card {
-  position: relative;
-  width: 44%;
-  aspect-ratio: 1 / 1;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 16px 30px rgba(61, 61, 86, 0.18);
+@keyframes spinRecord {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
-
-.cover-card img,
 .queue-item img {
   width: 100%;
   height: 100%;
@@ -599,6 +677,46 @@ onBeforeUnmount(() => {
   margin: 0;
   color: #69748f;
   line-height: 1.7;
+}
+
+.track-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.action-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.2);
+  color: #69748f;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.action-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+  color: #39445f;
+}
+
+.action-icon-btn.active {
+  color: #ff5b77;
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 91, 119, 0.3);
+}
+
+.action-icon-btn.active[title="收藏"] {
+  color: #f5a623;
+  border-color: rgba(245, 166, 35, 0.3);
 }
 
 .meta-zone {
@@ -761,38 +879,40 @@ onBeforeUnmount(() => {
 
 .bottom-controls {
   grid-column: 1 / -1;
-  padding: 22px 24px;
-  border-radius: 24px;
+  padding: 16px 24px;
+  border-radius: 20px;
   background: rgba(33, 37, 49, 0.86);
   color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
 .progress-block {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  flex: 1;
+  display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .progress-block span,
 .volume-box span {
   color: rgba(255, 255, 255, 0.82);
+  font-size: 0.9rem;
 }
 
 .control-row {
-  margin-top: 18px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .secondary-btn,
 .play-btn {
   border: none;
   border-radius: 999px;
-  padding: 12px 22px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -811,13 +931,17 @@ onBeforeUnmount(() => {
 .volume-box {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-left: 10px;
+  width: 120px;
 }
 
 input[type='range'] {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   accent-color: #7a88ff;
+  height: 4px;
+  border-radius: 2px;
 }
 
 .empty-shell {

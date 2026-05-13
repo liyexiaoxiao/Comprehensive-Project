@@ -31,6 +31,9 @@ import {
   faBook,
   faChartLine,
   faLeaf,
+  faHeart,
+  faStar,
+  faFolderPlus,
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -56,6 +59,9 @@ library.add(
   faBook,
   faChartLine,
   faLeaf,
+  faHeart,
+  faStar,
+  faFolderPlus,
 )
 
 const app = createApp(App)

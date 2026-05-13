@@ -168,6 +168,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import CircleTimer from '@/components/CircleTimer.vue'
+import { getMyMeditationLogsApi, saveMeditationLogApi } from '@/api/meditation'
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
@@ -191,7 +192,23 @@ const goBack = () => {
 }
 
 // Plant Growth Logic Mock
-const totalMeditationTime = ref(45) // mock: 45 minutes
+const totalMeditationTime = ref(0) 
+
+const fetchLogs = async () => {
+  try {
+    const res = await getMyMeditationLogsApi()
+    if (res.data) {
+      const total = res.data.reduce((sum, log) => sum + (log.duration || 0), 0)
+      totalMeditationTime.value = total
+    }
+  } catch (e) {
+    console.error('Failed to fetch meditation logs:', e)
+  }
+}
+
+onMounted(() => {
+  fetchLogs()
+})
 
 const TREE_CYCLE_TIME = 160 // 100 mins to mature + 3 * 20 mins for 3 fruits
 
@@ -278,9 +295,19 @@ const selectTime = (option) => {
   selectedTime.value = option
 }
 
-const handleTimerComplete = () => {
+const handleTimerComplete = async () => {
   const meditatedMins = Math.floor(selectedTime.value / 60)
-  totalMeditationTime.value += meditatedMins
+  try {
+    await saveMeditationLogApi({
+      startTime: new Date().toISOString(),
+      duration: meditatedMins,
+      musicId: currentTrack.value?.id || null
+    })
+    totalMeditationTime.value += meditatedMins
+    ElMessage.success('冥想记录已保存')
+  } catch (e) {
+    ElMessage.error('保存记录失败')
+  }
 }
 
 const showGuideText = ref(false)
