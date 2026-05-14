@@ -162,6 +162,27 @@
                 💭 {{ message.emotions.complex }}
               </span>
             </div>
+            <div v-if="message.toolResults?.length" class="tool-results">
+              <section
+                v-for="(result, resultIndex) in message.toolResults"
+                :key="`${message.id}-tool-${resultIndex}`"
+                class="music-recommendations"
+              >
+                <button
+                  v-for="track in result.items"
+                  :key="track.id"
+                  class="recommend-track-card"
+                  type="button"
+                  @click="selectRecommendedTrack(track)"
+                >
+                  <img :src="track.cover" :alt="track.title" />
+                  <div>
+                    <strong>{{ track.title }}</strong>
+                    <span>{{ track.reason }}</span>
+                  </div>
+                </button>
+              </section>
+            </div>
             <small>{{ message.timestamp }}</small>
           </article>
         </div>
@@ -440,6 +461,15 @@ const selectTrack = async (track) => {
   await loadAudioForTrack(currentTrack.value, true)
 }
 
+const selectRecommendedTrack = async (track) => {
+  if (!track?.filename) return
+  await selectTrack({
+    ...track,
+    type: track.type || 'AI推荐',
+    tags: Array.isArray(track.tags) ? track.tags : [track.emotion || 'neutral'],
+  })
+}
+
 const togglePlayback = async () => {
   if (!currentTrack.value?.id) return
 
@@ -524,13 +554,14 @@ const openPlayerPage = () => {
 const timeStamp = () =>
   new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
-const pushAssistantMessage = (content, emotions = null) => {
+const pushAssistantMessage = (content, emotions = null, toolResults = null) => {
   messages.value.push({
     id: `assistant-${Date.now()}-${Math.random()}`,
     role: 'assistant',
     content,
     timestamp: timeStamp(),
     emotions,
+    toolResults,
   })
 }
 
@@ -602,17 +633,21 @@ const createAssistantPlaceholder = () => {
     content: '正在思考中...',
     timestamp: timeStamp(),
     emotions: null,
+    toolResults: null,
   }
   messages.value.push(msg)
   return id
 }
 
-const updateAssistantMessage = (msgId, content, emotions = null) => {
+const updateAssistantMessage = (msgId, content, emotions = null, toolResults = undefined) => {
   const msg = messages.value.find(m => m.id === msgId)
   if (!msg) return
   msg.content = content
   if (emotions) {
     msg.emotions = emotions
+  }
+  if (toolResults !== undefined) {
+    msg.toolResults = toolResults
   }
 }
 
@@ -698,46 +733,28 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
       heardText.value = `已识别：${finalTranscript}`
     }
 
-    // 阶段2：流式聊天
+    // 阶段2：普通聊天，支持后端 LLM tool calling
     const assistantMsgId = createAssistantPlaceholder()
+    const chatResp = await axios.post('/py-api/api/companion/chat', {
+      userId,
+      sessionId,
+      text: finalTranscript,
+      detected_emotion: detectedEmotion,
+      tts_voice: selectedTtsVoice.value,
+    }, { timeout: 180000 })
 
-    const streamResponse = await fetch('/py-api/api/companion/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        sessionId,
-        text: finalTranscript,
-        detected_emotion: detectedEmotion,
-      }),
-    })
-
-    if (!streamResponse.ok || !streamResponse.body) {
-      throw new Error(`HTTP ${streamResponse.status}`)
-    }
-
-    const { collectedText, finalDone } = await readStreamAsText(streamResponse, assistantMsgId)
-    let replyText = collectedText || '我在这里。'
-    let llmEmotion = null
-
-    if (finalDone) {
-      replyText = finalDone.reply || replyText
-      llmEmotion = finalDone.emotion || null
-    }
+    const chatData = chatResp.data || {}
+    const replyText = chatData.reply || '我在这里。'
+    const llmEmotion = chatData.emotion || null
+    const toolResults = chatData.tool_results || []
 
     const emotions = {
       speech: detectedEmotion,
       llm: llmEmotion,
       complex: emotionDetails?.complex_emotion || null,
     }
-    updateAssistantMessage(assistantMsgId, replyText, emotions)
-
-    // 阶段3：异步 TTS（不阻塞流式文字）
-    const ttsResp = await axios.post('/py-api/api/companion/tts', {
-      text: replyText,
-      tts_voice: selectedTtsVoice.value,
-    }, { timeout: 120000 })
-    await playAssistantSpeech(ttsResp?.data?.audio_url)
+    updateAssistantMessage(assistantMsgId, replyText, emotions, toolResults)
+    await playAssistantSpeech(chatData.audio_url)
   } catch (error) {
     console.error(error)
     pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
@@ -1707,6 +1724,62 @@ onBeforeUnmount(() => {
 .emotion-tag.complex {
   background: rgba(139, 166, 140, 0.2);
   color: var(--color-accent-sage);
+}
+
+.tool-results {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.music-recommendations {
+  display: grid;
+  gap: 10px;
+}
+
+.recommend-track-card {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(44, 48, 46, 0.08);
+  text-align: left;
+  color: var(--color-text-primary);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recommend-track-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.recommend-track-card img {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.recommend-track-card div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.recommend-track-card strong,
+.recommend-track-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recommend-track-card span {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
 }
 
 .voice-box {

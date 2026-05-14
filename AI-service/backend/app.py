@@ -7,7 +7,8 @@ import requests
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
-from qwen_service import query_qwen_companion, stream_qwen_companion
+from music_tools import MUSIC_DIR, list_music_files
+from qwen_service import query_qwen_companion_with_tools, stream_qwen_companion
 from tts_service import synthesize_speech
 
 app = Flask(__name__)
@@ -87,6 +88,32 @@ def save_chat_log(user_id: int, session_id: str, role: str, content: str, emotio
 @app.route('/api/audio/<path:filename>', methods=['GET'])
 def generated_audio(filename):
     return send_from_directory(AUDIO_OUTPUT_DIR, filename, mimetype='audio/mpeg')
+
+
+@app.route('/api/music/list', methods=['GET'])
+def music_list():
+    return jsonify({'music_files': list_music_files()})
+
+
+@app.route('/api/music/file/<path:filename>', methods=['GET'])
+def music_file(filename):
+    return send_from_directory(MUSIC_DIR, filename, mimetype='audio/mpeg')
+
+
+@app.route('/api/music/<emotion>', methods=['GET'])
+def emotion_music(emotion):
+    files = [
+        filename for filename in list_music_files()
+        if filename.lower().startswith(f"{emotion.lower()}_")
+    ]
+    if not files:
+        files = [
+            filename for filename in list_music_files()
+            if filename.lower().startswith("neutral_")
+        ]
+    if not files:
+        return jsonify({'error': 'No music file found'}), 404
+    return send_from_directory(MUSIC_DIR, files[0], mimetype='audio/mpeg')
 
 
 @app.route('/api/companion/chat', methods=['POST', 'OPTIONS'])
@@ -169,16 +196,11 @@ def companion_chat():
             emotion_label=detected_emotion,
         )
 
-        model_raw = query_qwen_companion(transcript, detected_emotion, history)
-
-        emotion = '平静'
-        reply = model_raw
-        try:
-            parsed = json.loads(model_raw)
-            emotion = parsed.get('emotion', emotion)
-            reply = parsed.get('reply', reply)
-        except Exception:
-            pass
+        model_result = query_qwen_companion_with_tools(transcript, detected_emotion, history)
+        model_raw = model_result.get('raw', '')
+        emotion = model_result.get('emotion') or '平静'
+        reply = model_result.get('reply') or model_raw
+        tool_results = model_result.get('tool_results') or []
 
         save_chat_log(
             user_id=user_id,
@@ -199,6 +221,7 @@ def companion_chat():
             'detected_emotion': detected_emotion,
             'transcript': transcript,
             'emotion_details': emotion_data,
+            'tool_results': tool_results,
             **tts_payload,
         })
 

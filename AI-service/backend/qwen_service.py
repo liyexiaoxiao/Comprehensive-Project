@@ -1,12 +1,63 @@
+import json
 import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from music_tools import recommend_music
 
 
 load_dotenv()
 
 QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+
+COMPANION_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_music",
+            "description": "Recommend suitable local music when the user asks for music, songs, relaxing audio, sleep music, or similar help.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The user's music request or current situation.",
+                    },
+                    "emotion": {
+                        "type": "string",
+                        "description": "The user's current emotion label if available.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of tracks to recommend, from 1 to 5.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+]
+
+MUSIC_INTENT_KEYWORDS = (
+    "推荐音乐", "推荐歌曲", "推荐歌", "想听歌", "想听音乐", "听点音乐",
+    "来点音乐", "来首歌", "放首歌", "放音乐", "找首歌", "音乐推荐",
+    "睡前音乐", "放松音乐", "冥想音乐", "music", "song", "songs",
+)
+
+
+def _has_music_intent(text: str):
+    lowered = str(text or "").lower()
+    return any(keyword in lowered for keyword in MUSIC_INTENT_KEYWORDS)
+
+
+def _run_companion_tool(name: str, arguments: dict):
+    if name == "recommend_music":
+        return recommend_music(
+            query=arguments.get("query", ""),
+            emotion=arguments.get("emotion"),
+            limit=arguments.get("limit", 3),
+        )
+    raise ValueError(f"Unsupported tool: {name}")
 
 
 def build_companion_prompt(user_text: str, detected_emotion: str = None, history: list = None):
@@ -112,6 +163,85 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None, history: 
     if not content:
         raise RuntimeError("模型未返回内容")
     return content
+
+
+def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None, history: list = None):
+    """Call Qwen with native tool calling and return parsed reply plus tool results."""
+    if not QWEN_API_KEY:
+        raise RuntimeError("未配置 DASHSCOPE_API_KEY")
+
+    client = OpenAI(api_key=QWEN_API_KEY, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    messages = build_companion_prompt(user_text, detected_emotion, history)
+    messages.insert(1, {
+        "role": "system",
+        "content": (
+            "When the user asks for music recommendations, songs, relaxing audio, "
+            "sleep music, focus music, or similar requests, call recommend_music. "
+            "After tool results are available, reply as JSON only: "
+            '{"emotion":"情绪标签","reply":"给用户的话"}。'
+        ),
+    })
+
+    first_completion = client.chat.completions.create(
+        model="qwen3.5-plus",
+        messages=messages,
+        tools=COMPANION_TOOLS,
+        tool_choice={
+            "type": "function",
+            "function": {"name": "recommend_music"},
+        } if _has_music_intent(user_text) else "auto",
+        extra_body={"enable_thinking": False},
+    )
+
+    first_message = first_completion.choices[0].message if first_completion.choices else None
+    if first_message is None:
+        raise RuntimeError("模型未返回内容")
+
+    tool_results = []
+    tool_calls = getattr(first_message, "tool_calls", None) or []
+    if tool_calls:
+        messages.append(first_message.model_dump(exclude_none=True))
+        for tool_call in tool_calls:
+            function = tool_call.function
+            arguments = json.loads(function.arguments or "{}")
+            if not arguments.get("emotion") and detected_emotion:
+                arguments["emotion"] = detected_emotion
+            result = _run_companion_tool(function.name, arguments)
+            tool_results.append(result)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(result, ensure_ascii=False),
+            })
+
+        final_completion = client.chat.completions.create(
+            model="qwen3.5-plus",
+            messages=messages,
+            extra_body={"enable_thinking": False},
+        )
+        final_message = final_completion.choices[0].message if final_completion.choices else None
+        raw_content = final_message.content if final_message else ""
+    else:
+        raw_content = first_message.content or ""
+
+    if not raw_content:
+        raw_content = '{"emotion":"平静","reply":"我给你找了几首适合现在状态的音乐，可以先从第一首开始听。"}'
+
+    emotion = "平静"
+    reply = raw_content
+    try:
+        parsed = json.loads(raw_content)
+        emotion = parsed.get("emotion", emotion)
+        reply = parsed.get("reply", reply)
+    except Exception:
+        pass
+
+    return {
+        "raw": raw_content,
+        "emotion": emotion,
+        "reply": reply,
+        "tool_results": tool_results,
+    }
 
 
 def stream_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
