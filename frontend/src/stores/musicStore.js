@@ -11,55 +11,39 @@ import {
   addTrackToPlaylistApi,
   removeTrackFromPlaylistApi
 } from '@/api/music'
+import {
+  deleteUploadedMusicApi,
+  getUploadedMusicApi,
+  uploadMusicFileApi,
+} from '@/api/python'
+import { getRealMusicCover } from '@/utils/realMusic'
 import { ElMessage } from 'element-plus'
 
 const createTrack = (track) => ({
   ...track,
-  tags: Array.isArray(track.tags) ? [...track.tags] : []
+  artist: track.artist || '',
+  duration: Number(track.duration) || 0,
+  tags: Array.isArray(track.tags) ? [...track.tags] : [],
+  cover: track.cover || getRealMusicCover((Array.isArray(track.tags) && track.tags[0]) || 'neutral')
 })
 
-const initialUploadedTracks = [
-  {
-    id: 'upload-1',
-    title: '凌晨四点的海风',
-    artist: '林雾',
-    duration: 218,
-    tags: ['平静', '夜晚'],
-    cover: '/images/feature-img-1.jpg'
-  },
-  {
-    id: 'upload-2',
-    title: '给自己留一盏灯',
-    artist: '沈青',
-    duration: 204,
-    tags: ['治愈', '独处'],
-    cover: '/images/feature-img-2.jpg'
-  },
-  {
-    id: 'upload-3',
-    title: '窗台上的云',
-    artist: '',
-    duration: 231,
-    tags: ['轻盈', '午后'],
-    cover: '/images/feature-img-3.jpg'
-  },
-  {
-    id: 'upload-4',
-    title: '雨后慢行',
-    artist: '陈眠',
-    duration: 247,
-    tags: ['放松', '雨天'],
-    cover: '/images/feature-img-4.jpg'
-  }
-]
-
 export const useMusicStore = defineStore('music', () => {
-  const uploadedTracks = ref(initialUploadedTracks.map(createTrack)) 
+  const uploadedTracks = ref([])
   const isUploadedTrack = (trackId) => uploadedTracks.value.some(track => track.id === trackId)
   
   const likedTrackIds = ref([])
   const collectedTrackIds = ref([])
   const customPlaylists = ref([])
+
+  const fetchUploadedTracks = async () => {
+    try {
+      const response = await getUploadedMusicApi()
+      uploadedTracks.value = (response.data?.tracks || []).map(createTrack)
+    } catch (error) {
+      uploadedTracks.value = []
+      console.error('Failed to fetch uploaded tracks:', error)
+    }
+  }
 
   // 从后端获取用户的偏好和歌单
   const fetchUserData = async () => {
@@ -98,6 +82,8 @@ export const useMusicStore = defineStore('music', () => {
     } catch (error) {
       console.error('Failed to fetch user music data:', error)
     }
+
+    await fetchUploadedTracks()
   }
 
   const toggleLike = async (trackId) => {
@@ -132,14 +118,31 @@ export const useMusicStore = defineStore('music', () => {
     }
   }
 
-  const addUploadedTrack = (track) => {
-    uploadedTracks.value.push(track)
+  const uploadTrack = async (payload) => {
+    const formData = new FormData()
+    formData.append('file', payload.file)
+    formData.append('title', payload.title?.trim() || '')
+    formData.append('artist', payload.artist?.trim() || '')
+    formData.append('duration', String(payload.duration || 0))
+    formData.append('tags', JSON.stringify(Array.isArray(payload.tags) ? payload.tags : []))
+
+    const response = await uploadMusicFileApi(formData)
+    const nextTrack = createTrack(response.data || {})
+    uploadedTracks.value = [nextTrack, ...uploadedTracks.value.filter(track => track.id !== nextTrack.id)]
+    return nextTrack
   }
 
-  const removeUploadedTrack = (trackId) => {
+  const removeUploadedTrack = async (trackId) => {
+    await deleteUploadedMusicApi(trackId)
     uploadedTracks.value = uploadedTracks.value.filter(t => t.id !== trackId)
     likedTrackIds.value = likedTrackIds.value.filter(id => id !== trackId)
     collectedTrackIds.value = collectedTrackIds.value.filter(id => id !== trackId)
+    customPlaylists.value = customPlaylists.value.map((playlist) => ({
+      ...playlist,
+      trackIds: playlist.trackIds.filter(id => id !== trackId),
+      tracks: playlist.tracks.filter(track => track.id !== trackId),
+    }))
+    ElMessage.success('已删除上传音乐')
   }
 
   const createPlaylist = async (name, description = '自建歌单') => {
@@ -202,10 +205,11 @@ export const useMusicStore = defineStore('music', () => {
     likedTrackIds,
     collectedTrackIds,
     customPlaylists,
+    fetchUploadedTracks,
     fetchUserData,
     toggleLike,
     toggleCollect,
-    addUploadedTrack,
+    uploadTrack,
     removeUploadedTrack,
     createPlaylist,
     deletePlaylist,

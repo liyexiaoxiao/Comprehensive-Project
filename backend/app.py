@@ -1,16 +1,30 @@
+import json
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from emotion_model import analyze_emotion 
 from music_service import (
+    delete_uploaded_music,
     get_music_file,
     get_music_file_by_name,
     get_music_list,
     get_next_music,
     get_prev_music,
+    list_uploaded_music,
+    save_uploaded_music,
 )
 
 app = Flask(__name__)
 CORS(app)  
+
+
+def parse_user_id(raw_value):
+    if raw_value in (None, ''):
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
 
 @app.route('/api/analyze', methods=['POST', 'OPTIONS'])
 def analyze_text():
@@ -82,6 +96,61 @@ def get_music_by_filename(filename):
             return jsonify({"error": error}), 404
 
         return send_file(file_path, mimetype='audio/mpeg')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/music/uploads', methods=['GET'])
+def list_uploaded_tracks():
+    try:
+        user_id = parse_user_id(request.headers.get('X-User-Id'))
+        tracks = list_uploaded_music(user_id)
+        return jsonify({"tracks": tracks})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/music/uploads', methods=['POST', 'OPTIONS'])
+def upload_music_file():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        file = request.files.get('file')
+        title = request.form.get('title', '')
+        artist = request.form.get('artist', '')
+        duration = request.form.get('duration', 0)
+        tags_raw = request.form.get('tags', '[]')
+        try:
+            tags = json.loads(tags_raw) if tags_raw else []
+        except json.JSONDecodeError:
+            tags = []
+
+        saved_track, error = save_uploaded_music(
+            file_storage=file,
+            user_id=parse_user_id(request.headers.get('X-User-Id')),
+            title=title,
+            artist=artist,
+            duration=duration,
+            tags=tags,
+        )
+        if error:
+            return jsonify({"error": error}), 400
+        return jsonify(saved_track), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/music/uploads/<track_id>', methods=['DELETE'])
+def delete_uploaded_track(track_id):
+    try:
+        deleted, error, status_code = delete_uploaded_music(
+            track_id,
+            parse_user_id(request.headers.get('X-User-Id'))
+        )
+        if not deleted:
+            return jsonify({"error": error}), status_code
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

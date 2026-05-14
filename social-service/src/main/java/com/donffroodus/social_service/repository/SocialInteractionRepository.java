@@ -14,7 +14,16 @@ public interface SocialInteractionRepository extends JpaRepository<SocialInterac
 
 	List<SocialInteraction> findByPostIdOrderByCreatedAtAsc(Long postId);
 
-	Optional<SocialInteraction> findByPostIdAndUserIdAndCommentIsNull(Long postId, Long userId);
+	Optional<SocialInteraction> findByPostIdAndUserIdAndLikedTrueAndCommentIsNullAndTargetInteractionIdIsNull(Long postId,
+			Long userId);
+
+	Optional<SocialInteraction> findByPostIdAndUserIdAndLikedTrueAndCommentIsNullAndTargetInteractionId(Long postId,
+			Long userId,
+			Long targetInteractionId);
+
+	List<SocialInteraction> findByTargetUserIdOrderByCreatedAtDesc(Long targetUserId);
+
+	List<SocialInteraction> findByUserIdAndCommentIsNotNullOrderByCreatedAtDesc(Long userId);
 
 	@Modifying
 	@Query("delete from SocialInteraction i where i.postId = :postId")

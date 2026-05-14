@@ -2,6 +2,8 @@ package com.donffroodus.social_service.entity;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.CreationTimestamp;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -28,9 +30,10 @@ public class SocialPost {
 	private String moodTag;
 
 	@Column(name = "is_anonymous", nullable = false)
-	private boolean anonymous = true;
+	private boolean anonymous = false;
 
-	@Column(name = "created_at", insertable = false, updatable = false)
+	@CreationTimestamp
+	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	public Long getId() {

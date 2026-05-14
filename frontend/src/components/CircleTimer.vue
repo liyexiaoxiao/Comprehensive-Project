@@ -1,5 +1,5 @@
 <template>
-    <div class="circle-timer" :class="{ breath: isBreathing }">
+    <div class="circle-timer" :class="{ breath: isRunning }">
         <svg viewBox="0 0 440 440">
             <defs>
                 <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
@@ -25,6 +25,14 @@ const props = defineProps({
     totalTime: {
         type: Number,
         default: 180
+    },
+    isRunning: {
+        type: Boolean,
+        default: false
+    },
+    resetToken: {
+        type: Number,
+        default: 0
     }
 });
 
@@ -32,7 +40,6 @@ const emit = defineEmits(['complete'])
 
 const timeLeft = ref(props.totalTime)
 const dashArray = ref('0, 1130')  // 初始值
-const isBreathing = ref(true)
 
 const radius = 180
 const circumference = 2 * Math.PI * radius
@@ -51,39 +58,58 @@ const updateProgress = () => {
 let interval = null
 
 const startTimer = () => {
+    if (interval || timeLeft.value <= 0) {
+        return
+    }
     interval = setInterval(() => {
         if (timeLeft.value > 0) {
             timeLeft.value--;
             updateProgress();
         }
         else {
-            clearInterval(interval);
-            interval = null;
+            stopTimer()
             emit('complete');
         }
     }, 1000);
 };
 
+const stopTimer = () => {
+    if (interval) {
+        clearInterval(interval)
+        interval = null
+    }
+}
+
+const resetTimer = () => {
+    timeLeft.value = props.totalTime
+    updateProgress()
+}
+
 onMounted(() => {
     updateProgress();
-    startTimer();
 });
 
 // 组件卸载时清理定时器
 onUnmounted(() => {
-    if (interval) {
-        clearInterval(interval)
-    }
+    stopTimer()
 })
 
-// 如果 totalTime 发生变化，重置倒计时
 watch(() => props.totalTime, (newVal) => {
     timeLeft.value = newVal
     updateProgress()
-    if (interval) {
-        clearInterval(interval)
+})
+
+watch(() => props.isRunning, (running) => {
+    if (running) {
+        startTimer()
+    } else {
+        stopTimer()
     }
-    startTimer()
+}, { immediate: true })
+
+watch(() => props.resetToken, () => {
+    stopTimer()
+    resetTimer()
 })
 </script>
 

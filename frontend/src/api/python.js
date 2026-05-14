@@ -3,6 +3,12 @@ import pythonHttp from './pythonHttp'
 export const analyzeEmotionApi = (payload) => pythonHttp.post('/api/analyze', payload)
 
 export const getMusicListApi = () => pythonHttp.get('/api/music/list')
+export const getUploadedMusicApi = () => pythonHttp.get('/api/music/uploads')
+export const uploadMusicFileApi = (formData) =>
+  pythonHttp.post('/api/music/uploads', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+export const deleteUploadedMusicApi = (trackId) => pythonHttp.delete(`/api/music/uploads/${encodeURIComponent(trackId)}`)
 
 export const getMusicFileUrl = (filename) => {
   const baseUrl = (import.meta.env.VITE_PYTHON_BASE_URL || 'http://localhost:5000').replace(/\/$/, '')

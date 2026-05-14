@@ -144,6 +144,7 @@ import {
   getNextEmotionMusicApi,
   getPreviousEmotionMusicApi,
 } from '@/api/python'
+import { appendUserBehaviorLogApi } from '@/api/data'
 
 const router = useRouter()
 const musicStore = useMusicStore()
@@ -315,6 +316,18 @@ const loadAudioBlob = async (requestFactory) => {
     audioPlayer.volume = volume.value / 100
     await audioPlayer.play()
     isPlaying.value = true
+    
+    // User Behavior Log
+    appendUserBehaviorLogApi({
+      actionType: 'play_music',
+      targetType: 'music',
+      targetId: currentTrack.value?.id || 0,
+      metadata: {
+        title: currentTrack.value?.title,
+        emotion: currentEmotion.value
+      }
+    }).catch(e => console.warn('Log user behavior failed', e))
+    
   } catch (error) {
     isPlaying.value = false
     ElMessage.error('音乐播放失败，请确认 Python 音乐服务已启动。')

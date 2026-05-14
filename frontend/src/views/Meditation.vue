@@ -20,11 +20,14 @@
           <div class="timer-wrapper">
             <CircleTimer 
               :total-time="selectedTime" 
+              :is-running="isMeditationRunning"
+              :reset-token="timerResetToken"
               :colors="['#D97A6C', '#8ca595']" 
-              key="circle-timer"
               @complete="handleTimerComplete"
             />
           </div>
+
+          <p class="timer-status-text">{{ timerStatusText }}</p>
           
           <div class="time-options">
             <button 
@@ -34,6 +37,42 @@
               @click="selectTime(option)"
             >
               {{ option / 60 }}分钟
+            </button>
+          </div>
+
+          <div class="custom-time-row">
+            <input
+              v-model.number="customDurationMinutes"
+              type="number"
+              min="1"
+              max="180"
+              step="1"
+              class="custom-time-input"
+              placeholder="自定义分钟数"
+            />
+            <button class="apply-time-btn" @click="applyCustomDuration">应用时长</button>
+          </div>
+
+          <div class="timer-action-row">
+            <button
+              class="timer-action-btn primary"
+              @click="startMeditation"
+              :disabled="isMeditationRunning || isRoundCompleted"
+            >
+              开始
+            </button>
+            <button
+              class="timer-action-btn"
+              @click="pauseMeditation"
+              :disabled="!isMeditationRunning"
+            >
+              暂停
+            </button>
+            <button
+              class="timer-action-btn"
+              @click="restartMeditation"
+            >
+              重新开始
             </button>
           </div>
         </div>
@@ -168,7 +207,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import CircleTimer from '@/components/CircleTimer.vue'
-import { getMyMeditationLogsApi, saveMeditationLogApi } from '@/api/meditation'
+import { getMyMeditationLogsApi, saveMeditationLogApi, rewardGardenItemApi } from '@/api/meditation'
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
@@ -290,23 +329,83 @@ const nextStageText = computed(() => {
 // Timer Logic
 const timeOptions = [180, 300, 600, 1200] // 3min, 5min, 10min, 20min
 const selectedTime = ref(300)
+const customDurationMinutes = ref(selectedTime.value / 60)
+const isMeditationRunning = ref(false)
+const isRoundCompleted = ref(false)
+const timerResetToken = ref(0)
+const roundStartedAt = ref(null)
 
 const selectTime = (option) => {
   selectedTime.value = option
+  customDurationMinutes.value = option / 60
+  restartMeditation()
+}
+
+const timerStatusText = computed(() => {
+  if (isMeditationRunning.value) {
+    return '冥想进行中，倒计时结束后会自动保存记录。'
+  }
+  if (isRoundCompleted.value) {
+    return '本轮已完成，当前停留在 00:00，请手动开始下一轮。'
+  }
+  return '点击“开始”后才会真正开始倒计时。'
+})
+
+const restartMeditation = () => {
+  isMeditationRunning.value = false
+  isRoundCompleted.value = false
+  roundStartedAt.value = null
+  timerResetToken.value += 1
+}
+
+const clampCustomMinutes = (value) => {
+  const normalized = Math.floor(Number(value) || 0)
+  return Math.min(180, Math.max(1, normalized))
+}
+
+const applyCustomDuration = () => {
+  const minutes = clampCustomMinutes(customDurationMinutes.value)
+  customDurationMinutes.value = minutes
+  selectedTime.value = minutes * 60
+  restartMeditation()
+}
+
+const startMeditation = () => {
+  if (isMeditationRunning.value || isRoundCompleted.value) return
+  if (!roundStartedAt.value) {
+    roundStartedAt.value = new Date().toISOString()
+  }
+  isMeditationRunning.value = true
+}
+
+const pauseMeditation = () => {
+  isMeditationRunning.value = false
 }
 
 const handleTimerComplete = async () => {
+  isMeditationRunning.value = false
+  isRoundCompleted.value = true
   const meditatedMins = Math.floor(selectedTime.value / 60)
   try {
     await saveMeditationLogApi({
-      startTime: new Date().toISOString(),
+      startTime: roundStartedAt.value || new Date().toISOString(),
       duration: meditatedMins,
       musicId: currentTrack.value?.id || null
     })
     totalMeditationTime.value += meditatedMins
     ElMessage.success('冥想记录已保存')
+    
+    // Reward a random garden item
+    try {
+      await rewardGardenItemApi()
+      ElMessage.success('获得了一个冥想花园奖励！')
+    } catch (e) {
+      console.warn('Failed to reward garden item', e)
+    }
   } catch (e) {
     ElMessage.error('保存记录失败')
+  } finally {
+    roundStartedAt.value = null
   }
 }
 
@@ -548,6 +647,14 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
+.timer-status-text {
+  margin: -8px 0 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 .time-btn {
   padding: 8px 20px;
   background: rgba(255, 255, 255, 0.5);
@@ -566,6 +673,66 @@ onBeforeUnmount(() => {
 
 .time-btn:hover:not(.active) {
   background: #fff;
+}
+
+.custom-time-row,
+.timer-action-row {
+  width: 100%;
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.custom-time-input {
+  width: 160px;
+  padding: 10px 14px;
+  border: 1px solid rgba(44, 48, 46, 0.12);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-text-primary);
+  text-align: center;
+  font-size: 1rem;
+}
+
+.custom-time-input:focus {
+  outline: none;
+  border-color: var(--color-accent-sage);
+  background: #fff;
+}
+
+.apply-time-btn,
+.timer-action-btn {
+  padding: 10px 22px;
+  border: 1px solid rgba(44, 48, 46, 0.12);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.apply-time-btn:hover,
+.timer-action-btn:hover:not(:disabled) {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.timer-action-btn.primary {
+  background: linear-gradient(135deg, var(--color-accent-sage), #8ca595);
+  color: #fff;
+  border-color: transparent;
+}
+
+.timer-action-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #789580, #8ca595);
+}
+
+.apply-time-btn:disabled,
+.timer-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .guide-section {
