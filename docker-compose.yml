@@ -7,8 +7,8 @@ services:
       - "15672:15672" # 浏览器看控制台的端口
     restart: always
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: 123456
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
 
   api-gateway:
     build: ./api-gateway
@@ -22,6 +22,7 @@ services:
       - SOCIAL_SERVICE_URL=http://social-service:8083
       - DATA_SERVICE_URL=http://data-service:8084
       - MEDITATION_SERVICE_URL=http://meditation-service:8085
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - rabbitmq
 
@@ -32,9 +33,12 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq
       - SPRING_RABBITMQ_HOST=rabbitmq
-      - DB_HOST=106.53.206.106
-      - DB_USERNAME=user
-      - DB_PASSWORD=password123
+      - RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - rabbitmq
 
@@ -45,9 +49,12 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq
       - SPRING_RABBITMQ_HOST=rabbitmq
-      - DB_HOST=106.53.206.106
-      - DB_USERNAME=user
-      - DB_PASSWORD=password123
+      - RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - rabbitmq
 
@@ -56,18 +63,18 @@ services:
     container_name: music-service
     restart: always
     environment:
-      - DB_HOST=106.53.206.106
-      - DB_USERNAME=user
-      - DB_PASSWORD=password123
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
 
   social-service:
     build: ./social-service
     container_name: social-service
     restart: always
     environment:
-      - DB_HOST=106.53.206.106
-      - DB_USERNAME=user
-      - DB_PASSWORD=password123
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
 
   data-service:
     build: ./data-service
