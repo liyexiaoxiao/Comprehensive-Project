@@ -14,7 +14,7 @@
 	<name>social-service</name>
 	<description>情绪日记与社交模块（emohealing_social_db）</description>
 	<properties>
-		<java.version>21</java.version>
+		<java.version>17</java.version>
 	</properties>
 	<dependencies>
 		<dependency>
