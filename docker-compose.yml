@@ -1,0 +1,77 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-dev
+    ports:
+      - "5672:5672"   # 微服务连接用的端口
+      - "15672:15672" # 浏览器看控制台的端口
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: 123456
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    restart: always
+    environment:
+      - USER_SERVICE_URL=http://user-service:8082
+      - MUSIC_SERVICE_URL=http://music-service:8081
+      - SOCIAL_SERVICE_URL=http://social-service:8083
+      - DATA_SERVICE_URL=http://data-service:8084
+      - MEDITATION_SERVICE_URL=http://meditation-service:8085
+    depends_on:
+      - rabbitmq
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    restart: always
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - DB_HOST=106.53.206.106
+      - DB_USERNAME=user
+      - DB_PASSWORD=password123
+    depends_on:
+      - rabbitmq
+
+  meditation-service:
+    build: ./meditation-service
+    container_name: meditation-service
+    restart: always
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - DB_HOST=106.53.206.106
+      - DB_USERNAME=user
+      - DB_PASSWORD=password123
+    depends_on:
+      - rabbitmq
+
+  music-service:
+    build: ./music-service
+    container_name: music-service
+    restart: always
+    environment:
+      - DB_HOST=106.53.206.106
+      - DB_USERNAME=user
+      - DB_PASSWORD=password123
+
+  social-service:
+    build: ./social-service
+    container_name: social-service
+    restart: always
+    environment:
+      - DB_HOST=106.53.206.106
+      - DB_USERNAME=user
+      - DB_PASSWORD=password123
+
+  data-service:
+    build: ./data-service
+    container_name: data-service
+    restart: always
+    environment:
+      - MONGO_URI=mongodb://host.docker.internal:27017/emohealing_log_db
