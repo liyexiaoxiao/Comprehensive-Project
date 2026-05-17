@@ -175,9 +175,14 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
     messages.insert(1, {
         "role": "system",
         "content": (
-            "When the user asks for music recommendations, songs, relaxing audio, "
-            "sleep music, focus music, or similar requests, call recommend_music. "
-            "After tool results are available, reply as JSON only: "
+            "You may call recommend_music only when the user's latest message clearly "
+            "expresses a desire to listen to music, asks for song/music/audio "
+            "recommendations, asks to play music, or requests sleep, meditation, "
+            "relaxation, or focus audio. Do not call recommend_music for greetings, "
+            "small talk, general emotional sharing, or ordinary companionship unless "
+            "the user explicitly mentions wanting music, songs, or audio. "
+            "If no music tool is needed, answer normally as JSON only. "
+            "After tool results are available, also reply as JSON only: "
             '{"emotion":"情绪标签","reply":"给用户的话"}。'
         ),
     })
@@ -186,10 +191,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
         model="qwen3.5-plus",
         messages=messages,
         tools=COMPANION_TOOLS,
-        tool_choice={
-            "type": "function",
-            "function": {"name": "recommend_music"},
-        } if _has_music_intent(user_text) else "auto",
+        tool_choice="auto",
         extra_body={"enable_thinking": False},
     )
 
@@ -225,7 +227,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
         raw_content = first_message.content or ""
 
     if not raw_content:
-        raw_content = '{"emotion":"平静","reply":"我给你找了几首适合现在状态的音乐，可以先从第一首开始听。"}'
+        raw_content = '{"emotion":"\\u5e73\\u9759","reply":"\\u6211\\u5728\\u8fd9\\u91cc\\uff0c\\u542c\\u89c1\\u4f60\\u4e86\\u3002\\u60f3\\u804a\\u4ec0\\u4e48\\u90fd\\u53ef\\u4ee5\\u6162\\u6162\\u8bf4\\u3002"}'
 
     emotion = "平静"
     reply = raw_content
