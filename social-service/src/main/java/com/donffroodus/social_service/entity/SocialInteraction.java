@@ -2,6 +2,8 @@ package com.donffroodus.social_service.entity;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.CreationTimestamp;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -33,7 +35,14 @@ public class SocialInteraction {
 	@Column(columnDefinition = "text")
 	private String comment;
 
-	@Column(name = "created_at", insertable = false, updatable = false)
+	@Column(name = "target_interaction_id")
+	private Long targetInteractionId;
+
+	@Column(name = "target_user_id")
+	private Long targetUserId;
+
+	@CreationTimestamp
+	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	public Long getId() {
@@ -74,6 +83,22 @@ public class SocialInteraction {
 
 	public void setComment(String comment) {
 		this.comment = comment;
+	}
+
+	public Long getTargetInteractionId() {
+		return targetInteractionId;
+	}
+
+	public void setTargetInteractionId(Long targetInteractionId) {
+		this.targetInteractionId = targetInteractionId;
+	}
+
+	public Long getTargetUserId() {
+		return targetUserId;
+	}
+
+	public void setTargetUserId(Long targetUserId) {
+		this.targetUserId = targetUserId;
 	}
 
 	public LocalDateTime getCreatedAt() {

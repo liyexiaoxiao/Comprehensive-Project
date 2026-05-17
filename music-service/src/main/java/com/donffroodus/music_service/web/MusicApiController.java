@@ -1,8 +1,11 @@
 package com.donffroodus.music_service.web;
 
-import java.util.Comparator;
-import java.util.HashSet;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +35,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.donffroodus.music_service.entity.EmotionTag;
 import com.donffroodus.music_service.entity.MusicResource;
 import com.donffroodus.music_service.entity.MusicTagMapping;
+import com.donffroodus.music_service.entity.Playlist;
+import com.donffroodus.music_service.entity.PlaylistTrack;
 import com.donffroodus.music_service.entity.UserPreference;
 import com.donffroodus.music_service.repository.EmotionTagRepository;
 import com.donffroodus.music_service.repository.MusicResourceRepository;
 import com.donffroodus.music_service.repository.MusicTagMappingRepository;
+import com.donffroodus.music_service.repository.PlaylistRepository;
+import com.donffroodus.music_service.repository.PlaylistTrackRepository;
 import com.donffroodus.music_service.repository.UserPreferenceRepository;
 
 /**
@@ -51,23 +59,108 @@ public class MusicApiController {
 	private final EmotionTagRepository emotionTagRepository;
 	private final MusicTagMappingRepository musicTagMappingRepository;
 	private final UserPreferenceRepository userPreferenceRepository;
+	private final PlaylistRepository playlistRepository;
+	private final PlaylistTrackRepository playlistTrackRepository;
 
 	public MusicApiController(
 			MusicResourceRepository musicResourceRepository,
 			EmotionTagRepository emotionTagRepository,
 			MusicTagMappingRepository musicTagMappingRepository,
-			UserPreferenceRepository userPreferenceRepository) {
+			UserPreferenceRepository userPreferenceRepository,
+			PlaylistRepository playlistRepository,
+			PlaylistTrackRepository playlistTrackRepository) {
 		this.musicResourceRepository = musicResourceRepository;
 		this.emotionTagRepository = emotionTagRepository;
 		this.musicTagMappingRepository = musicTagMappingRepository;
 		this.userPreferenceRepository = userPreferenceRepository;
+		this.playlistRepository = playlistRepository;
+		this.playlistTrackRepository = playlistTrackRepository;
 	}
 
-	/** 列出全部音乐资源。 */
-	@Operation(summary = "列出全部音乐资源")
+	/** preference_type：1=喜欢，2=收藏（推荐排序与喜欢同等加权），-1=黑名单。 */
+	private static boolean isValidPreferenceType(Integer t) {
+		return t != null && (t == 1 || t == 2 || t == -1);
+	}
+
+	/** 喜欢或收藏：推荐时均视为正向偏好（收藏默认享受“喜欢”级排序）。 */
+	private static boolean isBoostPreference(Integer t) {
+		return t != null && (t == 1 || t == 2);
+	}
+
+	private static boolean isBlocked(Integer t) {
+		return t != null && t == -1;
+	}
+
+	/** 解析逗号分隔的 Long id；去重且保持首次出现顺序；最多 max 个。非法片段跳过。 */
+	private static List<Long> parseCommaSeparatedIds(String raw, int max) {
+		if (raw == null || raw.isBlank()) {
+			return List.of();
+		}
+		List<Long> out = new ArrayList<>();
+		for (String part : raw.split(",")) {
+			String s = part.strip();
+			if (s.isEmpty()) {
+				continue;
+			}
+			try {
+				long id = Long.parseLong(s);
+				if (out.contains(id)) {
+					continue;
+				}
+				out.add(id);
+				if (out.size() >= max) {
+					break;
+				}
+			} catch (NumberFormatException ex) {
+				// skip invalid token
+			}
+		}
+		return out;
+	}
+
+	/** 列出音乐资源；可选 q 按标题或艺人模糊匹配（不区分大小写）。 */
+	@Operation(summary = "列出音乐资源", description = "无 q 时返回全部；有 q 时在标题或 artist 中模糊匹配")
 	@GetMapping("/music-resources")
-	public List<MusicResource> listMusic() {
-		return musicResourceRepository.findAll();
+	public List<MusicResource> listMusic(
+			@Parameter(name = "q", description = "关键词，匹配 title 或 artist", in = ParameterIn.QUERY) @RequestParam(value = "q", required = false) String q) {
+		if (q == null || q.isBlank()) {
+			return musicResourceRepository.findAll();
+		}
+		String keyword = q.strip();
+		return musicResourceRepository.searchByTitleOrArtistIgnoreCase(keyword);
+	}
+
+	/** 当前用户上传的音乐列表（按 music_id 降序）。 */
+	@Operation(summary = "列出当前用户上传的音乐", description = "uploaderId 与 X-User-Id 一致")
+	@GetMapping("/me/music-resources")
+	public List<MusicResource> listMyUploadedMusic(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return musicResourceRepository.findByUploaderIdOrderByIdDesc(userId);
+	}
+
+	/**
+	 * 按多个主键批量查询音乐；顺序与请求 ids 中首次出现的 id 一致；不存在的 id 跳过。
+	 * 路径放在 /music-resources/{id} 之前，避免 "by-ids" 被当成 id。
+	 */
+	@Operation(summary = "按 id 批量查询音乐", description = "ids 为逗号分隔，如 1,2,3；最多 200 个；非法片段忽略")
+	@GetMapping("/music-resources/by-ids")
+	public ResponseEntity<List<MusicResource>> listMusicByIds(
+			@Parameter(name = "ids", description = "逗号分隔的 music_id", in = ParameterIn.QUERY, required = true) @RequestParam("ids") String ids) {
+		List<Long> idList = parseCommaSeparatedIds(ids, 200);
+		if (idList.isEmpty()) {
+			return ResponseEntity.badRequest().build();
+		}
+		Map<Long, MusicResource> byId = musicResourceRepository.findAllById(idList).stream()
+				.collect(Collectors.toMap(MusicResource::getId, m -> m, (a, b) -> a, HashMap::new));
+		List<MusicResource> ordered = new ArrayList<>();
+		for (Long id : idList) {
+			MusicResource m = byId.get(id);
+			if (m != null) {
+				ordered.add(m);
+			}
+		}
+		return ResponseEntity.ok(ordered);
 	}
 
 	/** 按主键获取单首音乐详情。 */
@@ -99,6 +192,21 @@ public class MusicApiController {
 		return ResponseEntity.ok(body);
 	}
 
+	/** 删除某首音乐的一条标签映射（须 mapping 属于该 musicId）。 */
+	@Operation(summary = "删除单条音乐-标签映射", description = "mapping 不属于该曲目时返回 404，避免误删")
+	@DeleteMapping("/music-resources/{musicId}/tags/{mappingId}")
+	@Transactional
+	public ResponseEntity<Void> deleteOneMusicTagMapping(
+			@PathVariable("musicId") Long musicId,
+			@PathVariable("mappingId") Long mappingId) {
+		Optional<MusicTagMapping> row = musicTagMappingRepository.findById(mappingId);
+		if (row.isEmpty() || !Objects.equals(row.get().getMusicId(), musicId)) {
+			return ResponseEntity.notFound().build();
+		}
+		musicTagMappingRepository.delete(row.get());
+		return ResponseEntity.ok().build();
+	}
+
 	/** 列出全部情绪标签字典。 */
 	@Operation(summary = "列出全部情绪标签")
 	@GetMapping("/emotion-tags")
@@ -106,17 +214,37 @@ public class MusicApiController {
 		return emotionTagRepository.findAll();
 	}
 
-	/** 查询当前用户对各音乐的偏好（喜欢 / 不喜欢）。 */
-	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，-1 不喜欢（黑名单）")
+	/** 按精确标签名查询一条情绪标签（唯一约束）。 */
+	@Operation(summary = "按名称查询情绪标签", description = "精确匹配 tag_name；不存在返回 404")
+	@GetMapping("/emotion-tags/by-name")
+	public ResponseEntity<EmotionTag> getEmotionTagByName(
+			@Parameter(name = "name", description = "标签名，精确匹配", in = ParameterIn.QUERY, required = true) @RequestParam("name") String name) {
+		if (name == null || name.isBlank()) {
+			return ResponseEntity.badRequest().build();
+		}
+		return emotionTagRepository.findByTagName(name.strip())
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	/** 查询当前用户对各音乐的偏好；可选按类型筛选。 */
+	@Operation(summary = "列出当前用户的音乐偏好", description = "preferenceType：1 喜欢，2 收藏（推荐与喜欢同等加权），-1 黑名单；可选 query preferenceType 筛选")
 	@GetMapping("/me/music-preferences")
-	public List<UserPreference> listUserPreferences(
-			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+	public ResponseEntity<List<UserPreference>> listUserPreferences(
+			@Parameter(name = "X-User-Id", description = "用户 ID（网关从 JWT 注入）", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@Parameter(name = "preferenceType", description = "可选：1、2、-1", in = ParameterIn.QUERY) @RequestParam(value = "preferenceType", required = false) Integer preferenceType) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		return userPreferenceRepository.findByUserId(userId);
+		if (preferenceType != null) {
+			if (!isValidPreferenceType(preferenceType)) {
+				return ResponseEntity.badRequest().build();
+			}
+			return ResponseEntity.ok(userPreferenceRepository.findByUserIdAndPreferenceType(userId, preferenceType));
+		}
+		return ResponseEntity.ok(userPreferenceRepository.findByUserId(userId));
 	}
 
 	/** 创建或更新当前用户对某首音乐的偏好。 */
-	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType 仅允许 1 或 -1")
+	@Operation(summary = "创建或更新音乐偏好", description = "preferenceType：1 喜欢，2 收藏，-1 黑名单；收藏在推荐排序中与喜欢同等优先")
 	@PostMapping("/me/music-preferences")
 	public ResponseEntity<UserPreference> upsertMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -125,11 +253,11 @@ public class MusicApiController {
 		if (request == null || request.musicId() == null || request.preferenceType() == null) {
 			return ResponseEntity.badRequest().build();
 		}
-		if (request.preferenceType() != 1 && request.preferenceType() != -1) {
+		if (!isValidPreferenceType(request.preferenceType())) {
 			return ResponseEntity.badRequest().build();
 		}
 
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, request.musicId());
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, request.musicId(), request.preferenceType());
 		UserPreference pref = existing.orElseGet(UserPreference::new);
 		pref.setUserId(userId);
 		pref.setMusicId(request.musicId());
@@ -140,12 +268,13 @@ public class MusicApiController {
 
 	/** 删除当前用户对某首音乐的偏好记录。 */
 	@Operation(summary = "删除某首音乐的偏好记录")
-	@DeleteMapping("/me/music-preferences/{musicId}")
+	@DeleteMapping("/me/music-preferences/{musicId}/{preferenceType}")
 	public ResponseEntity<Void> deleteMusicPreference(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
-			@PathVariable("musicId") Long musicId) {
+			@PathVariable("musicId") String musicId,
+			@PathVariable("preferenceType") Integer preferenceType) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicId(userId, musicId);
+		Optional<UserPreference> existing = userPreferenceRepository.findByUserIdAndMusicIdAndPreferenceType(userId, musicId, preferenceType);
 		if (existing.isEmpty()) {
 			return ResponseEntity.notFound().build();
 		}
@@ -154,8 +283,20 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
+	/** 查询当前用户对指定曲目的偏好（一行或不存在）。 */
+	@Operation(summary = "查询当前用户对某首音乐的偏好")
+	@GetMapping("/me/music-preferences/by-music/{musicId}")
+	public ResponseEntity<UserPreference> getMusicPreferenceForMusic(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("musicId") String musicId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return userPreferenceRepository.findByUserIdAndMusicId(userId, musicId)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
 	/** 按情绪标签推荐候选曲目，并结合用户偏好排序与过滤黑名单。 */
-	@Operation(summary = "按情绪标签推荐", description = "结合用户偏好：喜欢优先，黑名单排除；limit 默认 10")
+	@Operation(summary = "按情绪标签推荐", description = "结合用户偏好：喜欢/收藏优先，黑名单排除；limit 默认 10")
 	@PostMapping("/me/music-recommendations/by-emotion")
 	public ResponseEntity<List<MusicResource>> recommendByEmotion(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -181,22 +322,26 @@ public class MusicApiController {
 
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
-		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 提升排序靠前
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		// 2) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 提升排序靠前
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
-					return t == null || t != -1;
-				})
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(String.valueOf(m.getId()))))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
-							return (t != null && t == 1) ? 0 : 1;
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(String.valueOf(m.getId()))) ? 0 : 1)
+						.thenComparingInt((MusicResource m) -> {
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
+							if (t != null && t == 1) {
+								return 0;
+							}
+							if (t != null && t == 2) {
+								return 1;
+							}
+							return 2;
 						})
 						.thenComparing(MusicResource::getId))
 				.limit(limit)
@@ -206,7 +351,7 @@ public class MusicApiController {
 	}
 
 	/** 基于当前播放曲目（及可选情绪标签）推荐下一首，排除当前曲并考虑偏好。 */
-	@Operation(summary = "推荐下一首", description = "可传 emotionTagId，否则根据当前曲目标签推断；limit 默认 1")
+	@Operation(summary = "推荐下一首", description = "可传 emotionTagId，否则根据当前曲目标签推断；limit 默认 1；喜欢/收藏优先，黑名单排除")
 	@PostMapping("/me/music-recommendations/next")
 	public ResponseEntity<List<MusicResource>> recommendNext(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
@@ -250,22 +395,26 @@ public class MusicApiController {
 
 		List<MusicResource> candidates = musicResourceRepository.findAllById(candidateMusicIds);
 
-		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢) 排在前面
-		Map<Long, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
+		// 3) 读取用户偏好：-1(黑名单) 过滤；1(喜欢)/2(收藏) 排在前面
+		Map<String, Integer> preferenceTypeByMusicId = userPreferenceRepository.findByUserId(userId).stream()
 				.collect(Collectors.toMap(
 						UserPreference::getMusicId,
 						UserPreference::getPreferenceType,
 						(a, b) -> a));
 
 		List<MusicResource> result = candidates.stream()
-				.filter(m -> {
-					Integer t = preferenceTypeByMusicId.get(m.getId());
-					return t == null || t != -1;
-				})
+				.filter(m -> !isBlocked(preferenceTypeByMusicId.get(String.valueOf(m.getId()))))
 				.sorted(Comparator
-						.comparingInt((MusicResource m) -> {
-							Integer t = preferenceTypeByMusicId.get(m.getId());
-							return (t != null && t == 1) ? 0 : 1;
+						.comparingInt((MusicResource m) -> isBoostPreference(preferenceTypeByMusicId.get(String.valueOf(m.getId()))) ? 0 : 1)
+						.thenComparingInt((MusicResource m) -> {
+							Integer t = preferenceTypeByMusicId.get(String.valueOf(m.getId()));
+							if (t != null && t == 1) {
+								return 0;
+							}
+							if (t != null && t == 2) {
+								return 1;
+							}
+							return 2;
 						})
 						.thenComparing(MusicResource::getId))
 				.limit(limit)
@@ -335,6 +484,25 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
+	private static final int MAX_BATCH_TAG_ITEMS = 100;
+
+	/** 覆盖写入：先删该曲全部映射，再写入；调用方须已校验 music 存在且 tagIds 非空且均在字典中。 */
+	private List<MusicTagMapping> applyReplaceTagsForMusic(Long musicId, Set<Long> distinctTagIds, String source) {
+		List<MusicTagMapping> oldMappings = musicTagMappingRepository.findByMusicId(musicId);
+		if (!oldMappings.isEmpty()) {
+			musicTagMappingRepository.deleteAll(oldMappings);
+		}
+		List<MusicTagMapping> saved = new ArrayList<>();
+		for (Long tagId : distinctTagIds) {
+			MusicTagMapping mapping = new MusicTagMapping();
+			mapping.setMusicId(musicId);
+			mapping.setTagId(tagId);
+			mapping.setSource(source);
+			saved.add(musicTagMappingRepository.save(mapping));
+		}
+		return saved;
+	}
+
 	/** 覆盖写入某首音乐的情绪标签绑定（先清空旧映射再保存新标签集）。 */
 	@Operation(summary = "覆盖写入音乐的情绪标签", description = "先清空旧映射；tagIds 须全部存在于字典；source 默认 manual")
 	@PostMapping("/music-resources/{musicId}/tags")
@@ -366,21 +534,75 @@ public class MusicApiController {
 			source = "manual";
 		}
 
-		// 覆盖写入
-		List<MusicTagMapping> oldMappings = musicTagMappingRepository.findByMusicId(musicId);
-		if (!oldMappings.isEmpty()) {
-			musicTagMappingRepository.deleteAll(oldMappings);
+		return ResponseEntity.ok(applyReplaceTagsForMusic(musicId, distinctTagIds, source));
+	}
+
+	/**
+	 * 批量覆盖写入多首音乐的情绪标签（语义与单首 POST /music-resources/{musicId}/tags 一致）。
+	 * 同一请求内若出现重复 musicId，以后出现的条目为准。全部校验通过后再一次性提交事务。
+	 */
+	@Operation(summary = "批量覆盖写入音乐情绪标签", description = "最多 100 条；每项须 musicId + 非空 tagIds；tagIds 须全部存在于字典；source 可逐项省略，默认 manual")
+	@PostMapping("/music-resources/tags/batch")
+	@Transactional
+	public ResponseEntity<BatchReplaceMusicTagsResponse> batchReplaceMusicTags(
+			@RequestBody BatchReplaceMusicTagsRequest body) {
+		if (body == null || body.items() == null || body.items().isEmpty()) {
+			return ResponseEntity.badRequest().build();
 		}
-		List<MusicTagMapping> saved = new ArrayList<>();
-		for (Long tagId : distinctTagIds) {
-			MusicTagMapping mapping = new MusicTagMapping();
-			mapping.setMusicId(musicId);
-			mapping.setTagId(tagId);
-			mapping.setSource(source);
-			saved.add(musicTagMappingRepository.save(mapping));
+		if (body.items().size() > MAX_BATCH_TAG_ITEMS) {
+			return ResponseEntity.badRequest().build();
 		}
 
-		return ResponseEntity.ok(saved);
+		// 同 batch 内重复 musicId：保留最后一次
+		List<BatchReplaceMusicTagsItem> normalized = new ArrayList<>();
+		Map<Long, BatchReplaceMusicTagsItem> byMusic = new LinkedHashMap<>();
+		for (BatchReplaceMusicTagsItem item : body.items()) {
+			if (item == null || item.musicId() == null || item.tagIds() == null || item.tagIds().isEmpty()) {
+				return ResponseEntity.badRequest().build();
+			}
+			byMusic.put(item.musicId(), item);
+		}
+		normalized.addAll(byMusic.values());
+
+		Set<Long> allMusicIds = new HashSet<>();
+		Set<Long> allTagIds = new HashSet<>();
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			allMusicIds.add(item.musicId());
+			allTagIds.addAll(new HashSet<>(item.tagIds()));
+		}
+
+		List<MusicResource> musics = musicResourceRepository.findAllById(allMusicIds);
+		if (musics.size() != allMusicIds.size()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		List<EmotionTag> tags = emotionTagRepository.findAllById(allTagIds);
+		Set<Long> existingTagIds = tags.stream().map(EmotionTag::getId).collect(Collectors.toSet());
+		if (existingTagIds.size() != allTagIds.size()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			Set<Long> distinct = new HashSet<>(item.tagIds());
+			if (distinct.isEmpty()) {
+				return ResponseEntity.badRequest().build();
+			}
+			if (!existingTagIds.containsAll(distinct)) {
+				return ResponseEntity.badRequest().build();
+			}
+		}
+
+		List<BatchReplaceMusicTagsResultItem> results = new ArrayList<>();
+		for (BatchReplaceMusicTagsItem item : normalized) {
+			Set<Long> distinct = new HashSet<>(item.tagIds());
+			String source = item.source();
+			if (source == null || source.isBlank()) {
+				source = "manual";
+			}
+			List<MusicTagMapping> saved = applyReplaceTagsForMusic(item.musicId(), distinct, source);
+			results.add(new BatchReplaceMusicTagsResultItem(item.musicId(), saved.size()));
+		}
+		return ResponseEntity.ok(new BatchReplaceMusicTagsResponse(results));
 	}
 
 	/** 按名称创建情绪标签；已存在则返回已有记录。 */
@@ -440,7 +662,253 @@ public class MusicApiController {
 		return ResponseEntity.ok().build();
 	}
 
-	public static record MusicPreferenceRequest(Long musicId, Integer preferenceType) {
+	// =============== 自建歌单 ===============
+
+	/** 列出当前用户的全部歌单，并附带每个歌单的曲目（按 sort_order 升序）。 */
+	@Operation(summary = "列出当前用户的歌单", description = "每个歌单嵌入曲目数组，曲目按 sort_order 升序")
+	@GetMapping("/me/playlists")
+	public List<PlaylistResponse> listMyPlaylists(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		List<Playlist> playlists = playlistRepository.findByUserIdOrderByIdDesc(userId);
+		if (playlists.isEmpty()) {
+			return List.of();
+		}
+
+		List<Long> playlistIds = playlists.stream().map(Playlist::getId).toList();
+		List<PlaylistTrack> allTracks = playlistTrackRepository
+				.findByPlaylistIdInOrderBySortOrderAscIdAsc(playlistIds);
+
+		Set<Long> referencedMusicIds = allTracks.stream()
+				.map(PlaylistTrack::getMusicId)
+				.filter(id -> id != null && id.matches("\\d+"))
+				.map(Long::valueOf)
+				.collect(Collectors.toCollection(HashSet::new));
+		Map<String, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
+				.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
+
+		Map<Long, List<PlaylistTrackResponse>> tracksByPlaylist = new HashMap<>();
+		for (PlaylistTrack t : allTracks) {
+			tracksByPlaylist
+					.computeIfAbsent(t.getPlaylistId(), k -> new ArrayList<>())
+					.add(PlaylistTrackResponse.of(t, musicById.get(t.getMusicId())));
+		}
+
+		List<PlaylistResponse> result = new ArrayList<>();
+		for (Playlist p : playlists) {
+			result.add(PlaylistResponse.of(p, tracksByPlaylist.getOrDefault(p.getId(), List.of())));
+		}
+		return result;
+	}
+
+	/** 查询当前用户的单个歌单详情。 */
+	@Operation(summary = "查看歌单详情", description = "返回歌单元信息与曲目数组（按 sort_order 升序）")
+	@GetMapping("/me/playlists/{playlistId}")
+	public ResponseEntity<PlaylistResponse> getMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("playlistId") Long playlistId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		Optional<Playlist> playlist = playlistRepository.findByIdAndUserId(playlistId, userId);
+		if (playlist.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+
+		List<PlaylistTrack> tracks = playlistTrackRepository
+				.findByPlaylistIdOrderBySortOrderAscIdAsc(playlistId);
+		Set<Long> referencedMusicIds = tracks.stream()
+				.map(PlaylistTrack::getMusicId)
+				.filter(id -> id != null && id.matches("\\d+"))
+				.map(Long::valueOf)
+				.collect(Collectors.toCollection(HashSet::new));
+		Map<String, MusicResource> musicById = musicResourceRepository.findAllById(referencedMusicIds).stream()
+				.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
+
+		List<PlaylistTrackResponse> trackBodies = tracks.stream()
+				.map(t -> PlaylistTrackResponse.of(t, musicById.get(t.getMusicId())))
+				.toList();
+		return ResponseEntity.ok(PlaylistResponse.of(playlist.get(), trackBodies));
+	}
+
+	/** 新建当前用户的歌单。 */
+	@Operation(summary = "新建歌单", description = "name 必填；description、coverUrl 可空")
+	@PostMapping("/me/playlists")
+	public ResponseEntity<PlaylistResponse> createMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@RequestBody PlaylistWriteRequest request) {
+		if (request == null || request.name() == null || request.name().isBlank()) {
+			return ResponseEntity.badRequest().build();
+		}
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+
+		Playlist playlist = new Playlist();
+		playlist.setUserId(userId);
+		playlist.setName(request.name().strip());
+		playlist.setDescription(request.description());
+		playlist.setCoverUrl(request.coverUrl());
+		Playlist saved = playlistRepository.save(playlist);
+		return ResponseEntity.ok(PlaylistResponse.of(saved, List.of()));
+	}
+
+	/** 更新当前用户的歌单元信息。 */
+	@Operation(summary = "更新歌单元信息", description = "可更新 name / description / coverUrl；name 必填")
+	@PutMapping("/me/playlists/{playlistId}")
+	public ResponseEntity<PlaylistResponse> updateMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("playlistId") Long playlistId,
+			@RequestBody PlaylistWriteRequest request) {
+		if (request == null || request.name() == null || request.name().isBlank()) {
+			return ResponseEntity.badRequest().build();
+		}
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return playlistRepository.findByIdAndUserId(playlistId, userId)
+				.map(existing -> {
+					existing.setName(request.name().strip());
+					existing.setDescription(request.description());
+					existing.setCoverUrl(request.coverUrl());
+					Playlist saved = playlistRepository.save(existing);
+					List<PlaylistTrack> tracks = playlistTrackRepository
+							.findByPlaylistIdOrderBySortOrderAscIdAsc(playlistId);
+					Set<Long> ids = tracks.stream().map(PlaylistTrack::getMusicId)
+							.filter(id -> id != null && id.matches("\\d+"))
+							.map(Long::valueOf)
+							.collect(Collectors.toCollection(HashSet::new));
+					Map<String, MusicResource> musicById = musicResourceRepository.findAllById(ids).stream()
+							.collect(Collectors.toMap(m -> String.valueOf(m.getId()), m -> m, (a, b) -> a, HashMap::new));
+					List<PlaylistTrackResponse> body = tracks.stream()
+							.map(t -> PlaylistTrackResponse.of(t, musicById.get(t.getMusicId())))
+							.toList();
+					return ResponseEntity.ok(PlaylistResponse.of(saved, body));
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	/** 删除当前用户的歌单并清空其曲目。 */
+	@Operation(summary = "删除歌单", description = "同时删除该歌单下全部曲目记录")
+	@DeleteMapping("/me/playlists/{playlistId}")
+	@Transactional
+	public ResponseEntity<Void> deleteMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("playlistId") Long playlistId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return playlistRepository.findByIdAndUserId(playlistId, userId)
+				.map(playlist -> {
+					playlistTrackRepository.deleteByPlaylistId(playlistId);
+					playlistRepository.delete(playlist);
+					return ResponseEntity.ok().<Void>build();
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	/** 向当前用户的歌单追加一首曲目（sort_order 取已有最大值 +1）。 */
+	@Operation(summary = "向歌单追加曲目", description = "musicId 必填；曲目必须存在；同一歌单同一首歌不可重复，重复时返回 409")
+	@PostMapping("/me/playlists/{playlistId}/tracks")
+	@Transactional
+	public ResponseEntity<PlaylistTrackResponse> addTrackToMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("playlistId") Long playlistId,
+			@RequestBody PlaylistTrackWriteRequest request) {
+		if (request == null || request.musicId() == null) {
+			return ResponseEntity.badRequest().build();
+		}
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+
+		Optional<Playlist> playlist = playlistRepository.findByIdAndUserId(playlistId, userId);
+		if (playlist.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+		MusicResource music = null;
+		if (request.musicId() != null && request.musicId().matches("\\d+")) {
+			music = musicResourceRepository.findById(Long.valueOf(request.musicId())).orElse(null);
+		}
+		if (playlistTrackRepository.existsByPlaylistIdAndMusicId(playlistId, request.musicId())) {
+			return ResponseEntity.status(409).build();
+		}
+
+		int nextOrder = playlistTrackRepository.findMaxSortOrderByPlaylistId(playlistId) + 1;
+		PlaylistTrack track = new PlaylistTrack();
+		track.setPlaylistId(playlistId);
+		track.setMusicId(request.musicId());
+		track.setSortOrder(nextOrder);
+		PlaylistTrack saved = playlistTrackRepository.save(track);
+		return ResponseEntity.ok(PlaylistTrackResponse.of(saved, music));
+	}
+
+	/** 从当前用户的歌单移除某首曲目（按 musicId）。 */
+	@Operation(summary = "从歌单移除曲目")
+	@DeleteMapping("/me/playlists/{playlistId}/tracks/{musicId}")
+	@Transactional
+	public ResponseEntity<Void> removeTrackFromMyPlaylist(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("playlistId") Long playlistId,
+			@PathVariable("musicId") String musicId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		Optional<Playlist> playlist = playlistRepository.findByIdAndUserId(playlistId, userId);
+		if (playlist.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+		return playlistTrackRepository.findByPlaylistIdAndMusicId(playlistId, musicId)
+				.map(row -> {
+					playlistTrackRepository.delete(row);
+					return ResponseEntity.ok().<Void>build();
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	public static record PlaylistWriteRequest(
+			String name,
+			String description,
+			String coverUrl) {
+	}
+
+	public static record PlaylistTrackWriteRequest(
+			String musicId) {
+	}
+
+	public static record PlaylistTrackResponse(
+			Long playlistTrackId,
+			Long playlistId,
+			String musicId,
+			Integer sortOrder,
+			LocalDateTime createdAt,
+			MusicResource music) {
+
+		static PlaylistTrackResponse of(PlaylistTrack t, MusicResource music) {
+			return new PlaylistTrackResponse(
+					t.getId(),
+					t.getPlaylistId(),
+					t.getMusicId(),
+					t.getSortOrder(),
+					t.getCreatedAt(),
+					music);
+		}
+	}
+
+	public static record PlaylistResponse(
+			Long playlistId,
+			Long userId,
+			String name,
+			String description,
+			String coverUrl,
+			LocalDateTime createdAt,
+			LocalDateTime updatedAt,
+			Integer trackCount,
+			List<PlaylistTrackResponse> tracks) {
+
+		static PlaylistResponse of(Playlist p, List<PlaylistTrackResponse> tracks) {
+			return new PlaylistResponse(
+					p.getId(),
+					p.getUserId(),
+					p.getName(),
+					p.getDescription(),
+					p.getCoverUrl(),
+					p.getCreatedAt(),
+					p.getUpdatedAt(),
+					tracks == null ? 0 : tracks.size(),
+					tracks == null ? List.of() : tracks);
+		}
+	}
+
+	public static record MusicPreferenceRequest(String musicId, Integer preferenceType) {
 	}
 
 	public static record MusicRecommendationRequest(Long emotionTagId, Integer limit) {
@@ -464,6 +932,25 @@ public class MusicApiController {
 	public static record MusicTagsWriteRequest(
 			List<Long> tagIds,
 			String source) {
+	}
+
+	public static record BatchReplaceMusicTagsItem(
+			Long musicId,
+			List<Long> tagIds,
+			String source) {
+	}
+
+	public static record BatchReplaceMusicTagsRequest(
+			List<BatchReplaceMusicTagsItem> items) {
+	}
+
+	public static record BatchReplaceMusicTagsResultItem(
+			Long musicId,
+			int mappingCount) {
+	}
+
+	public static record BatchReplaceMusicTagsResponse(
+			List<BatchReplaceMusicTagsResultItem> results) {
 	}
 
 	public static record EmotionTagWriteRequest(

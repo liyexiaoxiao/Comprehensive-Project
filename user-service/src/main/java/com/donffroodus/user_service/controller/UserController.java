@@ -1,6 +1,13 @@
 package com.donffroodus.user_service.controller;
 
+import java.nio.file.Files;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.donffroodus.user_service.dto.AdminResetPasswordRequest;
 import com.donffroodus.user_service.dto.AdminUpdateUserRequest;
@@ -26,7 +34,6 @@ import com.donffroodus.user_service.entity.UserInfo;
 import com.donffroodus.user_service.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
-
 
 @RestController
 @RequestMapping("/api/users")
@@ -57,6 +64,63 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
         return ResponseEntity.ok(userService.getUserById(userId));
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadMyAvatar(@RequestHeader("X-User-Id") Long userId, @RequestParam("file") MultipartFile file) {
+        try {
+            String avatarUrl = userService.uploadMyAvatar(userId, file);
+            return ResponseEntity.ok(Map.of("avatarUrl", avatarUrl));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/avatars/{filename:.+}")
+    public ResponseEntity<?> getAvatar(@PathVariable String filename) {
+        try {
+            Resource resource = userService.loadAvatarResource(filename);
+            String contentType = Files.probeContentType(resource.getFile().toPath());
+            MediaType mediaType = contentType == null
+                    ? MediaType.APPLICATION_OCTET_STREAM
+                    : MediaType.parseMediaType(contentType);
+
+            return ResponseEntity.ok()
+                    .contentType(mediaType)
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> searchUsers(
+            @RequestParam("q") String keyword,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestHeader(value = "X-User-Id", required = false) Long currentUserId) {
+        if (limit <= 0) {
+            return ResponseEntity.badRequest().body("limit must be positive");
+        }
+        return ResponseEntity.ok(userService.searchUsers(keyword, limit, currentUserId));
+    }
+
+    @GetMapping("/summaries")
+    public ResponseEntity<?> getUserSummaries(@RequestParam("ids") String ids) {
+        if (ids == null || ids.isBlank()) {
+            return ResponseEntity.badRequest().body("ids is required");
+        }
+
+        try {
+            List<Long> userIds = java.util.Arrays.stream(ids.split(","))
+                    .map(String::trim)
+                    .filter(part -> !part.isEmpty())
+                    .map(Long::valueOf)
+                    .toList();
+            return ResponseEntity.ok(userService.getUserSummariesByIds(userIds));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body("ids must be comma-separated numbers");
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')") 

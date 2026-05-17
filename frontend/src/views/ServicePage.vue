@@ -57,7 +57,6 @@
           <div class="section-head">
             <div>
               <h2>{{ activeCategory.name }}</h2>
-              <p>{{ activeCategory.description }}</p>
             </div>
             <span class="count-pill">{{ filteredTracks.length }} 首曲目</span>
           </div>
@@ -297,11 +296,12 @@ const musicCategories = computed(() => {
     collectedIds: musicStore.collectedTrackIds,
     durationMap: realMusicDurations.value,
   })
+  const realLibrary = realCategories.flatMap(c => c.tracks)
   const customCats = musicStore.customPlaylists.map((playlist) => ({
     id: playlist.id,
     name: playlist.name,
     description: playlist.description || '自建歌单',
-    tracks: playlist.tracks,
+    tracks: playlist.trackIds?.map(id => musicStore.uploadedTracks.find(t => t.id === id) || realLibrary.find(t => t.id === id)).filter(Boolean) || [],
   }))
   return [...realCategories, ...customCats]
 })
@@ -1104,6 +1104,7 @@ audioPlayer.onended = () => {
 
 onMounted(async () => {
   await loadRealMusicLibrary()
+  await musicStore.fetchUserData()
 })
 
 onBeforeUnmount(() => {
@@ -1270,11 +1271,17 @@ onBeforeUnmount(() => {
 }
 
 .panel-head h1 {
-  font-size: 3rem;
+  font-size: 2.2rem;
 }
 
 .panel-head h2 {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
+}
+
+.lead {
+  max-width: 620px;
+  margin: 12px 0 0;
+  font-size: 1rem;
 }
 
 .lead,
@@ -1287,12 +1294,6 @@ onBeforeUnmount(() => {
 .message-role,
 .portal-card span {
   color: var(--color-text-secondary);
-}
-
-.lead {
-  max-width: 620px;
-  margin: 16px 0 0;
-  font-size: 1.1rem;
 }
 
 .back-link,
@@ -1413,13 +1414,13 @@ onBeforeUnmount(() => {
 
 .category-card {
   flex: 0 0 auto;
-  width: 240px;
-  height: 120px;
+  width: 200px;
+  height: 100px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
-  padding: 24px;
+  padding: 18px 20px;
   background: rgba(255, 255, 255, 0.4);
   border: 2px solid rgba(255, 255, 255, 0.5); /* Thicker default border to avoid layout shift when selected */
   border-radius: var(--radius-xl);
@@ -1433,7 +1434,7 @@ onBeforeUnmount(() => {
 
 .category-card:hover {
   background: rgba(255, 255, 255, 0.8);
-  transform: translateY(-8px) scale(1.02);
+  transform: translateY(-4px) scale(1.02);
   box-shadow: 0 15px 30px rgba(44, 48, 46, 0.1);
   border-color: rgba(255, 255, 255, 0.8);
 }
@@ -1443,18 +1444,18 @@ onBeforeUnmount(() => {
   border-color: var(--color-accent-terracotta);
   color: var(--color-text-primary);
   box-shadow: 0 10px 25px rgba(200, 138, 117, 0.2);
-  transform: translateY(-4px) scale(1.01);
+  transform: translateY(-2px) scale(1.01);
 }
 
 .category-card strong {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
   font-family: var(--font-serif);
 }
 
 .category-card span {
-  font-size: 0.85rem;
-  margin-top: 8px;
+  font-size: 0.8rem;
+  margin-top: 6px;
   color: var(--color-text-secondary);
   opacity: 0.8;
   transition: all 0.3s;
@@ -1470,21 +1471,25 @@ onBeforeUnmount(() => {
 }
 
 .track-section {
-  margin-top: 30px;
+  margin-top: 10px;
   background: rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-xl);
-  padding: 24px;
+  padding: 16px 24px;
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
+.section-head h2 {
+  font-size: 1.4rem;
+}
+
 .track-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 16px;
   flex: 1;
 }
 

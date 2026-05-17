@@ -119,10 +119,10 @@
                   </span>
                 </div>
                 <p class="diary-text">{{ selectedDiary.content }}</p>
-                <button class="action-btn outline" @click="editDiary">编辑日记</button>
+                <p class="diary-hint">日记写入后不可修改。</p>
               </div>
               
-              <div v-else class="diary-edit">
+              <div v-else-if="isSelectedDateToday" class="diary-edit">
                 <div class="emotion-selector">
                   <span class="label">今日情绪：</span>
                   <div class="emotion-options">
@@ -144,6 +144,10 @@
                 ></textarea>
                 <button class="action-btn" @click="saveDiary">保存日记</button>
               </div>
+
+              <div v-else class="diary-empty-state">
+                <p class="diary-hint">只能编写今天的日记，历史日期仅支持查看。</p>
+              </div>
             </div>
           </div>
           
@@ -153,27 +157,6 @@
             <div class="chart-container" ref="diaryWeeklyChartRef"></div>
           </div>
           
-          <!-- Friend Action Modal -->
-          <div v-if="selectedFriend" class="modal-overlay" @click.self="selectedFriend = null">
-            <div class="modal-content glass-panel">
-              <div class="modal-header">
-                <h3>好友详情</h3>
-                <button class="close-btn" @click="selectedFriend = null">&times;</button>
-              </div>
-              <div class="modal-body friend-modal">
-                <div class="friend-modal-avatar"><font-awesome-icon icon="user" /></div>
-                <h4>{{ selectedFriend.name }}</h4>
-                <p class="friend-modal-id">ID: {{ selectedFriend.id }}</p>
-                <div class="friend-modal-intimacy">
-                  <span>亲密度等级：</span>
-                  <span v-for="n in 3" :key="n" class="petal large-petal" :class="{ active: n <= selectedFriend.intimacy }">🌸</span>
-                </div>
-                <div class="friend-modal-actions">
-                  <button class="action-btn danger-btn" @click="deleteFriend(selectedFriend.id)">删除好友</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Tab 2: 情绪数据 -->
@@ -371,8 +354,11 @@
                       </div>
                     </div>
                     <div class="track-action-row">
+                      <button class="icon-btn" @click="toggleUploadedTrackPreview(track)" :title="previewingUploadedTrackId === track.id ? '暂停试听' : '试听音乐'">
+                        {{ previewingUploadedTrackId === track.id ? '⏸' : '▶' }}
+                      </button>
                       <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
-                      <button class="icon-btn danger" @click="musicStore.removeUploadedTrack(track.id)" title="删除">🗑️</button>
+                      <button class="icon-btn danger" @click="deleteUploadedTrack(track.id)" title="删除">🗑️</button>
                     </div>
                   </article>
                   </div>
@@ -407,9 +393,6 @@
                     </div>
                     <div class="track-action-row">
                       <button class="icon-btn" @click="musicStore.toggleLike(track.id)" title="取消喜欢">💔</button>
-                      <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" :title="musicStore.collectedTrackIds.includes(track.id) ? '取消收藏' : '收藏'">
-                        <span :class="{ 'active-icon': musicStore.collectedTrackIds.includes(track.id) }">⭐</span>
-                      </button>
                       <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
                     </div>
                   </article>
@@ -445,9 +428,6 @@
                     </div>
                     <div class="track-action-row">
                       <button class="icon-btn" @click="musicStore.toggleCollect(track.id)" title="取消收藏">❌</button>
-                      <button class="icon-btn" @click="musicStore.toggleLike(track.id)" :title="musicStore.likedTrackIds.includes(track.id) ? '取消喜欢' : '喜欢'">
-                        <span :class="{ 'active-icon': musicStore.likedTrackIds.includes(track.id) }">❤️</span>
-                      </button>
                       <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
                     </div>
                   </article>
@@ -509,7 +489,10 @@
               <h3 class="section-title">朋友圈</h3>
               <p class="social-header-desc">像动态广场一样浏览好友近况，支持点赞、评论与带上“现在的情绪”发布帖子。</p>
             </div>
-            <button class="action-btn social-publish-btn" @click="openSocialComposer">发布</button>
+            <div class="social-header-actions">
+              <button class="action-btn social-secondary-btn" @click="openMyPostsSpace">我的帖子</button>
+              <button class="action-btn social-publish-btn" @click="openSocialComposer">发布</button>
+            </div>
           </div>
 
           <div class="social-layout">
@@ -517,7 +500,10 @@
               <article v-for="post in socialPosts" :key="post.id" class="social-post-card glass-panel-inner">
                 <div class="social-post-top">
                   <div class="social-author-block">
-                    <div class="social-avatar">{{ getNameInitial(post.authorName) }}</div>
+                    <div class="social-avatar">
+                      <img v-if="post.authorAvatarUrl" :src="post.authorAvatarUrl" alt="avatar" />
+                      <span v-else>{{ getNameInitial(post.authorName) }}</span>
+                    </div>
                     <div>
                       <div class="social-author-row">
                         <strong>{{ post.authorName }}</strong>
@@ -526,7 +512,27 @@
                       <span class="social-post-time">{{ post.timeLabel }}</span>
                     </div>
                   </div>
-                  <span class="social-mood-pill">现在的情绪 · {{ post.mood }}</span>
+                  <div class="social-post-top-actions">
+                    <span class="social-mood-pill">现在的情绪 · {{ post.mood }}</span>
+                    <div class="social-menu-wrap">
+                      <button class="social-menu-btn" @click="toggleSocialMenu(post)">...</button>
+                      <div v-if="post.isMenuOpen" class="social-menu-dropdown">
+                        <button class="social-menu-item" @click="handleSocialMenuLike(post)">
+                          {{ post.likedByMe ? '取消点赞' : '点赞' }}
+                        </button>
+                        <button class="social-menu-item" @click="openSocialCommentEditor(post)">
+                          评论
+                        </button>
+                        <button
+                          v-if="Number(post.authorUserId) === currentUserId"
+                          class="social-menu-item danger"
+                          @click="deleteSocialPost(post)"
+                        >
+                          删除帖子
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <p class="social-post-content">{{ post.content }}</p>
@@ -535,22 +541,47 @@
                   <span v-for="item in post.highlights" :key="item" class="social-highlight-chip"># {{ item }}</span>
                 </div>
 
-                <div class="social-post-actions">
-                  <button class="social-action-chip" :class="{ active: post.likedByMe }" @click="toggleSocialLike(post)">
-                    {{ post.likedByMe ? '已赞' : '点赞' }} · {{ post.likes }}
-                  </button>
-                  <span class="social-comment-total">{{ post.comments.length }} 条评论</span>
-                </div>
+                <div v-if="post.likeUsers.length || post.comments.length" class="social-feedback-card">
+                  <div v-if="post.likeUsers.length" class="social-like-line">
+                    <span class="social-like-icon">♡</span>
+                    <span>{{ formatSocialLikeNames(post.likeUsers) }}</span>
+                  </div>
 
-                <div class="social-comment-list">
-                  <div v-for="comment in post.comments" :key="comment.id" class="social-comment-item">
-                    <span class="social-comment-author">{{ comment.author }}：</span>
-                    <span class="social-comment-text">{{ comment.content }}</span>
-                    <span class="social-comment-time">{{ comment.timeLabel }}</span>
+                  <div class="social-comment-list">
+                    <div v-for="comment in post.comments" :key="comment.id" class="social-comment-item">
+                      <div class="social-comment-main">
+                        <span class="social-comment-author">{{ comment.author }}</span>
+                        <span v-if="comment.replyToName" class="social-comment-reply-target">回复 {{ comment.replyToName }}</span>
+                        <span class="social-comment-text">：{{ comment.content }}</span>
+                        <span class="social-comment-time">{{ comment.timeLabel }}</span>
+                      </div>
+                      <div v-if="comment.likeUsers.length" class="social-comment-like-line">
+                        <span class="social-like-icon">♡</span>
+                        <span>{{ formatSocialLikeNames(comment.likeUsers) }}</span>
+                      </div>
+                      <div class="social-comment-actions">
+                        <button class="social-comment-action-btn" @click="toggleCommentLike(post, comment)">
+                          {{ comment.likedByMe ? '取消点赞' : '点赞' }}
+                        </button>
+                        <button class="social-comment-action-btn" @click="openCommentReplyEditor(post, comment)">
+                          回复
+                        </button>
+                      </div>
+                      <div v-if="comment.isReplyEditorOpen" class="social-comment-reply-editor">
+                        <input
+                          v-model="comment.replyDraft"
+                          type="text"
+                          class="info-input"
+                          placeholder="回复这条评论..."
+                          @keyup.enter="submitCommentReply(post, comment)"
+                        />
+                        <button class="action-btn social-comment-btn" @click="submitCommentReply(post, comment)">发送</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div class="social-comment-editor">
+                <div v-if="post.isCommentEditorOpen" class="social-comment-editor">
                   <input
                     v-model="post.commentDraft"
                     type="text"
@@ -578,17 +609,30 @@
                   </div>
                   <div class="social-stat-item">
                     <strong>{{ socialSummary.commentCount }}</strong>
-                    <span>评论</span>
+                    <span>收到评论/回复</span>
                   </div>
                   <div class="social-stat-item">
                     <strong>{{ socialSummary.likeCount }}</strong>
-                    <span>点赞</span>
+                    <span>收到点赞</span>
                   </div>
                   <div class="social-stat-item">
                     <strong>{{ friendsList.length }}</strong>
                     <span>好友</span>
                   </div>
                 </div>
+              </div>
+
+              <div class="social-side-card">
+                <span class="social-side-kicker">Notifications</span>
+                <h4>今日互动提醒</h4>
+                <div v-if="socialNotifications.length" class="social-notification-list">
+                  <div v-for="item in socialNotifications" :key="item.id" class="social-notification-item">
+                    <strong>{{ item.actorName }}</strong>
+                    <span>{{ item.message }}</span>
+                    <em>{{ item.timeLabel }}</em>
+                  </div>
+                </div>
+                <p v-else>今天暂时还没有新的互动提醒。</p>
               </div>
 
               <div class="social-side-card muted">
@@ -608,27 +652,171 @@
           <div class="friends-header">
             <h3 class="section-title">我的好友</h3>
             <div class="add-friend-section">
-              <input type="text" v-model="newFriendId" placeholder="输入好友名字或ID搜索" class="search-input" />
-              <button class="action-btn" @click="addFriend">添加好友</button>
+              <input 
+                type="text" 
+                v-model="newFriendId" 
+                placeholder="输入用户名搜索" 
+                class="search-input"
+                @keyup.enter="searchUser"
+              />
+              <button class="action-btn" @click="searchUser" :disabled="isSearching">
+                {{ isSearching ? '搜索中...' : '搜索' }}
+              </button>
             </div>
           </div>
           
-          <div class="friends-list glass-panel-inner">
-            <div class="friend-item" v-for="friend in friendsList" :key="friend.id" @click="selectFriend(friend)">
-              <div class="friend-info">
-                <div class="friend-avatar"><font-awesome-icon icon="user" /></div>
-                <div class="friend-details">
-                  <span class="friend-name">{{ friend.name }}</span>
-                  <span class="friend-id">ID: {{ friend.id }}</span>
+          <div class="search-results-panel glass-panel-inner" v-if="searchResults.length > 0">
+            <h4 class="sub-section-title">搜索结果</h4>
+            <div class="search-results-list">
+              <div class="friend-item" v-for="user in searchResults" :key="user.userId">
+                <div class="friend-info">
+                  <div class="friend-avatar">
+                    <img v-if="user.avatarUrl" :src="user.avatarUrl" alt="avatar" />
+                    <font-awesome-icon v-else icon="user" />
+                  </div>
+                  <div class="friend-details">
+                    <span class="friend-name">{{ user.nickname || user.username }}</span>
+                    <span class="friend-id">{{ user.username ? `账号：${user.username}` : '账号信息暂不可用' }}</span>
+                  </div>
+                </div>
+                <button class="action-btn outline slim-btn" @click="addFriend(user.userId)">发送申请</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="friend-requests-panel glass-panel-inner" v-if="friendRequests.length > 0">
+            <h4 class="sub-section-title">好友申请</h4>
+            <div class="friend-requests-list">
+              <div class="friend-item" v-for="req in friendRequests" :key="req.id">
+                <div class="friend-info">
+                  <div class="friend-avatar">
+                    <img v-if="req.senderAvatarUrl" :src="req.senderAvatarUrl" alt="avatar" />
+                    <font-awesome-icon v-else icon="user" />
+                  </div>
+                  <div class="friend-details">
+                    <span class="friend-name">{{ req.senderName }}</span>
+                    <span class="friend-id">{{ req.senderUsername ? `账号：${req.senderUsername}` : '请求添加您为好友' }}</span>
+                  </div>
+                </div>
+                <div class="request-actions">
+                  <button class="action-btn slim-btn" @click="handleRequest(req.id, true)">同意</button>
+                  <button class="action-btn outline slim-btn" @click="handleRequest(req.id, false)">拒绝</button>
                 </div>
               </div>
-              <div class="friend-intimacy" :title="'亲密度: ' + friend.intimacy">
-                <span v-for="n in 3" :key="n" class="petal" :class="{ active: n <= friend.intimacy }">🌸</span>
+            </div>
+          </div>
+          
+          <div class="friends-dashboard" :class="{ 'detail-open': !!selectedFriend }">
+            <section class="friends-list-panel glass-panel-inner">
+              <div class="friends-list-panel-header">
+                <div>
+                  <h4 class="sub-section-title">好友列表</h4>
+                  <p class="friend-panel-hint">点击好友，在右侧查看基础信息和友情度成长。</p>
+                </div>
+                <span class="friend-count-badge">{{ friendsList.length }} 位好友</span>
               </div>
-            </div>
-            <div v-if="friendsList.length === 0" class="empty-state">
-              暂无好友，快去添加一些朋友吧！
-            </div>
+
+              <div class="friends-list">
+                <div
+                  class="friend-item"
+                  :class="{ active: selectedFriend?.id === friend.id }"
+                  v-for="friend in friendsList"
+                  :key="friend.id"
+                  @click="selectFriend(friend)"
+                >
+                  <div class="friend-info">
+                    <div class="friend-avatar">
+                      <img v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
+                      <font-awesome-icon v-else icon="user" />
+                    </div>
+                    <div class="friend-details">
+                      <span class="friend-name">{{ friend.name }}</span>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-desc">{{ friend.friendshipDescription }}</span>
+                    </div>
+                  </div>
+                  <div class="friend-item-side">
+                    <div class="friend-intimacy" :title="`友情度：${friend.friendshipScore}`">
+                      <span v-for="n in 3" :key="n" class="petal" :class="{ active: n <= friend.intimacy }">🌸</span>
+                    </div>
+                    <span class="friend-score-label">{{ friend.friendshipScore }} 分</span>
+                  </div>
+                </div>
+
+                <div v-if="friendsList.length === 0" class="empty-state">
+                  暂无好友，快去添加一些朋友吧！
+                </div>
+              </div>
+            </section>
+
+            <aside v-if="selectedFriend" class="friend-detail-panel glass-panel-inner">
+              <div class="friend-detail-card">
+                <div class="friend-detail-toolbar">
+                  <button class="friend-detail-close" @click="closeSelectedFriend">关闭</button>
+                </div>
+                <div class="friend-detail-top">
+                  <div class="friend-detail-avatar">
+                    <img v-if="selectedFriend.avatarUrl" :src="selectedFriend.avatarUrl" alt="avatar" />
+                    <font-awesome-icon v-else icon="user" />
+                  </div>
+                  <div class="friend-detail-main">
+                    <div class="friend-detail-heading">
+                      <div>
+                        <h4>{{ selectedFriend.name }}</h4>
+                        <p>{{ selectedFriend.username ? `账号：${selectedFriend.username}` : '账号信息暂不可用' }}</p>
+                      </div>
+                      <span class="friendship-badge">{{ selectedFriend.intimacy }}/3 朵花</span>
+                    </div>
+                    <p class="friend-bio">{{ selectedFriend.bio || '这个朋友还没有留下自我描述。' }}</p>
+                  </div>
+                </div>
+
+                <div class="friend-detail-stats">
+                  <div class="friend-stat-card">
+                    <span>友情度</span>
+                    <strong>{{ selectedFriend.friendshipScore }}</strong>
+                  </div>
+                  <div class="friend-stat-card">
+                    <span>已点亮花朵</span>
+                    <strong>{{ selectedFriend.intimacy }}/3</strong>
+                  </div>
+                  <div class="friend-stat-card">
+                    <span>状态</span>
+                    <strong>{{ selectedFriend.intimacy >= 3 ? '满级好友' : '持续升温中' }}</strong>
+                  </div>
+                </div>
+
+                <div class="friendship-progress-card">
+                  <div class="friendship-progress-header">
+                    <span>友情花朵</span>
+                    <span>{{ selectedFriend.friendshipScore }}/150</span>
+                  </div>
+                  <div class="friend-intimacy detail-intimacy">
+                    <span v-for="n in 3" :key="n" class="petal large-petal" :class="{ active: n <= selectedFriend.intimacy }">🌸</span>
+                  </div>
+                  <div class="friendship-progress-track">
+                    <div class="friendship-progress-bar" :style="{ width: `${selectedFriend.progressPercent}%` }"></div>
+                  </div>
+                  <p class="friendship-description">{{ selectedFriend.friendshipDescription }}</p>
+                  <p class="friendship-rule-tip">互动规则：点赞对方帖子 +3，评论对方帖子 +5。</p>
+                </div>
+
+                <div class="friend-basic-grid">
+                  <div class="friend-basic-item">
+                    <span>最近更新</span>
+                    <strong>{{ formatFriendDate(selectedFriend.updatedAt) }}</strong>
+                  </div>
+                  <div class="friend-basic-item">
+                    <span>下一目标</span>
+                    <strong>{{ selectedFriend.nextGoalText }}</strong>
+                  </div>
+                </div>
+
+                <div class="friend-detail-actions">
+                  <button class="action-btn danger-btn friend-delete-btn" @click="deleteFriend(selectedFriend.friendshipId)">删除好友</button>
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </main>
@@ -674,7 +862,9 @@
             </div>
             <div class="modal-actions">
               <button class="modal-btn secondary-btn" @click="closeMusicModal">取消</button>
-              <button class="modal-btn primary-btn" @click="submitUpload" :disabled="!uploadForm.file || !uploadForm.title">确认上传</button>
+              <button class="modal-btn primary-btn" @click="submitUpload" :disabled="!uploadForm.file || !uploadForm.title || isUploadingTrack">
+                {{ isUploadingTrack ? '上传中...' : '确认上传' }}
+              </button>
             </div>
           </div>
         </div>
@@ -742,24 +932,35 @@
       </div>
 
       <div v-if="showAddToPlaylistModal" class="modal-overlay" @click.self="showAddToPlaylistModal = false">
-        <div class="modal-content glass-panel">
+        <div class="modal-content glass-panel music-modal-card playlist-detail-modal-card">
           <div class="modal-header">
-            <h3>加入歌单</h3>
+            <div class="playlist-detail-modal-title">
+              <span class="playlist-focus-label">操作</span>
+              <h3>加入歌单</h3>
+            </div>
             <button class="close-btn" @click="showAddToPlaylistModal = false">&times;</button>
           </div>
           <div class="modal-body">
-            <div v-if="musicStore.customPlaylists.length === 0" class="empty-state">
+            <div v-if="musicStore.customPlaylists.length === 0" class="empty-state compact-empty-state">
               暂无歌单，请先创建歌单。
             </div>
-            <div v-else class="playlist-select-list">
-              <button
-                v-for="pl in musicStore.customPlaylists" 
-                :key="pl.id" 
-                class="modal-btn secondary-btn full-width-btn"
-                @click="confirmAddToPlaylist(pl.id)"
-              >
-                {{ pl.name }}
-              </button>
+            <div v-else class="playlist-track-scroll-area">
+              <div class="playlist-track-list">
+                <button
+                  v-for="pl in musicStore.customPlaylists" 
+                  :key="pl.id" 
+                  class="playlist-track-row add-to-pl-row"
+                  @click="confirmAddToPlaylist(pl.id)"
+                >
+                  <div class="playlist-track-main">
+                    <strong>{{ pl.name }}</strong>
+                    <span>{{ pl.description || '自建歌单' }}</span>
+                  </div>
+                  <div class="playlist-track-side">
+                    <span class="add-icon">➕</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -787,22 +988,96 @@
                 v-model="socialDraft.mood"
                 type="text"
                 class="info-input"
-                placeholder="例如：轻松、期待、平静"
+                placeholder="例如：轻松 平静，或使用逗号分隔多个情绪"
               />
             </div>
             <div class="social-draft-preview">
               <span class="social-preview-label">预览标签</span>
-              <span class="social-mood-pill">{{ socialDraft.mood.trim() || '未填写情绪' }}</span>
+              <div v-if="parsedSocialMoodTags.length" class="social-preview-tags">
+                <span
+                  v-for="tag in parsedSocialMoodTags"
+                  :key="tag"
+                  class="social-mood-pill"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+              <span v-else class="social-mood-pill">未填写情绪</span>
             </div>
             <div class="modal-actions">
               <button class="modal-btn secondary-btn" @click="closeSocialComposer">取消</button>
               <button
                 class="modal-btn primary-btn"
                 @click="submitSocialPost"
-                :disabled="!socialDraft.content.trim() || !socialDraft.mood.trim()"
+                :disabled="!socialDraft.content.trim() || parsedSocialMoodTags.length === 0"
               >
                 发布动态
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showMyPostsModal" class="modal-overlay" @click.self="closeMyPostsSpace">
+        <div class="modal-content glass-panel music-modal-card my-posts-modal-card">
+          <div class="modal-header">
+            <div class="playlist-detail-modal-title">
+              <span class="playlist-focus-label">MY POSTS</span>
+              <h3>我发布的帖子</h3>
+              <p>集中查看自己曾发布过的所有朋友圈动态。</p>
+            </div>
+            <button class="close-btn" @click="closeMyPostsSpace">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div v-if="isMyPostsLoading" class="empty-state compact-empty-state">
+              正在加载我的帖子...
+            </div>
+            <div v-else-if="mySocialPosts.length" class="my-posts-scroll-area">
+              <article v-for="post in mySocialPosts" :key="post.id" class="my-post-card">
+                <div class="my-post-card-top">
+                  <div class="my-post-card-head">
+                    <div class="my-post-card-meta">
+                      <span class="social-mood-pill">现在的情绪 · {{ post.mood }}</span>
+                      <span class="social-post-time">{{ post.timeLabel }}</span>
+                    </div>
+                    <strong>{{ post.authorName }}</strong>
+                  </div>
+                  <button
+                    class="modal-btn danger-btn my-post-delete-btn"
+                    @click="deleteSocialPost(post, { fromMyPosts: true })"
+                    :disabled="deletingPostId === post.id"
+                  >
+                    {{ deletingPostId === post.id ? '删除中...' : '删除帖子' }}
+                  </button>
+                </div>
+                <p class="social-post-content">{{ post.content }}</p>
+                <div v-if="post.highlights?.length" class="social-highlight-row">
+                  <span v-for="item in post.highlights" :key="`${post.id}-${item}`" class="social-highlight-chip"># {{ item }}</span>
+                </div>
+                <div v-if="post.likeUsers.length || post.comments.length" class="social-feedback-card my-post-feedback-card">
+                  <div v-if="post.likeUsers.length" class="social-like-line">
+                    <span class="social-like-icon">♡</span>
+                    <span>{{ formatSocialLikeNames(post.likeUsers) }}</span>
+                  </div>
+                  <div class="social-comment-list">
+                    <div v-for="comment in post.comments" :key="`my-${comment.id}`" class="social-comment-item">
+                      <div class="social-comment-main">
+                        <span class="social-comment-author">{{ comment.author }}</span>
+                        <span v-if="comment.replyToName" class="social-comment-reply-target">回复 {{ comment.replyToName }}</span>
+                        <span class="social-comment-text">：{{ comment.content }}</span>
+                        <span class="social-comment-time">{{ comment.timeLabel }}</span>
+                      </div>
+                      <div v-if="comment.likeUsers.length" class="social-comment-like-line">
+                        <span class="social-like-icon">♡</span>
+                        <span>{{ formatSocialLikeNames(comment.likeUsers) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+            <div v-else class="empty-state compact-empty-state">
+              你还没有发布过帖子，去朋友圈记录第一条动态吧！
             </div>
           </div>
         </div>
@@ -813,18 +1088,47 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { useMusicStore } from '@/stores/musicStore'
 import { ElMessage } from 'element-plus'
 import {
   getCurrentUserApi,
+  getUserSummariesApi,
   getCurrentUserFromStorage,
+  resolveUserAvatarUrl,
   saveCurrentUserToStorage,
+  uploadMyAvatarApi,
   updateMyProfileApi,
 } from '@/api/user'
 import { getMusicFileUrl, getMusicListApi } from '@/api/python'
 import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
+import { 
+  getMyMoodDiariesApi, 
+  createMoodDiaryApi, 
+  getPostsApi,
+  getMyPostsApi,
+  getPostInteractionsApi,
+  createPostApi,
+  deletePostApi,
+  likePostApi,
+  commentPostApi,
+  likeCommentApi,
+  replyCommentApi,
+  getMySocialNotificationsApi,
+  getMyFriendsApi,
+  sendFriendRequestApi,
+  getReceivedFriendRequestsApi,
+  handleFriendRequestApi,
+  searchUsersApi,
+  deleteFriendshipApi
+} from '@/api/social'
+
+import { getMyEmotionSnapshotsApi } from '@/api/data'
+
+import { appendUserBehaviorLogApi } from '@/api/data'
+
+import { getMyMeditationLogsApi, getMyGardenApi } from '@/api/meditation'
 
 const musicStore = useMusicStore()
 const realMusicFiles = ref([])
@@ -843,6 +1147,8 @@ const userProfile = ref({
 const isEditingProfile = ref(false)
 const isProfileSubmitting = ref(false)
 const avatarInputRef = ref(null)
+const pendingAvatarFile = ref(null)
+let avatarPreviewObjectUrl = ''
 
 const mapUserToProfile = (user) => ({
   id: user?.userId ?? '',
@@ -851,8 +1157,19 @@ const mapUserToProfile = (user) => ({
   email: user?.email?.trim() || '',
   phone: user?.phone?.trim() || '',
   description: user?.bio?.trim() || '',
-  avatar: user?.avatarUrl?.trim() || ''
+  avatar: resolveUserAvatarUrl(user?.avatarUrl)
 })
+
+const resetPendingAvatarUpload = () => {
+  pendingAvatarFile.value = null
+  if (avatarPreviewObjectUrl) {
+    URL.revokeObjectURL(avatarPreviewObjectUrl)
+    avatarPreviewObjectUrl = ''
+  }
+  if (avatarInputRef.value) {
+    avatarInputRef.value.value = ''
+  }
+}
 
 const loadCurrentUserProfile = async () => {
   const cachedUser = getCurrentUserFromStorage()
@@ -874,18 +1191,29 @@ const loadCurrentUserProfile = async () => {
 }
 
 const triggerAvatarUpload = () => {
-  avatarInputRef.value.click()
+  avatarInputRef.value?.click()
 }
 
 const handleAvatarUpload = (event) => {
   const file = event.target.files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      userProfile.value.avatar = e.target.result
-    }
-    reader.readAsDataURL(file)
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    ElMessage.error('请选择图片文件作为头像')
+    event.target.value = ''
+    return
   }
+
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('头像图片不能超过 5MB')
+    event.target.value = ''
+    return
+  }
+
+  resetPendingAvatarUpload()
+  pendingAvatarFile.value = file
+  avatarPreviewObjectUrl = URL.createObjectURL(file)
+  userProfile.value.avatar = avatarPreviewObjectUrl
 }
 
 const handleProfileAction = async () => {
@@ -896,15 +1224,26 @@ const handleProfileAction = async () => {
 
   isProfileSubmitting.value = true
   try {
+    let avatarUrl = userProfile.value.avatar || null
+
+    if (pendingAvatarFile.value) {
+      const formData = new FormData()
+      formData.append('file', pendingAvatarFile.value)
+      const uploadResponse = await uploadMyAvatarApi(formData)
+      avatarUrl = resolveUserAvatarUrl(uploadResponse.data?.avatarUrl)
+      userProfile.value.avatar = avatarUrl
+    }
+
     await updateMyProfileApi({
       nickname: userProfile.value.name.trim(),
       email: userProfile.value.email.trim() || null,
       phone: userProfile.value.phone.trim() || null,
-      avatarUrl: userProfile.value.avatar || null,
+      avatarUrl,
       bio: userProfile.value.description.trim() || null,
     })
 
     await loadCurrentUserProfile()
+    resetPendingAvatarUpload()
     isEditingProfile.value = false
     ElMessage.success('个人资料已更新')
   } catch (error) {
@@ -951,13 +1290,33 @@ const selectedDateStr = computed(() => {
   const d = currentDate.value
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
+const todayDateStr = computed(() => {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+})
+const isSelectedDateToday = computed(() => selectedDateStr.value === todayDateStr.value)
 
 // Mock Diaries
-const mockDiaries = ref({
-  '2026-04-01': { emotions: ['Happy', 'Calm'], content: '今天天气很好，出去散步了，心情很不错！' },
-  '2026-04-03': { emotions: ['Sad', 'Angry'], content: '工作遇到了一些挫折，感觉有点沮丧，还跟同事吵了一架。' },
-  '2026-04-05': { emotions: ['Calm'], content: '安静地看了一下午书，内心很平静。' }
-})
+const mockDiaries = ref({})
+
+const fetchDiaries = async () => {
+  try {
+    const res = await getMyMoodDiariesApi()
+    const diariesMap = {}
+    if (res.data && Array.isArray(res.data)) {
+      res.data.forEach(diary => {
+        diariesMap[diary.date] = {
+          id: diary.id,
+          emotions: diary.dominantEmotion ? diary.dominantEmotion.split(',') : [],
+          content: diary.context
+        }
+      })
+    }
+    mockDiaries.value = diariesMap
+  } catch (e) {
+    console.error('Failed to fetch diaries:', e)
+  }
+}
 
 const hasDiary = (dateStr) => !!mockDiaries.value[dateStr]
 const selectedDiary = computed(() => mockDiaries.value[selectedDateStr.value])
@@ -976,18 +1335,45 @@ const toggleEmotion = (emotion) => {
   }
 }
 
-const editDiary = () => {
-  if (selectedDiary.value) {
-    newDiary.value = { ...selectedDiary.value, emotions: [...selectedDiary.value.emotions] }
-    // Temporarily remove to show edit form
-    delete mockDiaries.value[selectedDateStr.value]
+const saveDiary = async () => {
+  if (!isSelectedDateToday.value) {
+    ElMessage.warning('只能编写今天的日记')
+    return
   }
-}
-
-const saveDiary = () => {
+  if (selectedDiary.value) {
+    ElMessage.warning('今日已写过日记，且不可修改')
+    return
+  }
   if (!newDiary.value.content.trim()) return
-  mockDiaries.value[selectedDateStr.value] = { ...newDiary.value, emotions: [...newDiary.value.emotions] }
-  newDiary.value = { emotions: ['Happy'], content: '' }
+  try {
+    const payload = {
+      date: selectedDateStr.value,
+      dominantEmotion: newDiary.value.emotions.join(','),
+      context: newDiary.value.content
+    }
+    const res = await createMoodDiaryApi(payload)
+    const targetId = res.data?.id || 0
+    ElMessage.success('日记保存成功')
+    await fetchDiaries()
+    initDiaryWeeklyChart()
+    newDiary.value = { emotions: ['Happy'], content: '' }
+    
+    appendUserBehaviorLogApi({
+      actionType: 'save_diary',
+      targetType: 'diary',
+      targetId: targetId,
+      metadata: { emotions: payload.dominantEmotion }
+    }).catch(e => console.warn('Log user behavior failed', e))
+    
+  } catch (e) {
+    if (e.response?.status === 403) {
+      ElMessage.error('只能编写今天的日记')
+    } else if (e.response?.status === 409) {
+      ElMessage.error('今日日记已存在，且不可修改')
+    } else {
+      ElMessage.error('保存失败')
+    }
+  }
 }
 
 // --- Tab 2: Data State & Charts ---
@@ -995,7 +1381,325 @@ const trendChartRef = ref(null)
 const distributionChartRef = ref(null)
 const heatmapChartRef = ref(null)
 
-const weeklyAverageScore = ref(1.2) // Mock average score
+const emotionSnapshots = ref([])
+const trendData = ref([0, 0, 0, 0, 0, 0, 0])
+const distributionData = ref([])
+const heatmapDataList = ref([])
+const isEmotionDataLoading = ref(false)
+
+const buildTrendChartOption = () => ({
+  tooltip: { trigger: 'axis' },
+  grid: { left: '5%', right: '10%', top: '10%', bottom: '10%', containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+    axisLine: { lineStyle: { color: '#666' } }
+  },
+  yAxis: {
+    type: 'value',
+    min: -20,
+    max: 20,
+    interval: 5,
+    position: 'right',
+    axisLabel: {
+      formatter: function(value) {
+        if (value === 20) return 'Extreme';
+        if (value === 15) return 'High';
+        if (value === 10) return 'Medium';
+        if (value === 5) return 'Low';
+        if (value === 0) return '';
+        if (value === -5) return 'Low';
+        if (value === -10) return 'Medium';
+        if (value === -15) return 'High';
+        if (value === -20) return 'Extreme';
+        return '';
+      },
+      color: function(value) {
+        if (value > 0) return '#228B22';
+        if (value < 0) return '#DC143C';
+        return '#999';
+      },
+      fontWeight: 'bold'
+    },
+    splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }
+  },
+  visualMap: {
+    show: false,
+    pieces: [
+      { gt: 15, lte: 20, color: '#006400' },
+      { gt: 10, lte: 15, color: '#228B22' },
+      { gt: 5, lte: 10, color: '#3CB371' },
+      { gt: 0, lte: 5, color: '#90EE90' },
+      { gt: -5, lte: 0, color: '#FFB6C1' },
+      { gt: -10, lte: -5, color: '#FF69B4' },
+      { gt: -15, lte: -10, color: '#DC143C' },
+      { gt: -20, lte: -15, color: '#8B0000' }
+    ],
+    outOfRange: { color: '#999' }
+  },
+  graphic: [
+    {
+      type: 'text',
+      left: 'center',
+      top: '25%',
+      style: {
+        text: 'POSITIVE',
+        fill: 'rgba(34, 139, 34, 0.1)',
+        font: 'bold 40px sans-serif'
+      }
+    },
+    {
+      type: 'text',
+      left: 'center',
+      top: '65%',
+      style: {
+        text: 'NEGATIVE',
+        fill: 'rgba(220, 20, 60, 0.1)',
+        font: 'bold 40px sans-serif'
+      }
+    }
+  ],
+  series: [{
+    data: trendData.value,
+    type: 'line',
+    smooth: true,
+    lineStyle: { width: 4 },
+    markLine: {
+      silent: true,
+      data: [{ yAxis: 0 }],
+      lineStyle: { color: '#ccc', width: 2 }
+    }
+  }]
+})
+
+const buildDistributionChartOption = () => ({
+  tooltip: { trigger: 'item' },
+  legend: { orient: 'vertical', left: 'left', textStyle: { color: '#666' } },
+  series: [{
+    type: 'pie',
+    radius: ['40%', '70%'],
+    avoidLabelOverlap: false,
+    itemStyle: {
+      borderRadius: 10,
+      borderColor: '#fff',
+      borderWidth: 2
+    },
+    label: { show: false, position: 'center' },
+    emphasis: {
+      label: { show: true, fontSize: 16, fontWeight: 'bold' }
+    },
+    labelLine: { show: false },
+    data: distributionData.value.length ? distributionData.value : [{ value: 1, name: '暂无数据', itemStyle: { color: '#ccc' } }]
+  }]
+})
+
+const buildHeatmapChartOption = () => {
+  const year = new Date().getFullYear()
+  const month = currentMonth.value
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const firstDay = new Date(year, month - 1, 1).getDay()
+  const firstDayIndex = firstDay === 0 ? 6 : firstDay - 1
+
+  const xData = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  const requiredWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7)
+  const yData = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6'].slice(0, requiredWeeks)
+
+  return {
+    tooltip: {
+      position: 'top',
+      formatter: function(params) {
+        return `${month}月${params.value[3]}日<br/>情绪评分: ${params.value[2]}`
+      }
+    },
+    grid: {
+      top: 40,
+      bottom: 20,
+      left: 60,
+      right: 20
+    },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      position: 'top',
+      splitArea: { show: true },
+      axisTick: { show: false },
+      axisLine: { show: false }
+    },
+    yAxis: {
+      type: 'category',
+      data: yData,
+      inverse: true,
+      splitArea: { show: true },
+      axisTick: { show: false },
+      axisLine: { show: false }
+    },
+    visualMap: {
+      min: -20,
+      max: 20,
+      show: false,
+      dimension: 2,
+      inRange: {
+        color: ['#8B0000', '#DC143C', '#FFB6C1', '#f5f5f5', '#90EE90', '#228B22', '#006400']
+      }
+    },
+    series: [{
+      type: 'heatmap',
+      data: heatmapDataList.value,
+      label: {
+        show: true,
+        formatter: function(params) {
+          return params.value[3]
+        },
+        color: '#333',
+        fontSize: 12,
+        fontWeight: 'bold'
+      },
+      itemStyle: {
+        borderWidth: 4,
+        borderColor: '#fff',
+        borderRadius: 4
+      },
+      emphasis: {
+        itemStyle: {
+          shadowBlur: 10,
+          shadowColor: 'rgba(0, 0, 0, 0.5)'
+        }
+      }
+    }]
+  }
+}
+
+const syncDataCharts = () => {
+  if (trendChart) {
+    trendChart.setOption(buildTrendChartOption(), true, true)
+  }
+  if (distributionChart) {
+    distributionChart.setOption(buildDistributionChartOption(), true, true)
+  }
+  if (heatmapChart) {
+    heatmapChart.setOption(buildHeatmapChartOption(), true, true)
+  }
+}
+
+const updateDataChartLoading = (loading) => {
+  const charts = [trendChart, distributionChart, heatmapChart].filter(Boolean)
+  charts.forEach((chart) => {
+    if (loading) {
+      chart.showLoading('default', {
+        text: '加载中...',
+        color: '#86aa8a',
+        textColor: '#6c7f78',
+        maskColor: 'rgba(255,255,255,0.45)'
+      })
+    } else {
+      chart.hideLoading()
+    }
+  })
+}
+
+const fetchEmotionData = async () => {
+  isEmotionDataLoading.value = true
+  updateDataChartLoading(true)
+  try {
+    const res = await getMyEmotionSnapshotsApi({ size: 100 })
+    if (res.data && Array.isArray(res.data)) {
+      emotionSnapshots.value = res.data
+      
+      const now = new Date()
+      const tData = [0, 0, 0, 0, 0, 0, 0]
+      const tCount = [0, 0, 0, 0, 0, 0, 0]
+      const distMap = {}
+      
+      res.data.forEach(snap => {
+        const snapDate = new Date(snap.createdAt)
+        const diffTime = Math.abs(now - snapDate)
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+        
+        // Trend
+        if (diffDays < 7) {
+          const index = 6 - diffDays
+          tData[index] += snap.score || 0
+          tCount[index] += 1
+        }
+        
+        // Distribution
+        const eName = snap.emotion
+        if (eName) {
+          distMap[eName] = (distMap[eName] || 0) + 1
+        }
+      })
+      
+      // Average trend
+      for (let i = 0; i < 7; i++) {
+        if (tCount[i] > 0) {
+          tData[i] = parseFloat((tData[i] / tCount[i]).toFixed(1))
+        }
+      }
+      trendData.value = tData
+      
+      // Calculate weekly average for the comment
+      let sum = 0, count = 0
+      tData.forEach(s => {
+        if (s !== 0 || tCount[tData.indexOf(s)] > 0) {
+          sum += s
+          count++
+        }
+      })
+      weeklyAverageScore.value = count > 0 ? parseFloat((sum / count).toFixed(1)) : 0
+      
+      // Distribution Data
+      distributionData.value = Object.keys(distMap).map(k => {
+        // Map backend emotion to frontend name if possible
+        const mappedName = emotionConfig[k] ? emotionConfig[k].name : k
+        const color = emotionConfig[k] ? emotionConfig[k].color : '#999'
+        return {
+          value: distMap[k],
+          name: mappedName,
+          itemStyle: { color }
+        }
+      })
+      
+      // Heatmap Data
+      const hData = []
+      const year = new Date().getFullYear();
+      const month = currentMonth.value; 
+      const firstDay = new Date(year, month - 1, 1).getDay();
+      const firstDayIndex = firstDay === 0 ? 6 : firstDay - 1;
+      
+      const snapMapByDay = {}
+      res.data.forEach(snap => {
+        const d = new Date(snap.createdAt)
+        if (d.getFullYear() === year && (d.getMonth() + 1) === month) {
+          const day = d.getDate()
+          if (!snapMapByDay[day]) snapMapByDay[day] = []
+          snapMapByDay[day].push(snap.score || 0)
+        }
+      })
+      
+      const daysInMonth = new Date(year, month, 0).getDate();
+      for(let i=1; i<=daysInMonth; i++) {
+        const currentPos = firstDayIndex + (i - 1);
+        const x = currentPos % 7;
+        const y = Math.floor(currentPos / 7);
+        
+        let score = 0
+        if (snapMapByDay[i]) {
+          score = snapMapByDay[i].reduce((a,b) => a+b, 0) / snapMapByDay[i].length
+        }
+        hData.push([x, y, Math.round(score), i]); 
+      }
+      heatmapDataList.value = hData
+      syncDataCharts()
+    }
+  } catch (e) {
+    console.error('Failed to fetch emotion data:', e)
+  } finally {
+    isEmotionDataLoading.value = false
+    updateDataChartLoading(false)
+  }
+}
+
+const weeklyAverageScore = ref(0)
 const weeklyComment = computed(() => {
   const score = weeklyAverageScore.value
   if (score > 10) return '本周你的情绪非常积极，继续保持这份好心情！'
@@ -1005,11 +1709,102 @@ const weeklyComment = computed(() => {
 })
 
 // --- Meditation Data Logic ---
-const weeklyMeditationData = [15, 30, 0, 45, 20, 60, 10]
+const weeklyMeditationData = ref([0, 0, 0, 0, 0, 0, 0])
+const meditationLogs = ref([])
+const MEDITATION_DAY_TARGET_MINUTES = 20
+
+const formatLocalDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const toLocalDateStart = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+const getWeekDatesMondayStart = (baseDate = new Date()) => {
+  const centerDate = new Date(baseDate)
+  centerDate.setHours(0, 0, 0, 0)
+
+  const startDate = new Date(centerDate)
+  const dayOfWeek = startDate.getDay()
+  const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  startDate.setDate(startDate.getDate() + offset)
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(startDate)
+    date.setDate(startDate.getDate() + index)
+    return date
+  })
+}
+
+const buildMeditationDurationMap = (logs = []) => {
+  const durationMap = {}
+  logs.forEach((log) => {
+    const logDate = toLocalDateStart(log.startTime)
+    if (!logDate) return
+    const dateKey = formatLocalDateKey(logDate)
+    durationMap[dateKey] = (durationMap[dateKey] || 0) + (Number(log.duration) || 0)
+  })
+  return durationMap
+}
+
+const fetchMeditationLogs = async () => {
+  try {
+    const res = await getMyMeditationLogsApi()
+    if (res.data && Array.isArray(res.data)) {
+      meditationLogs.value = res.data
+      const durationMap = buildMeditationDurationMap(res.data)
+      const currentWeekDates = getWeekDatesMondayStart(new Date())
+      const data = currentWeekDates.map((date) => {
+        const dateKey = formatLocalDateKey(date)
+        return durationMap[dateKey] || 0
+      })
+      weeklyMeditationData.value = data
+    } else {
+      meditationLogs.value = []
+      weeklyMeditationData.value = [0, 0, 0, 0, 0, 0, 0]
+    }
+  } catch (e) {
+    console.error('Failed to fetch meditation logs:', e)
+    meditationLogs.value = []
+    weeklyMeditationData.value = [0, 0, 0, 0, 0, 0, 0]
+  }
+}
+
 const weeklyAverageMeditation = computed(() => {
-  const sum = weeklyMeditationData.reduce((a, b) => a + b, 0)
-  return (sum / weeklyMeditationData.length).toFixed(1)
+  const sum = weeklyMeditationData.value.reduce((a, b) => a + b, 0)
+  return (sum / weeklyMeditationData.value.length).toFixed(1)
 })
+
+const getMeditationYAxisConfig = () => {
+  const maxDuration = Math.max(...weeklyMeditationData.value, 0)
+  const suggestedMax = Math.max(maxDuration, MEDITATION_DAY_TARGET_MINUTES)
+
+  if (suggestedMax <= 10) {
+    return { max: 10, interval: 2 }
+  }
+  if (suggestedMax <= 30) {
+    return { max: Math.ceil(suggestedMax / 5) * 5, interval: 5 }
+  }
+  if (suggestedMax <= 60) {
+    return { max: Math.ceil(suggestedMax / 10) * 10, interval: 10 }
+  }
+
+  const interval = suggestedMax <= 120 ? 15 : 30
+  return {
+    max: Math.ceil(suggestedMax / interval) * interval,
+    interval,
+  }
+}
+
 const meditationComment = computed(() => {
   const avg = parseFloat(weeklyAverageMeditation.value)
   if (avg >= 30) return "太棒了！你保持了极佳的冥想习惯，内心一定非常平静吧。"
@@ -1024,6 +1819,30 @@ let diaryWeeklyChart = null
 
 const diaryWeeklyChartRef = ref(null)
 
+const getWeekDatesForCalendar = (baseDate) => {
+  const dates = []
+  const centerDate = new Date(baseDate)
+  centerDate.setHours(0, 0, 0, 0)
+
+  const startDate = new Date(centerDate)
+  startDate.setDate(centerDate.getDate() - centerDate.getDay())
+
+  for (let offset = 0; offset < 7; offset++) {
+    const date = new Date(startDate)
+    date.setDate(startDate.getDate() + offset)
+    dates.push(date)
+  }
+
+  return dates
+}
+
+const parseDiaryEmotions = (diary) => {
+  if (!diary?.emotions || !Array.isArray(diary.emotions)) {
+    return []
+  }
+  return diary.emotions.filter((emotion) => emotionConfig[emotion])
+}
+
 const initDiaryWeeklyChart = () => {
   if (currentTab.value !== 'diary') return
   nextTick(() => {
@@ -1031,22 +1850,34 @@ const initDiaryWeeklyChart = () => {
       if (diaryWeeklyChart) diaryWeeklyChart.dispose()
       diaryWeeklyChart = echarts.init(diaryWeeklyChartRef.value)
       
-      const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+      const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
       const emotionKeys = ['Angry', 'Calm', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
-      
-      // Generate mock data for the diary chart
-      // Format: [x_index, y_index]
-      const chartData = [
-        [0, 4], [0, 1], // 周一: Happy, Calm
-        [1, 5],         // 周二: Neutral
-        [2, 6], [2, 7], // 周三: Sad, Surprise
-        [3, 4],         // 周四: Happy
-        [4, 0], [4, 2], // 周五: Angry, Disgust
-        [5, 4], [5, 1], // 周六: Happy, Calm
-        [6, 1]          // 周日: Calm
-      ]
+      const currentWeekDates = getWeekDatesForCalendar(currentDate.value)
+      const chartData = []
+
+      currentWeekDates.forEach((date, index) => {
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        const diary = mockDiaries.value[dateStr]
+        const emotions = parseDiaryEmotions(diary)
+
+        emotions.forEach((emotion) => {
+          const emotionIndex = emotionKeys.indexOf(emotion)
+          if (emotionIndex !== -1) {
+            chartData.push([index, emotionIndex])
+          }
+        })
+      })
       
       diaryWeeklyChart.setOption({
+        tooltip: {
+          formatter: function (params) {
+            const xIndex = params.value[0]
+            const emotionKey = emotionKeys[params.value[1]]
+            const date = currentWeekDates[xIndex]
+            const dateLabel = `${date.getMonth() + 1}月${date.getDate()}日`
+            return `${days[xIndex]} ${dateLabel}<br/>${emotionConfig[emotionKey].name}`
+          }
+        },
         grid: { left: '10%', right: '5%', top: '10%', bottom: '15%' },
         xAxis: {
           type: 'category',
@@ -1087,7 +1918,17 @@ const initDiaryWeeklyChart = () => {
             borderRadius: 5
           },
           data: chartData
-        }]
+        }],
+        graphic: chartData.length === 0 ? [{
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '本周暂无情绪日记数据',
+            fill: '#999',
+            font: '14px sans-serif'
+          }
+        }] : []
       })
     }
   })
@@ -1099,232 +1940,86 @@ const initCharts = () => {
   nextTick(() => {
     // 1. Trend Chart
     if (trendChartRef.value) {
-      trendChart = echarts.init(trendChartRef.value)
-      trendChart.setOption({
-        tooltip: { trigger: 'axis' },
-        grid: { left: '5%', right: '10%', top: '10%', bottom: '10%', containLabel: true },
-        xAxis: { 
-          type: 'category', 
-          data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-          axisLine: { lineStyle: { color: '#666' } }
-        },
-        yAxis: { 
-          type: 'value', 
-          min: -20, 
-          max: 20,
-          interval: 5,
-          position: 'right',
-          axisLabel: { 
-            formatter: function(value) {
-              if (value === 20) return 'Extreme';
-              if (value === 15) return 'High';
-              if (value === 10) return 'Medium';
-              if (value === 5) return 'Low';
-              if (value === 0) return '';
-              if (value === -5) return 'Low';
-              if (value === -10) return 'Medium';
-              if (value === -15) return 'High';
-              if (value === -20) return 'Extreme';
-              return '';
-            },
-            color: function(value) {
-              if (value > 0) return '#228B22';
-              if (value < 0) return '#DC143C';
-              return '#999';
-            },
-            fontWeight: 'bold'
-          },
-          splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }
-        },
-        visualMap: {
-          show: false,
-          pieces: [
-            { gt: 15, lte: 20, color: '#006400' }, 
-            { gt: 10, lte: 15, color: '#228B22' }, 
-            { gt: 5, lte: 10, color: '#3CB371' },  
-            { gt: 0, lte: 5, color: '#90EE90' },   
-            { gt: -5, lte: 0, color: '#FFB6C1' },  
-            { gt: -10, lte: -5, color: '#FF69B4' }, 
-            { gt: -15, lte: -10, color: '#DC143C' },
-            { gt: -20, lte: -15, color: '#8B0000' } 
-          ],
-          outOfRange: { color: '#999' }
-        },
-        graphic: [
-          {
-            type: 'text',
-            left: 'center',
-            top: '25%',
-            style: {
-              text: 'POSITIVE',
-              fill: 'rgba(34, 139, 34, 0.1)',
-              font: 'bold 40px sans-serif'
-            }
-          },
-          {
-            type: 'text',
-            left: 'center',
-            top: '65%',
-            style: {
-              text: 'NEGATIVE',
-              fill: 'rgba(220, 20, 60, 0.1)',
-              font: 'bold 40px sans-serif'
-            }
-          }
-        ],
-        series: [{
-          data: [2, 12, 18, -4, -17, -9, 3], // Mock scores from -20 to 20
-          type: 'line',
-          smooth: true,
-          lineStyle: { width: 4 },
-          markLine: {
-            silent: true,
-            data: [{ yAxis: 0 }],
-            lineStyle: { color: '#ccc', width: 2 }
-          }
-        }]
-      })
+      if (!trendChart) {
+        trendChart = echarts.init(trendChartRef.value)
+      }
     }
 
     // 2. Distribution Chart
     if (distributionChartRef.value) {
-      distributionChart = echarts.init(distributionChartRef.value)
-      distributionChart.setOption({
-        tooltip: { trigger: 'item' },
-        legend: { orient: 'vertical', left: 'left', textStyle: { color: '#666' } },
-        series: [{
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: { show: false, position: 'center' },
-          emphasis: {
-            label: { show: true, fontSize: 16, fontWeight: 'bold' }
-          },
-          labelLine: { show: false },
-          data: [
-            { value: 3, name: '高兴', itemStyle: { color: emotionConfig.Happy.color } },
-            { value: 2, name: '平静', itemStyle: { color: emotionConfig.Calm.color } },
-            { value: 1, name: '中性', itemStyle: { color: emotionConfig.Neutral.color } },
-            { value: 1, name: '悲伤', itemStyle: { color: emotionConfig.Sad.color } }
-          ]
-        }]
-      })
+      if (!distributionChart) {
+        distributionChart = echarts.init(distributionChartRef.value)
+      }
     }
 
     // 3. Heatmap Chart
     if (heatmapChartRef.value) {
-      heatmapChart = echarts.init(heatmapChartRef.value)
-      
-      const year = new Date().getFullYear();
-      const month = currentMonth.value; // Use the current month
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const firstDay = new Date(year, month - 1, 1).getDay();
-      const firstDayIndex = firstDay === 0 ? 6 : firstDay - 1; // Convert to Mon=0, Sun=6
-
-      const xData = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      const requiredWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7);
-      const yData = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6'].slice(0, requiredWeeks);
-      
-      const heatData = [];
-      for(let i=1; i<=daysInMonth; i++) {
-        const currentPos = firstDayIndex + (i - 1);
-        const x = currentPos % 7;
-        const y = Math.floor(currentPos / 7);
-        const score = Math.floor(Math.random() * 41) - 20;
-        heatData.push([x, y, score, i]); // Store day number instead of month+day
+      if (!heatmapChart) {
+        heatmapChart = echarts.init(heatmapChartRef.value)
       }
+    }
 
-      heatmapChart.setOption({
-        tooltip: { 
-          position: 'top',
-          formatter: function(params) {
-            return `${month}月${params.value[3]}日<br/>情绪评分: ${params.value[2]}`;
-          }
-        },
-        grid: {
-          top: 40,
-          bottom: 20,
-          left: 60,
-          right: 20
-        },
-        xAxis: {
-          type: 'category',
-          data: xData,
-          position: 'top',
-          splitArea: { show: true },
-          axisTick: { show: false },
-          axisLine: { show: false }
-        },
-        yAxis: {
-          type: 'category',
-          data: yData,
-          inverse: true,
-          splitArea: { show: true },
-          axisTick: { show: false },
-          axisLine: { show: false }
-        },
-        visualMap: {
-          min: -20,
-          max: 20,
-          show: false,
-          dimension: 2, // This fixes the color missing issue (mapping color to score instead of the text label)
-          inRange: {
-            color: ['#8B0000', '#DC143C', '#FFB6C1', '#f5f5f5', '#90EE90', '#228B22', '#006400'] 
-          }
-        },
-        series: [{
-          type: 'heatmap',
-          data: heatData,
-          label: {
-            show: true,
-            formatter: function(params) {
-              return params.value[3]; // Display day number only
-            },
-            color: '#333',
-            fontSize: 12,
-            fontWeight: 'bold'
-          },
-          itemStyle: {
-            borderWidth: 4,
-            borderColor: '#fff',
-            borderRadius: 4
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          }
-        }]
-      })
+    syncDataCharts()
+    if (isEmotionDataLoading.value) {
+      updateDataChartLoading(true)
     }
   })
 }
 
 watch(currentTab, (newTab) => {
+  if (newTab !== 'friends') {
+    selectedFriend.value = null
+  }
   if (newTab === 'diary') {
-    initDiaryWeeklyChart()
+    fetchDiaries().then(() => {
+      initDiaryWeeklyChart()
+    })
   } else if (newTab === 'data') {
     initCharts()
+    fetchEmotionData()
   } else if (newTab === 'meditation') {
-    initMeditationCharts()
+    fetchMeditationLogs().then(() => {
+      initMeditationCharts()
+    })
+    fetchGardenData()
+  } else if (newTab === 'social') {
+    fetchSocialPosts()
+    fetchSocialNotifications()
+  } else if (newTab === 'friends') {
+    fetchFriends()
+    fetchFriendRequests()
+  }
+})
+
+watch(currentDate, () => {
+  if (currentTab.value === 'diary') {
+    initDiaryWeeklyChart()
   }
 })
 
 onMounted(() => {
   loadCurrentUserProfile()
-  loadRealMusicFiles()
+  loadRealMusicFiles().then(() => {
+    musicStore.fetchUserData()
+  })
   if (currentTab.value === 'diary') {
-    initDiaryWeeklyChart()
+    fetchDiaries().then(() => {
+      initDiaryWeeklyChart()
+    })
   } else if (currentTab.value === 'data') {
     initCharts()
+    fetchEmotionData()
   } else if (currentTab.value === 'meditation') {
-    initMeditationCharts()
+    fetchMeditationLogs().then(() => {
+      initMeditationCharts()
+    })
+    fetchGardenData()
+  } else if (currentTab.value === 'social') {
+    fetchSocialPosts()
+    fetchSocialNotifications()
+  } else if (currentTab.value === 'friends') {
+    fetchFriends()
+    fetchFriendRequests()
   }
 })
 
@@ -1332,12 +2027,15 @@ onMounted(() => {
 const activeMusicModal = ref('')
 const showAddToPlaylistModal = ref(false)
 const showPlaylistDetailModal = ref(false)
+const isUploadingTrack = ref(false)
+const previewingUploadedTrackId = ref('')
 const newPlaylistName = ref('')
 const newPlaylistDescription = ref('')
 const trackToAdd = ref(null)
 const activePlaylist = ref(null)
 const audioInputRef = ref(null)
 const playlistCarouselRef = ref(null)
+const uploadedPreviewAudio = typeof Audio === 'undefined' ? null : new Audio()
 
 const uploadForm = ref({
   file: null,
@@ -1368,7 +2066,12 @@ const collectedTracksList = computed(() => {
   }).filter(Boolean)
 })
 
-const playlistModalTracks = computed(() => activePlaylist.value?.tracks ?? [])
+const playlistModalTracks = computed(() => {
+  const ids = activePlaylist.value?.trackIds || []
+  return ids.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+  }).filter(Boolean)
+})
 
 const getTrackTags = (track) => {
   if (track.tags?.length) return track.tags.slice(0, 2)
@@ -1387,9 +2090,13 @@ const formatDuration = (seconds) => {
 }
 
 const formatPlaylistMeta = (playlist) => {
-  const totalSeconds = playlist.tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
+  const ids = playlist?.trackIds || []
+  const tracks = ids.map(id => {
+    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+  }).filter(Boolean)
+  const totalSeconds = tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
   const totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
-  return `${playlist.tracks.length} 首 · ${totalMinutes} 分钟`
+  return `${tracks.length} 首 · ${totalMinutes} 分钟`
 }
 
 const loadRealMusicFiles = async () => {
@@ -1424,6 +2131,38 @@ const handleAudioSelect = (event) => {
 
 const triggerAudioSelect = () => {
   audioInputRef.value?.click()
+}
+
+const stopUploadedTrackPreview = () => {
+  if (!uploadedPreviewAudio) return
+  uploadedPreviewAudio.pause()
+  uploadedPreviewAudio.currentTime = 0
+  previewingUploadedTrackId.value = ''
+}
+
+const toggleUploadedTrackPreview = async (track) => {
+  if (!uploadedPreviewAudio || !track?.filename) {
+    ElMessage.warning('当前音乐暂不支持试听')
+    return
+  }
+
+  if (previewingUploadedTrackId.value === track.id && !uploadedPreviewAudio.paused) {
+    uploadedPreviewAudio.pause()
+    previewingUploadedTrackId.value = ''
+    return
+  }
+
+  try {
+    uploadedPreviewAudio.pause()
+    uploadedPreviewAudio.src = getMusicFileUrl(track.filename)
+    uploadedPreviewAudio.currentTime = 0
+    await uploadedPreviewAudio.play()
+    previewingUploadedTrackId.value = track.id
+  } catch (error) {
+    previewingUploadedTrackId.value = ''
+    ElMessage.error('试听失败，请确认音乐服务已启动')
+    console.error('Preview uploaded track failed:', error)
+  }
 }
 
 const openUploadModal = () => {
@@ -1480,23 +2219,57 @@ const autoDetectTags = () => {
   }, 1000)
 }
 
-const submitUpload = () => {
+const submitUpload = async () => {
   if (!uploadForm.value.file || !uploadForm.value.title) return
   
-  const newTrack = {
-    id: 'upload_' + Date.now(),
-    title: uploadForm.value.title.trim(),
-    artist: uploadForm.value.artist.trim(),
-    duration: uploadForm.value.duration || 180,
-    tags: [...uploadForm.value.tags],
-    cover: getRealMusicCover(uploadForm.value.tags[0] || 'neutral'),
-    file: uploadForm.value.file
+  try {
+    isUploadingTrack.value = true
+    await musicStore.uploadTrack({
+      file: uploadForm.value.file,
+      title: uploadForm.value.title.trim(),
+      artist: uploadForm.value.artist.trim(),
+      duration: uploadForm.value.duration || 0,
+      tags: [...uploadForm.value.tags],
+    })
+    closeMusicModal()
+    ElMessage.success('音乐上传成功')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.error || '音乐上传失败')
+  } finally {
+    isUploadingTrack.value = false
   }
-  
-  musicStore.addUploadedTrack(newTrack)
-  closeMusicModal()
-  ElMessage.success('音乐上传成功')
 }
+
+const deleteUploadedTrack = async (trackId) => {
+  if (!trackId || !window.confirm('确认删除这首已上传的音乐吗？')) {
+    return
+  }
+
+  try {
+    if (previewingUploadedTrackId.value === trackId) {
+      stopUploadedTrackPreview()
+    }
+    await musicStore.removeUploadedTrack(trackId)
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.error || '删除上传音乐失败')
+  }
+}
+
+if (uploadedPreviewAudio) {
+  uploadedPreviewAudio.onended = () => {
+    previewingUploadedTrackId.value = ''
+  }
+
+  uploadedPreviewAudio.onpause = () => {
+    if (uploadedPreviewAudio.ended) return
+    previewingUploadedTrackId.value = ''
+  }
+}
+
+onBeforeUnmount(() => {
+  resetPendingAvatarUpload()
+  stopUploadedTrackPreview()
+})
 
 const submitCreatePlaylist = () => {
   if (!newPlaylistName.value) return
@@ -1575,74 +2348,330 @@ watch(
 // --- Tab 5: Social State ---
 const socialMoodSuggestions = ['轻松', '期待', '平静', '治愈']
 
+const parseSocialMoodTags = (value) => {
+  if (!value || typeof value !== 'string') return []
+  return [...new Set(
+    value
+      .split(/[,，、\s]+/)
+      .map(tag => tag.trim())
+      .filter(Boolean)
+  )]
+}
+
 const createSocialPost = (post) => ({
   ...post,
+  likeUsers: Array.isArray(post.likeUsers) ? post.likeUsers.map(user => ({ ...user })) : [],
   highlights: Array.isArray(post.highlights) ? [...post.highlights] : [],
-  comments: Array.isArray(post.comments) ? post.comments.map(comment => ({ ...comment })) : [],
-  commentDraft: ''
+  comments: Array.isArray(post.comments)
+    ? post.comments.map(comment => ({
+        ...comment,
+        likeUsers: Array.isArray(comment.likeUsers) ? comment.likeUsers.map(user => ({ ...user })) : [],
+        replyDraft: comment.replyDraft || '',
+        isReplyEditorOpen: Boolean(comment.isReplyEditorOpen),
+      }))
+    : [],
+  commentDraft: '',
+  isMenuOpen: false,
+  isCommentEditorOpen: false
 })
 
 const showSocialComposer = ref(false)
+const showMyPostsModal = ref(false)
 const socialDraft = ref({
   content: '',
   mood: ''
 })
-const socialPosts = ref([
-  createSocialPost({
-    id: 'post_1',
-    authorName: '小明',
-    authorRole: '好友',
-    timeLabel: '10 分钟前',
-    mood: '轻松',
-    content: '今天下课后沿着操场走了一圈，风很舒服，感觉整个人都慢下来了一点。',
-    highlights: ['散步', '晚风'],
-    likes: 18,
-    likedByMe: false,
-    comments: [
-      { id: 'comment_1', author: 'Alice', content: '听起来很治愈，我也想去走走。', timeLabel: '8 分钟前' },
-      { id: 'comment_2', author: '我', content: '这种慢下来的时刻真的很难得。', timeLabel: '5 分钟前' }
-    ]
-  }),
-  createSocialPost({
-    id: 'post_2',
-    authorName: 'Alice',
-    authorRole: '好友',
-    timeLabel: '32 分钟前',
-    mood: '期待',
-    content: '把这周的任务清单整理完了，晚上准备听点歌，给明天留一点盼头。',
-    highlights: ['计划感', '夜晚歌单'],
-    likes: 25,
-    likedByMe: true,
-    comments: [
-      { id: 'comment_3', author: '李华', content: '完成清单的成就感最适合配音乐。', timeLabel: '20 分钟前' }
-    ]
-  }),
-  createSocialPost({
-    id: 'post_3',
-    authorName: '李华',
-    authorRole: '好友',
-    timeLabel: '1 小时前',
-    mood: '平静',
-    content: '午后在图书馆坐了很久，什么都没急着做，只是把手头的内容一点点收完。',
-    highlights: ['图书馆', '专注'],
-    likes: 12,
-    likedByMe: false,
-    comments: [
-      { id: 'comment_4', author: '小明', content: '这种节奏感很舒服。', timeLabel: '56 分钟前' }
-    ]
+const parsedSocialMoodTags = computed(() => parseSocialMoodTags(socialDraft.value.mood))
+const socialPosts = ref([])
+const mySocialPosts = ref([])
+const isMyPostsLoading = ref(false)
+const deletingPostId = ref(null)
+const socialUserMap = ref({})
+const socialNotifications = ref([])
+
+const currentUserId = computed(() => {
+  const id = Number(userProfile.value.id)
+  return Number.isFinite(id) && id > 0 ? id : null
+})
+
+const ensureSocialUserSummaries = async (userIds = []) => {
+  const ids = [...new Set(userIds.map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0))]
+  if (currentUserId.value) {
+    socialUserMap.value[currentUserId.value] = {
+      userId: currentUserId.value,
+      nickname: userProfile.value.name,
+      username: userProfile.value.username,
+      avatarUrl: userProfile.value.avatar,
+    }
+  }
+  const missingIds = ids.filter(id => !socialUserMap.value[id])
+  if (!missingIds.length) return
+
+  try {
+    const res = await getUserSummariesApi(missingIds)
+    const nextMap = { ...socialUserMap.value }
+    ;(res.data || []).forEach((user) => {
+      nextMap[user.userId] = {
+        ...user,
+        avatarUrl: resolveUserAvatarUrl(user?.avatarUrl),
+      }
+    })
+    socialUserMap.value = nextMap
+  } catch (e) {
+    console.warn('获取社交用户摘要失败:', e)
+  }
+}
+
+const getSocialUserSummary = (userId) => {
+  const numericId = Number(userId)
+  if (!Number.isFinite(numericId) || numericId <= 0) return null
+  if (currentUserId.value === numericId) {
+    return {
+      userId: numericId,
+      nickname: userProfile.value.name,
+      username: userProfile.value.username,
+      avatarUrl: userProfile.value.avatar,
+    }
+  }
+  return socialUserMap.value[numericId] || friendUserMap.value[numericId] || null
+}
+
+const getSocialDisplayName = (userId) => {
+  const user = getSocialUserSummary(userId)
+  if (!userId) return '匿名'
+  return user?.nickname || user?.username || `用户 ${userId}`
+}
+
+const getSocialAvatar = (userId) => getSocialUserSummary(userId)?.avatarUrl || ''
+
+const formatSocialTime = (value) => {
+  if (!value) return '未知时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未知时间'
+
+  const diffMs = Date.now() - date.getTime()
+  if (diffMs < 0) {
+    return date.toLocaleString()
+  }
+  if (diffMs < 60 * 1000) return '刚刚'
+  if (diffMs < 60 * 60 * 1000) return `${Math.floor(diffMs / (60 * 1000))} 分钟前`
+  if (diffMs < 24 * 60 * 60 * 1000) return `${Math.floor(diffMs / (60 * 60 * 1000))} 小时前`
+  if (diffMs < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(diffMs / (24 * 60 * 60 * 1000))} 天前`
+  return date.toLocaleString()
+}
+
+const formatSocialLikeNames = (likeUsers = []) => {
+  const names = [...new Set(likeUsers.map(user => user.name).filter(Boolean))]
+  return names.join('、')
+}
+
+const startOfToday = computed(() => {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+})
+
+const endOfToday = computed(() => {
+  const date = new Date(startOfToday.value)
+  date.setDate(date.getDate() + 1)
+  return date
+})
+
+const isWithinToday = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  return date >= startOfToday.value && date < endOfToday.value
+}
+
+const formatNotificationMessage = (item) => {
+  switch (item.type) {
+    case 'POST_LIKE':
+      return '点赞了你的帖子'
+    case 'POST_COMMENT':
+      return `评论了你的帖子：${item.content || ''}`.trim()
+    case 'COMMENT_LIKE':
+      return '点赞了你的评论'
+    case 'COMMENT_REPLY':
+      return `回复了你的评论：${item.content || ''}`.trim()
+    default:
+      return item.content || '有新的互动'
+  }
+}
+
+const toggleSocialMenu = (targetPost) => {
+  socialPosts.value.forEach((post) => {
+    post.isMenuOpen = post.id === targetPost.id ? !post.isMenuOpen : false
   })
-])
+}
+
+const openSocialCommentEditor = (targetPost) => {
+  socialPosts.value.forEach((post) => {
+    post.isMenuOpen = false
+    if (post.id === targetPost.id) {
+      post.isCommentEditorOpen = true
+    }
+  })
+}
+
+const openCommentReplyEditor = (post, targetComment) => {
+  post.comments.forEach((comment) => {
+    comment.isReplyEditorOpen = comment.id === targetComment.id ? !comment.isReplyEditorOpen : false
+  })
+}
+
+const buildSocialInteractions = (interactions = []) => {
+  const likeUsers = []
+  const comments = []
+  const commentMap = new Map()
+
+  interactions.forEach((interaction) => {
+    if (interaction.comment) {
+      const commentItem = {
+        id: interaction.interactionId,
+        authorUserId: interaction.userId,
+        author: getSocialDisplayName(interaction.userId),
+        replyToName: interaction.targetInteractionId ? getSocialDisplayName(interactions.find(item => item.interactionId === interaction.targetInteractionId)?.userId) : '',
+        content: interaction.comment,
+        timeLabel: formatSocialTime(interaction.createdAt),
+        targetInteractionId: interaction.targetInteractionId,
+        likeUsers: [],
+        likedByMe: false,
+        replyDraft: '',
+        isReplyEditorOpen: false,
+      }
+      commentMap.set(commentItem.id, commentItem)
+      comments.push(commentItem)
+      return
+    }
+
+    if (interaction.liked && !interaction.comment && !interaction.targetInteractionId) {
+      likeUsers.push({
+        userId: interaction.userId,
+        name: getSocialDisplayName(interaction.userId)
+      })
+      return
+    }
+
+    if (interaction.liked && interaction.targetInteractionId) {
+      const targetComment = commentMap.get(interaction.targetInteractionId)
+      if (targetComment) {
+        targetComment.likeUsers.push({
+          userId: interaction.userId,
+          name: getSocialDisplayName(interaction.userId)
+        })
+      }
+    }
+  })
+
+  comments.forEach((comment) => {
+    comment.likedByMe = comment.likeUsers.some(user => Number(user.userId) === currentUserId.value)
+  })
+
+  return { likeUsers, comments }
+}
+
+const fetchSocialNotifications = async () => {
+  try {
+    const res = await getMySocialNotificationsApi()
+    const notifications = (res.data || []).filter(item => isWithinToday(item.createdAt))
+    const actorIds = notifications.map(item => item.actorUserId)
+    await ensureSocialUserSummaries(actorIds)
+    socialNotifications.value = notifications.map((item) => ({
+      id: item.interactionId,
+      actorUserId: item.actorUserId,
+      actorName: getSocialDisplayName(item.actorUserId),
+      type: item.type,
+      content: item.content,
+      timeLabel: formatSocialTime(item.createdAt),
+      createdAt: item.createdAt,
+      message: formatNotificationMessage(item),
+    }))
+  } catch (e) {
+    console.warn('获取互动提醒失败:', e)
+    socialNotifications.value = []
+  }
+}
+
+const mapSocialPostList = async (rawPosts = []) => {
+  const interactionEntries = await Promise.all(
+    rawPosts.map(async (post) => {
+      try {
+        const response = await getPostInteractionsApi(post.postId)
+        return [post.postId, response.data || []]
+      } catch (error) {
+        console.warn('获取帖子互动失败:', post.postId, error)
+        return [post.postId, []]
+      }
+    })
+  )
+
+  const interactionsMap = Object.fromEntries(interactionEntries)
+  const allUserIds = rawPosts.flatMap((post) => [
+    post.authorUserId,
+    ...(interactionsMap[post.postId] || []).map(interaction => interaction.userId),
+  ])
+  await ensureSocialUserSummaries(allUserIds)
+
+  return rawPosts.map((post) => {
+    const interactions = interactionsMap[post.postId] || []
+    const { likeUsers, comments } = buildSocialInteractions(interactions)
+
+    return createSocialPost({
+      id: post.postId,
+      authorUserId: post.authorUserId,
+      authorName: getSocialDisplayName(post.authorUserId),
+      authorAvatarUrl: getSocialAvatar(post.authorUserId),
+      authorRole: !post.authorUserId ? '匿名' : (currentUserId.value === Number(post.authorUserId) ? '我' : '好友'),
+      timeLabel: formatSocialTime(post.createdAt),
+      mood: parseSocialMoodTags(post.moodTag).join(' / ') || post.moodTag || '未知',
+      content: post.content,
+      highlights: Array.isArray(post.highlightTags) && post.highlightTags.length
+        ? post.highlightTags
+        : parseSocialMoodTags(post.moodTag),
+      likeUsers,
+      likedByMe: likeUsers.some(user => Number(user.userId) === currentUserId.value),
+      comments,
+    })
+  })
+}
+
+const fetchSocialPosts = async () => {
+  try {
+    const res = await getPostsApi(0, 50)
+    if (res.data && res.data.content) {
+      socialPosts.value = await mapSocialPostList(res.data.content)
+    }
+  } catch (e) {
+    console.error('Failed to fetch social posts:', e)
+  }
+}
+
+const fetchMySocialPosts = async () => {
+  isMyPostsLoading.value = true
+  try {
+    const res = await getMyPostsApi(0, 100)
+    const rawPosts = res.data?.content || []
+    mySocialPosts.value = await mapSocialPostList(rawPosts)
+  } catch (e) {
+    console.error('Failed to fetch my social posts:', e)
+    mySocialPosts.value = []
+  } finally {
+    isMyPostsLoading.value = false
+  }
+}
 
 const socialSummary = computed(() => {
+  const todayNotifications = socialNotifications.value.filter((item) => isWithinToday(item.createdAt))
+
   return socialPosts.value.reduce((summary, post) => {
-    summary.postCount += 1
-    summary.commentCount += post.comments.length
-    summary.likeCount += post.likes
+    if (Number(post.authorUserId) === currentUserId.value) {
+      summary.postCount += 1
+    }
     return summary
   }, {
     postCount: 0,
-    commentCount: 0,
-    likeCount: 0
+    commentCount: todayNotifications.filter(item => item.type === 'POST_COMMENT' || item.type === 'COMMENT_REPLY').length,
+    likeCount: todayNotifications.filter(item => item.type === 'POST_LIKE' || item.type === 'COMMENT_LIKE').length
   })
 })
 
@@ -1661,83 +2690,332 @@ const openSocialComposer = () => {
   showSocialComposer.value = true
 }
 
+const openMyPostsSpace = async () => {
+  showMyPostsModal.value = true
+  await fetchMySocialPosts()
+}
+
 const closeSocialComposer = () => {
   showSocialComposer.value = false
   resetSocialDraft()
 }
 
-const toggleSocialLike = (post) => {
-  post.likedByMe = !post.likedByMe
-  post.likes += post.likedByMe ? 1 : -1
+const closeMyPostsSpace = () => {
+  showMyPostsModal.value = false
 }
 
-const submitSocialComment = (post) => {
+const toggleSocialLike = async (post) => {
+  try {
+    await likePostApi(post.id)
+    post.isMenuOpen = false
+    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    
+    if (!post.likedByMe) {
+      appendUserBehaviorLogApi({
+        actionType: 'like_post',
+        targetType: 'post',
+        targetId: post.id,
+        metadata: { authorName: post.authorName }
+      }).catch(e => console.warn('Log user behavior failed', e))
+    }
+  } catch (e) {
+    ElMessage.error('点赞失败')
+  }
+}
+
+const handleSocialMenuLike = async (post) => {
+  await toggleSocialLike(post)
+}
+
+const toggleCommentLike = async (post, comment) => {
+  try {
+    await likeCommentApi(post.id, comment.id)
+    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+  } catch (e) {
+    if (e.response?.status === 403) {
+      ElMessage.error('只有帖子相关好友与评论主人可以点赞')
+    } else {
+      ElMessage.error('评论点赞失败')
+    }
+  }
+}
+
+const submitSocialComment = async (post) => {
   const content = post.commentDraft.trim()
   if (!content) return
 
-  post.comments.push({
-    id: `comment_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
-    author: userProfile.value.name || '我',
-    content,
-    timeLabel: '刚刚'
-  })
-  post.commentDraft = ''
-  ElMessage.success('评论成功')
+  try {
+    await commentPostApi(post.id, { comment: content })
+    post.commentDraft = ''
+    post.isCommentEditorOpen = false
+    ElMessage.success('评论成功')
+    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+  } catch (e) {
+    ElMessage.error('评论失败')
+  }
 }
 
-const submitSocialPost = () => {
-  const content = socialDraft.value.content.trim()
-  const mood = socialDraft.value.mood.trim()
-  if (!content || !mood) return
+const submitCommentReply = async (post, comment) => {
+  const content = comment.replyDraft.trim()
+  if (!content) return
 
-  socialPosts.value.unshift(createSocialPost({
-    id: `post_${Date.now()}`,
-    authorName: userProfile.value.name || '我',
-    authorRole: '我',
-    timeLabel: '刚刚',
-    mood,
-    content,
-    highlights: [mood],
-    likes: 0,
-    likedByMe: false,
-    comments: []
-  }))
-  closeSocialComposer()
-  ElMessage.success('动态发布成功')
+  try {
+    await replyCommentApi(post.id, comment.id, { comment: content })
+    comment.replyDraft = ''
+    comment.isReplyEditorOpen = false
+    ElMessage.success('回复成功')
+    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+  } catch (e) {
+    if (e.response?.status === 403) {
+      ElMessage.error('只有帖子相关好友与评论主人可以回复')
+    } else {
+      ElMessage.error('回复失败')
+    }
+  }
+}
+
+const submitSocialPost = async () => {
+  const content = socialDraft.value.content.trim()
+  const moodTags = parsedSocialMoodTags.value
+  if (!content || moodTags.length === 0) return
+
+  try {
+    const normalizedMood = moodTags.join(',')
+    const res = await createPostApi({ content, moodTag: normalizedMood })
+    ElMessage.success('发布成功')
+    closeSocialComposer()
+    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    
+    // User Behavior Log
+    appendUserBehaviorLogApi({
+      actionType: 'publish_post',
+      targetType: 'post',
+      targetId: res.data?.postId || 0,
+      metadata: { moodTags }
+    }).catch(e => console.warn('Log user behavior failed', e))
+    
+  } catch (e) {
+    ElMessage.error('发布失败')
+  }
+}
+
+const deleteSocialPost = async (post, options = {}) => {
+  const confirmed = window.confirm('确认删除这条帖子吗？删除后无法恢复。')
+  if (!confirmed) return
+
+  post.isMenuOpen = false
+  deletingPostId.value = post.id
+  try {
+    await deletePostApi(post.id)
+    ElMessage.success('帖子已删除')
+    socialPosts.value = socialPosts.value.filter(item => item.id !== post.id)
+    mySocialPosts.value = mySocialPosts.value.filter(item => item.id !== post.id)
+
+    const tasks = [fetchSocialNotifications(), fetchSocialPosts()]
+    if (showMyPostsModal.value) {
+      tasks.push(fetchMySocialPosts())
+    }
+    await Promise.all(tasks)
+  } catch (e) {
+    ElMessage.error('删除帖子失败')
+  } finally {
+    deletingPostId.value = null
+  }
 }
 
 // --- Tab 6: Friends State ---
-const friendsList = ref([
-  { id: '1001', name: '小明', intimacy: 3 },
-  { id: '1002', name: 'Alice', intimacy: 2 },
-  { id: '1003', name: '李华', intimacy: 1 }
-])
+const friendsList = ref([])
+const friendRequests = ref([])
 const newFriendId = ref('')
+const searchResults = ref([])
+const isSearching = ref(false)
 const selectedFriend = ref(null)
+const friendUserMap = ref({})
+const FRIENDSHIP_FLOWER_STEP = 50
+const MAX_FRIENDSHIP_FLOWERS = 3
+const MAX_FRIENDSHIP_SCORE = FRIENDSHIP_FLOWER_STEP * MAX_FRIENDSHIP_FLOWERS
 
-const addFriend = () => {
-  if (!newFriendId.value.trim()) {
-    alert('请输入好友名字或ID')
+const getDisplayName = (user) => {
+  if (!user) return ''
+  return user.nickname || user.username || ''
+}
+
+const clampFriendshipScore = (score) => {
+  const numericScore = Number(score)
+  if (!Number.isFinite(numericScore)) {
+    return 0
+  }
+  return Math.max(0, Math.floor(numericScore))
+}
+
+const buildFriendshipDescription = (score, flowerCount) => {
+  if (flowerCount >= MAX_FRIENDSHIP_FLOWERS) {
+    return `当前友情度 ${score} 分，三朵花已全部点亮，继续保持这份默契吧。`
+  }
+
+  const nextThreshold = (flowerCount + 1) * FRIENDSHIP_FLOWER_STEP
+  const remaining = Math.max(0, nextThreshold - score)
+  return `当前友情度 ${score} 分，已点亮 ${flowerCount}/${MAX_FRIENDSHIP_FLOWERS} 朵花，再获得 ${remaining} 分即可点亮下一朵。`
+}
+
+const buildNextGoalText = (score, flowerCount) => {
+  if (flowerCount >= MAX_FRIENDSHIP_FLOWERS) {
+    return '三朵花已全部点亮'
+  }
+  return `${Math.max(0, (flowerCount + 1) * FRIENDSHIP_FLOWER_STEP - score)} 分后升级`
+}
+
+const formatFriendDate = (value) => {
+  if (!value) return '暂未记录'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '暂未记录'
+  }
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const ensureUserSummaries = async (userIds = []) => {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  const missingIds = ids.filter(id => !friendUserMap.value[id])
+
+  if (missingIds.length === 0) {
     return
   }
-  const id = Math.floor(Math.random() * 9000 + 1000).toString()
-  friendsList.value.push({
-    id: id,
-    name: newFriendId.value,
-    intimacy: 1
-  })
-  newFriendId.value = ''
-  alert('添加成功！')
+
+  try {
+    const res = await getUserSummariesApi(missingIds)
+    const nextMap = { ...friendUserMap.value }
+    ;(res.data || []).forEach(user => {
+      nextMap[user.userId] = {
+        ...user,
+        avatarUrl: resolveUserAvatarUrl(user?.avatarUrl),
+      }
+    })
+    friendUserMap.value = nextMap
+  } catch (e) {
+    console.warn('获取用户摘要失败:', e)
+  }
+}
+
+const fetchFriends = async () => {
+  try {
+    const res = await getMyFriendsApi()
+    if (res.data) {
+      const previousSelectedId = selectedFriend.value?.id
+      await ensureUserSummaries(res.data.map(f => f.friendUserId))
+      const nextFriends = res.data.map(f => {
+        const friendshipScore = clampFriendshipScore(f.friendshipScore)
+        const intimacy = Math.max(0, Math.min(MAX_FRIENDSHIP_FLOWERS, Number(f.intimacyLevel) || 0))
+        return {
+        friendshipId: f.friendshipId,
+        id: f.friendUserId,
+        name: getDisplayName(friendUserMap.value[f.friendUserId]) || `用户 ${f.friendUserId}`,
+        username: friendUserMap.value[f.friendUserId]?.username || '',
+        avatarUrl: friendUserMap.value[f.friendUserId]?.avatarUrl || '',
+        bio: friendUserMap.value[f.friendUserId]?.bio || '',
+        intimacy,
+        friendshipScore,
+        createdAt: f.createdAt || '',
+        updatedAt: f.updatedAt || '',
+        progressPercent: Math.min(100, Math.round((friendshipScore / MAX_FRIENDSHIP_SCORE) * 100)),
+        friendshipDescription: buildFriendshipDescription(friendshipScore, intimacy),
+        nextGoalText: buildNextGoalText(friendshipScore, intimacy)
+      }
+      })
+      friendsList.value = nextFriends
+      selectedFriend.value = nextFriends.find(friend => friend.id === previousSelectedId) || null
+    }
+  } catch (e) {
+    console.error('获取好友列表失败:', e)
+  }
+}
+
+const fetchFriendRequests = async () => {
+  try {
+    const res = await getReceivedFriendRequestsApi()
+    if (res.data) {
+      await ensureUserSummaries(res.data.map(req => req.senderId))
+      friendRequests.value = res.data.map(req => ({
+        ...req,
+        senderName: getDisplayName(friendUserMap.value[req.senderId]) || `用户 ${req.senderId}`,
+        senderUsername: friendUserMap.value[req.senderId]?.username || '',
+        senderAvatarUrl: friendUserMap.value[req.senderId]?.avatarUrl || '',
+      }))
+    }
+  } catch (e) {
+    console.error('获取好友申请失败:', e)
+  }
+}
+
+const searchUser = async () => {
+  const keyword = newFriendId.value.trim()
+  if (!keyword) {
+    searchResults.value = []
+    return
+  }
+  try {
+    isSearching.value = true
+    const res = await searchUsersApi(keyword)
+    if (res.data) {
+      searchResults.value = res.data
+    }
+  } catch (e) {
+    ElMessage.error('搜索用户失败')
+    searchResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+}
+
+const addFriend = async (targetId) => {
+  if (!targetId) return
+  try {
+    await sendFriendRequestApi({ friendUserId: targetId, intimacyLevel: 1 })
+    ElMessage.success('好友申请已发送')
+    newFriendId.value = ''
+    searchResults.value = []
+  } catch (e) {
+    ElMessage.error(e.response?.data || '发送好友申请失败')
+  }
+}
+
+const handleRequest = async (requestId, accept) => {
+  try {
+    await handleFriendRequestApi(requestId, { accept })
+    ElMessage.success(accept ? '已同意好友申请' : '已拒绝好友申请')
+    await fetchFriendRequests()
+    if (accept) {
+      await fetchFriends()
+    }
+  } catch (e) {
+    ElMessage.error('处理好友申请失败')
+  }
 }
 
 const selectFriend = (friend) => {
   selectedFriend.value = friend
 }
 
-const deleteFriend = (id) => {
+const closeSelectedFriend = () => {
+  selectedFriend.value = null
+}
+
+const deleteFriend = async (friendshipId) => {
   if (confirm('确定要删除这位好友吗？')) {
-    friendsList.value = friendsList.value.filter(f => f.id !== id)
-    selectedFriend.value = null
+    try {
+      await deleteFriendshipApi(friendshipId)
+      ElMessage.success('删除成功')
+      selectedFriend.value = null
+      await fetchFriends()
+    } catch (e) {
+      ElMessage.error('删除好友失败')
+    }
   }
 }
 
@@ -1750,6 +3028,7 @@ const initMeditationCharts = () => {
     if (meditationChartRef.value) {
       if (meditationChart) meditationChart.dispose();
       meditationChart = echarts.init(meditationChartRef.value)
+      const yAxisConfig = getMeditationYAxisConfig()
       meditationChart.setOption({
         tooltip: { trigger: 'axis', formatter: '{b} <br/>时长: {c} 分钟' },
         grid: { left: '5%', right: '5%', top: '15%', bottom: '15%', containLabel: true },
@@ -1761,10 +3040,14 @@ const initMeditationCharts = () => {
         yAxis: {
           type: 'value',
           name: '时长 (分钟)',
+          min: 0,
+          max: yAxisConfig.max,
+          interval: yAxisConfig.interval,
+          minInterval: 1,
           splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }
         },
         series: [{
-          data: weeklyMeditationData,
+          data: weeklyMeditationData.value,
           type: 'bar',
           barWidth: '40%',
           itemStyle: {
@@ -1780,24 +3063,58 @@ const initMeditationCharts = () => {
   })
 }
 
-// Mock inventory
-const seedInventory = ref([
-  { id: 1, name: '向日葵种子', icon: '🌻', count: 5 },
-  { id: 2, name: '玫瑰种子', icon: '🌹', count: 2 },
-  { id: 3, name: '仙人掌种子', icon: '🌵', count: 12 },
-])
+// Garden gamification state
+const seedInventory = ref([])
+const fruitInventory = ref([])
+const unlockedPlants = ref([])
 
-const fruitInventory = ref([
-  { id: 1, name: '向日葵籽', icon: '🌰', count: 20 },
-  { id: 2, name: '玫瑰花瓣', icon: '🥀', count: 8 },
-])
+const seedDict = {
+  1: { name: '向日葵种子', icon: '🌻' },
+  2: { name: '玫瑰种子', icon: '🌹' },
+  3: { name: '仙人掌种子', icon: '🌵' }
+}
 
-const unlockedPlants = ref([
-  { id: 1, name: '向日葵', icon: '🌻', description: '充满阳光的植物' },
-  { id: 2, name: '玫瑰', icon: '🌹', description: '代表热情的植物' },
-  { id: 3, name: '小雏菊', icon: '🌼', description: '清新淡雅' },
-  { id: 4, name: '仙人掌', icon: '🌵', description: '坚韧不拔' },
-])
+const fruitDict = {
+  1: { name: '向日葵籽', icon: '🌰' },
+  2: { name: '玫瑰花瓣', icon: '🥀' }
+}
+
+const plantDict = {
+  1: { name: '向日葵', icon: '🌻', description: '充满阳光的植物' },
+  2: { name: '玫瑰', icon: '🌹', description: '代表热情的植物' },
+  3: { name: '小雏菊', icon: '🌼', description: '清新淡雅' },
+  4: { name: '仙人掌', icon: '🌵', description: '坚韧不拔' }
+}
+
+const fetchGardenData = async () => {
+  try {
+    const res = await getMyGardenApi()
+    if (res.data) {
+      seedInventory.value = (res.data.seeds || []).map(item => ({
+        id: item.itemId,
+        name: seedDict[item.itemId]?.name || '未知种子',
+        icon: seedDict[item.itemId]?.icon || '🌱',
+        count: item.count
+      }))
+      
+      fruitInventory.value = (res.data.fruits || []).map(item => ({
+        id: item.itemId,
+        name: fruitDict[item.itemId]?.name || '未知果实',
+        icon: fruitDict[item.itemId]?.icon || '🍎',
+        count: item.count
+      }))
+      
+      unlockedPlants.value = (res.data.unlockedPlantIds || []).map(id => ({
+        id,
+        name: plantDict[id]?.name || '未知植物',
+        icon: plantDict[id]?.icon || '🌿',
+        description: plantDict[id]?.description || '这是一种神奇的植物'
+      }))
+    }
+  } catch (e) {
+    console.error('获取花园数据失败:', e)
+  }
+}
 
 // Tracker Logic
 const trackerDate = ref(new Date())
@@ -1817,13 +3134,28 @@ const daysInTrackerMonth = computed(() => {
   const year = trackerDate.value.getFullYear()
   const month = trackerDate.value.getMonth()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const durationMap = buildMeditationDurationMap(meditationLogs.value)
+
   const days = []
   for(let i=1; i<=daysInMonth; i++) {
+    const currentDate = new Date(year, month, i)
+    currentDate.setHours(0, 0, 0, 0)
+    const dateKey = formatLocalDateKey(currentDate)
+    const totalMinutes = durationMap[dateKey] || 0
+
     let status = 'future'
-    if (i < 15) status = Math.random() > 0.2 ? 'completed' : 'missed'
-    else if (i === 15) status = 'partial'
-    
+    if (currentDate.getTime() > today.getTime()) {
+      status = 'future'
+    } else if (totalMinutes >= MEDITATION_DAY_TARGET_MINUTES) {
+      status = 'completed'
+    } else if (totalMinutes > 0) {
+      status = 'partial'
+    } else if (currentDate.getTime() < today.getTime()) {
+      status = 'missed'
+    }
+
     days.push({ date: i, status })
   }
   return days
@@ -2296,6 +3628,22 @@ window.addEventListener('resize', () => {
   margin-bottom: 20px;
 }
 
+.diary-empty-state {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.diary-hint {
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
 /* Tab 2: Data */
 .data-tab {
   display: flex;
@@ -2344,8 +3692,35 @@ window.addEventListener('resize', () => {
 .social-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
+}
+
+.social-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.social-secondary-btn,
+.social-publish-btn {
+  width: 120px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.social-secondary-btn {
+  background: rgba(255, 255, 255, 0.8);
+  color: #445b62;
+  border: 1px solid rgba(118, 150, 157, 0.16);
+}
+
+.social-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .social-header-desc {
@@ -2354,7 +3729,6 @@ window.addEventListener('resize', () => {
   line-height: 1.6;
 }
 
-.social-publish-btn,
 .social-comment-btn {
   width: auto;
   white-space: nowrap;
@@ -2407,6 +3781,12 @@ window.addEventListener('resize', () => {
   gap: 14px;
 }
 
+.social-post-top-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .social-author-block {
   display: flex;
   align-items: center;
@@ -2424,6 +3804,13 @@ window.addEventListener('resize', () => {
   color: #fff;
   font-weight: 700;
   box-shadow: 0 10px 22px rgba(118, 150, 157, 0.18);
+}
+
+.social-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .social-author-row {
@@ -2456,6 +3843,7 @@ window.addEventListener('resize', () => {
   color: #3f5b63;
   font-size: 0.88rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .social-post-content {
@@ -2480,34 +3868,82 @@ window.addEventListener('resize', () => {
   font-size: 0.82rem;
 }
 
-.social-post-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(118, 150, 157, 0.12);
+.social-menu-wrap {
+  position: relative;
 }
 
-.social-action-chip {
+.social-menu-btn {
+  min-width: 42px;
+  height: 42px;
+  padding: 0 12px;
   border: none;
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: rgba(118, 150, 157, 0.1);
-  color: #436068;
+  border-radius: 12px;
+  background: rgba(118, 150, 157, 0.12);
+  color: #4b6870;
+  font-size: 1.2rem;
+  letter-spacing: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.social-action-chip:hover,
-.social-action-chip.active {
-  background: rgba(118, 150, 157, 0.2);
-  color: #29434a;
+.social-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 112px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(118, 150, 157, 0.16);
+  box-shadow: 0 12px 28px rgba(63, 89, 98, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 3;
 }
 
-.social-comment-total {
-  color: #71848b;
-  font-size: 0.9rem;
+.social-menu-item {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #36525a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.social-menu-item:hover {
+  background: rgba(118, 150, 157, 0.1);
+}
+
+.social-menu-item.danger {
+  color: #c64f63;
+}
+
+.social-menu-item.danger:hover {
+  background: rgba(255, 82, 82, 0.1);
+}
+
+.social-feedback-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(246, 249, 248, 0.9);
+  border: 1px solid rgba(118, 150, 157, 0.08);
+}
+
+.social-like-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #566d75;
+  line-height: 1.6;
+}
+
+.social-like-icon {
+  font-size: 1.1rem;
+  color: #6d86ad;
 }
 
 .social-comment-list {
@@ -2518,12 +3954,19 @@ window.addEventListener('resize', () => {
 
 .social-comment-item {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   padding: 10px 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.social-comment-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .social-comment-author {
@@ -2531,8 +3974,46 @@ window.addEventListener('resize', () => {
   font-weight: 600;
 }
 
+.social-comment-reply-target {
+  color: #6d86ad;
+  font-weight: 600;
+}
+
 .social-comment-text {
   color: #4d6167;
+}
+
+.social-comment-like-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #677d84;
+  font-size: 0.9rem;
+}
+
+.social-comment-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.social-comment-action-btn {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: #6d86ad;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.social-comment-action-btn:hover {
+  color: #4f6d95;
+}
+
+.social-comment-reply-editor {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .social-comment-editor {
@@ -2604,6 +4085,53 @@ window.addEventListener('resize', () => {
   font-size: 0.88rem;
 }
 
+.social-notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.social-notification-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.social-notification-list::-webkit-scrollbar-thumb {
+  background: rgba(118, 150, 157, 0.28);
+  border-radius: 999px;
+}
+
+.social-notification-list::-webkit-scrollbar-track {
+  background: rgba(235, 242, 240, 0.72);
+  border-radius: 999px;
+}
+
+.social-notification-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(248, 251, 249, 0.95);
+}
+
+.social-notification-item strong {
+  color: #2d4750;
+}
+
+.social-notification-item span {
+  color: #5d7178;
+  line-height: 1.6;
+}
+
+.social-notification-item em {
+  color: #889aa0;
+  font-style: normal;
+  font-size: 0.84rem;
+}
+
 .social-trend-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2617,13 +4145,98 @@ window.addEventListener('resize', () => {
   gap: 20px;
 }
 
+.music-modal-card.my-posts-modal-card.modal-content {
+  width: min(980px, 94vw);
+  max-width: 980px;
+  max-height: min(84vh, 900px);
+}
+
+.my-posts-scroll-area {
+  max-height: 64vh;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.my-posts-scroll-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+.my-posts-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(118, 150, 157, 0.28);
+  border-radius: 999px;
+}
+
+.my-posts-scroll-area::-webkit-scrollbar-track {
+  background: rgba(235, 242, 240, 0.72);
+  border-radius: 999px;
+}
+
+.my-post-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 250, 248, 0.96) 100%);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+  box-shadow: 0 16px 34px rgba(110, 142, 150, 0.08);
+}
+
+.my-post-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.my-post-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.my-post-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.my-post-card-top strong {
+  display: block;
+  color: #2b4147;
+  font-size: 1.08rem;
+}
+
+.my-post-delete-btn {
+  width: auto !important;
+  min-width: 128px;
+  flex-shrink: 0;
+}
+
+.my-post-feedback-card {
+  margin-top: 4px;
+}
+
 .social-draft-preview {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 14px 16px;
   border-radius: 16px;
   background: rgba(248, 251, 249, 0.96);
+}
+
+.social-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .social-preview-label {
@@ -3115,6 +4728,7 @@ window.addEventListener('resize', () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  gap: 18px;
 }
 
 .friends-header {
@@ -3129,6 +4743,12 @@ window.addEventListener('resize', () => {
   gap: 10px;
 }
 
+.add-friend-section .action-btn {
+  width: auto;
+  padding: 8px 24px;
+  font-size: 0.95rem;
+}
+
 .search-input {
   padding: 8px 15px;
   border-radius: var(--radius-full);
@@ -3138,30 +4758,94 @@ window.addEventListener('resize', () => {
   min-width: 200px;
 }
 
+.friends-dashboard {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.friends-dashboard.detail-open {
+  grid-template-columns: minmax(320px, 1.05fr) minmax(300px, 0.92fr);
+}
+
+.friends-list-panel,
+.friend-detail-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(245, 250, 248, 0.92) 100%);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.friends-list-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.friend-panel-hint {
+  margin: 6px 0 0;
+  color: #768f96;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.friend-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(118, 150, 157, 0.12);
+  color: #45616a;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .friends-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 20px;
+  padding-right: 6px;
 }
 
 .friend-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 20px;
-  background: rgba(255,255,255,0.5);
-  border-radius: var(--radius-md);
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(255,255,255,0.6);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.3s;
+  border: 1px solid transparent;
 }
 
 .friend-item:hover {
-  background: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.9);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 12px 28px rgba(118, 150, 157, 0.14);
+}
+
+.friend-item.active {
+  border-color: rgba(118, 150, 157, 0.28);
+  background: linear-gradient(135deg, rgba(222, 241, 234, 0.92), rgba(250, 252, 251, 0.96));
+  box-shadow: 0 14px 30px rgba(118, 150, 157, 0.16);
+}
+
+.friend-item .action-btn {
+  width: auto;
+  padding: 6px 18px;
+  font-size: 0.9rem;
+  height: auto;
 }
 
 .friend-info {
@@ -3185,6 +4869,8 @@ window.addEventListener('resize', () => {
 .friend-details {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .friend-name {
@@ -3197,9 +4883,29 @@ window.addEventListener('resize', () => {
   color: #777;
 }
 
+.friend-desc {
+  font-size: 0.82rem;
+  color: #69828a;
+  line-height: 1.5;
+}
+
+.friend-item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .friend-intimacy {
   display: flex;
   gap: 5px;
+}
+
+.friend-score-label {
+  font-size: 0.82rem;
+  color: #56727a;
+  font-weight: 600;
 }
 
 .petal {
@@ -3213,57 +4919,319 @@ window.addEventListener('resize', () => {
   filter: grayscale(0%);
 }
 
-.friend-modal {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 0;
-  text-align: center;
+.search-results-panel,
+.friend-requests-panel {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(118, 150, 157, 0.15);
 }
 
-.friend-modal-avatar {
-  width: 80px;
-  height: 80px;
+.sub-section-title {
+  margin: 0 0 16px 0;
+  font-size: 1.1rem;
+  color: #3f5b63;
+  font-weight: 600;
+}
+
+.search-results-list,
+.friend-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.request-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.friend-item .friend-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.friend-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
+.friend-detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.friend-detail-close {
+  border: 1px solid rgba(118, 150, 157, 0.18);
+  background: rgba(255, 255, 255, 0.88);
+  color: #5d757c;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.friend-detail-close:hover {
+  background: rgba(245, 250, 248, 1);
+  color: #405b62;
+}
+
+.friend-detail-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.friend-detail-avatar {
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--color-accent-sage);
   color: white;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 2.5rem;
-  margin-bottom: 15px;
+  font-size: 2rem;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 10px 22px rgba(118, 150, 157, 0.18);
 }
 
-.friend-modal h4 {
-  font-size: 1.5rem;
-  margin-bottom: 5px;
+.friend-detail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.friend-modal-id {
-  color: #666;
-  margin-bottom: 20px;
+.friend-detail-main {
+  flex: 1;
+  min-width: 0;
 }
 
-.friend-modal-intimacy {
+.friend-detail-heading {
   display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.friend-detail-heading h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #30464d;
+}
+
+.friend-detail-heading p {
+  margin: 5px 0 0;
+  color: #6d868d;
+  font-size: 0.84rem;
+}
+
+.friendship-badge {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 192, 203, 0.2);
+  color: #b45d78;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.friend-bio {
+  margin: 10px 0 0;
+  color: #50666d;
+  line-height: 1.6;
+  font-size: 0.84rem;
+  white-space: pre-wrap;
+}
+
+.friend-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 30px;
-  font-size: 1.1rem;
+}
+
+.friend-stat-card {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(247, 250, 249, 0.88);
+  border: 1px solid rgba(118, 150, 157, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friend-stat-card span {
+  color: #7b9197;
+  font-size: 0.76rem;
+}
+
+.friend-stat-card strong {
+  color: #2f4850;
+  font-size: 1rem;
+}
+
+.friendship-progress-card {
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255, 243, 247, 0.9), rgba(245, 250, 248, 0.92));
+  border: 1px solid rgba(255, 196, 211, 0.4);
+}
+
+.friendship-progress-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #7d6270;
+  font-size: 0.8rem;
+  margin-bottom: 10px;
+}
+
+.detail-intimacy {
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.friendship-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+.friendship-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff8bb0, #f7b6c7);
+  box-shadow: 0 8px 20px rgba(255, 139, 176, 0.25);
 }
 
 .large-petal {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
 }
 
-.friend-modal-actions {
+.friendship-description {
+  margin: 10px 0 6px;
+  color: #5d6f76;
+  line-height: 1.55;
+  font-size: 0.8rem;
+}
+
+.friendship-rule-tip {
+  margin: 0;
+  color: #8b7a82;
+  font-size: 0.76rem;
+}
+
+.friend-basic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.friend-basic-item {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.68);
+  border: 1px solid rgba(118, 150, 157, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friend-basic-item span {
+  color: #7b9197;
+  font-size: 0.76rem;
+}
+
+.friend-basic-item strong {
+  color: #365057;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.friend-detail-actions {
   width: 100%;
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.friend-delete-btn {
+  width: auto;
+  min-width: 112px;
+  max-width: none;
+  padding: 8px 18px;
+  font-size: 0.88rem;
+  height: auto;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1120px) {
+  .friends-dashboard.detail-open {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-detail-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-basic-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .friends-header,
+  .friends-list-panel-header,
+  .friend-detail-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .add-friend-section {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .friend-item {
+    align-items: flex-start;
+  }
+
+  .friend-item-side {
+    align-items: flex-start;
+  }
+
+  .friend-detail-top {
+    flex-direction: column;
+  }
+
+  .friend-detail-actions {
+    justify-content: stretch;
+  }
+
+  .friend-delete-btn {
+    width: 100%;
+  }
 }
 
 .danger-btn {
   background: #ff5252;
   color: white;
-  width: 100%;
 }
 
 .danger-btn:hover {
@@ -4066,6 +6034,28 @@ window.addEventListener('resize', () => {
   width: 100%;
   margin-bottom: 10px;
   justify-content: flex-start;
+}
+
+.add-to-pl-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.add-to-pl-row:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.add-icon {
+  font-size: 1.2rem;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.add-to-pl-row:hover .add-icon {
+  opacity: 1;
 }
 
 .playlist-select-list {

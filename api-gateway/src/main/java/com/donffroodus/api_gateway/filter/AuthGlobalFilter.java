@@ -24,7 +24,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String[] WHITELIST = {
         "/api/users/login",
-        "/api/users/register"
+        "/api/users/register",
+        "/api/users/avatars"
     };
 
     private boolean isInWhitelist(String path) {
@@ -39,6 +40,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private boolean matchesWhitelistedPath(String path, String whitelistedPath) {
         return path.equals(whitelistedPath)
                 || path.equals(whitelistedPath + "/")
+                || path.startsWith(whitelistedPath + "/")
                 || path.startsWith(whitelistedPath + "?")
                 || path.startsWith(whitelistedPath + "/?")
                 || (path + "/").equals(whitelistedPath);

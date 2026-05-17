@@ -1,22 +1,55 @@
 @echo off
+setlocal
+cd /d "%~dp0"
+set "ROOT=%CD%"
+
 echo =========================================
 echo EmotionHealing - Start All Backend Services
 echo =========================================
+echo.
+echo Cleaning existing backend processes on service ports...
 
+call :stop_port 5000 Python Backend
+call :stop_port 8080 API Gateway
+call :stop_port 8081 Music Service
+call :stop_port 8082 User Service
+call :stop_port 8083 Social Service
+call :stop_port 8084 Data Service
+call :stop_port 8085 Meditation Service
+
+echo.
 echo Starting Python Backend...
-start "Python Backend" cmd /k "cd backend && call pip install -r requirements.txt && python app.py"
+start "Python Backend" cmd /k "cd /d ""%ROOT%\backend"" && call pip install -r requirements.txt && python app.py"
 
 echo Starting API Gateway...
-start "API Gateway" cmd /k "cd api-gateway && mvnw spring-boot:run"
+start "API Gateway" cmd /k "cd /d ""%ROOT%\api-gateway"" && call mvnw.cmd spring-boot:run"
 
 echo Starting User Service...
-start "User Service" cmd /k "cd user-service && mvnw spring-boot:run"
+start "User Service" cmd /k "cd /d ""%ROOT%\user-service"" && call mvnw.cmd spring-boot:run"
 
 echo Starting Music Service...
-start "Music Service" cmd /k "cd music-service && mvnw spring-boot:run"
+start "Music Service" cmd /k "cd /d ""%ROOT%\music-service"" && call mvnw.cmd spring-boot:run"
 
+echo Starting Social Service...
+start "Social Service" cmd /k "cd /d ""%ROOT%"" && call api-gateway\mvnw.cmd -f social-service\pom.xml spring-boot:run"
+
+echo Starting Meditation Service...
+start "Meditation Service" cmd /k "cd /d ""%ROOT%\meditation-service\meditation-service"" && call mvnw.cmd spring-boot:run"
+
+echo Starting Data Service...
+start "Data Service" cmd /k "cd /d ""%ROOT%"" && call api-gateway\mvnw.cmd -f data-service\pom.xml spring-boot:run"
 
 echo.
 echo All backend services are starting in separate windows.
 echo =========================================
 pause
+goto :eof
+
+:stop_port
+set "PORT=%~1"
+set "SERVICE_NAME=%~2"
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:":%PORT% .*LISTENING"') do (
+  echo Stopping %SERVICE_NAME% on port %PORT% ^(PID %%P^)...
+  taskkill /PID %%P /F >nul 2>&1
+)
+goto :eof

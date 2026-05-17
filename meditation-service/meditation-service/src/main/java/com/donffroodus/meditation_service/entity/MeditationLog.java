@@ -27,7 +27,7 @@ public class MeditationLog {
     private Integer duration; // 以分钟为单位
 
     @Column(name = "music_id")
-    private Long musicId;
+    private String musicId;
 
     @Column(name = "image_id")
     private Long imageId;
@@ -60,10 +60,10 @@ public class MeditationLog {
     public void setDuration(Integer duration) {
         this.duration = duration;
     }
-    public Long getMusicId() {
+    public String getMusicId() {
         return musicId;
     }
-    public void setMusicId(Long musicId) {
+    public void setMusicId(String musicId) {
         this.musicId = musicId;
     }
     public Long getImageId() {
