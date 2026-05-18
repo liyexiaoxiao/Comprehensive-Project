@@ -14,6 +14,8 @@ public interface MoodDiaryRepository extends JpaRepository<MoodDiary, Long> {
 
 	Optional<MoodDiary> findByIdAndUserId(Long id, Long userId);
 
+	long deleteByIdAndUserId(Long id, Long userId);
+
 	List<MoodDiary> findByUserIdAndDate(Long userId, LocalDate date);
 
 	boolean existsByUserIdAndDate(Long userId, LocalDate date);

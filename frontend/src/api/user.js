@@ -7,6 +7,11 @@ export const uploadMyAvatarApi = (formData) =>
   http.post('/api/users/me/avatar', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+export const getAdminUsersApi = (params) => http.get('/api/users/get-users', { params })
+export const getAdminUserByIdApi = (userId) => http.get(`/api/users/${userId}`)
+export const updateAdminUserApi = (userId, payload) => http.patch(`/api/users/${userId}`, payload)
+export const resetAdminUserPasswordApi = (userId, payload) => http.post(`/api/users/${userId}/reset-password`, payload)
+export const deleteAdminUserApi = (userId) => http.delete(`/api/users/${userId}`)
 
 export const getUserSummariesApi = (userIds = []) => {
   const ids = userIds.filter((id) => id !== null && id !== undefined)
@@ -26,6 +31,11 @@ export const getCurrentUserFromStorage = () => {
   } catch {
     return null
   }
+}
+
+export const isAdminUser = (user) => {
+  const role = String(user?.role || '').trim().toUpperCase()
+  return role === 'ADMIN' || role === 'ROLE_ADMIN'
 }
 
 export const resolveUserAvatarUrl = (avatarUrl) => {

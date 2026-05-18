@@ -35,12 +35,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.donffroodus.music_service.entity.EmotionTag;
 import com.donffroodus.music_service.entity.MusicResource;
 import com.donffroodus.music_service.entity.MusicTagMapping;
+import com.donffroodus.music_service.entity.OfficialPlaylistConfig;
 import com.donffroodus.music_service.entity.Playlist;
 import com.donffroodus.music_service.entity.PlaylistTrack;
 import com.donffroodus.music_service.entity.UserPreference;
 import com.donffroodus.music_service.repository.EmotionTagRepository;
 import com.donffroodus.music_service.repository.MusicResourceRepository;
 import com.donffroodus.music_service.repository.MusicTagMappingRepository;
+import com.donffroodus.music_service.repository.OfficialPlaylistConfigRepository;
 import com.donffroodus.music_service.repository.PlaylistRepository;
 import com.donffroodus.music_service.repository.PlaylistTrackRepository;
 import com.donffroodus.music_service.repository.UserPreferenceRepository;
@@ -59,6 +61,7 @@ public class MusicApiController {
 	private final EmotionTagRepository emotionTagRepository;
 	private final MusicTagMappingRepository musicTagMappingRepository;
 	private final UserPreferenceRepository userPreferenceRepository;
+	private final OfficialPlaylistConfigRepository officialPlaylistConfigRepository;
 	private final PlaylistRepository playlistRepository;
 	private final PlaylistTrackRepository playlistTrackRepository;
 
@@ -67,12 +70,14 @@ public class MusicApiController {
 			EmotionTagRepository emotionTagRepository,
 			MusicTagMappingRepository musicTagMappingRepository,
 			UserPreferenceRepository userPreferenceRepository,
+			OfficialPlaylistConfigRepository officialPlaylistConfigRepository,
 			PlaylistRepository playlistRepository,
 			PlaylistTrackRepository playlistTrackRepository) {
 		this.musicResourceRepository = musicResourceRepository;
 		this.emotionTagRepository = emotionTagRepository;
 		this.musicTagMappingRepository = musicTagMappingRepository;
 		this.userPreferenceRepository = userPreferenceRepository;
+		this.officialPlaylistConfigRepository = officialPlaylistConfigRepository;
 		this.playlistRepository = playlistRepository;
 		this.playlistTrackRepository = playlistTrackRepository;
 	}
@@ -116,6 +121,223 @@ public class MusicApiController {
 			}
 		}
 		return out;
+	}
+
+	private static final String OFFICIAL_PLAYLIST_LIST_SEPARATOR = "\n";
+
+	private static final List<OfficialPlaylistConfigResponse> DEFAULT_OFFICIAL_PLAYLISTS = List.of(
+			new OfficialPlaylistConfigResponse(
+					"official-neutral",
+					"官方·中性歌单",
+					"适合情绪平稳、不过度起伏，想安静陪伴自己的时刻。",
+					"中性",
+					"neutral",
+					List.of("neutral"),
+					List.of("中性", "neutral"),
+					0),
+			new OfficialPlaylistConfigResponse(
+					"official-joy",
+					"官方·高兴歌单",
+					"适合开心、轻快、想把好心情继续延长的时刻。",
+					"高兴",
+					"joy",
+					List.of("joy"),
+					List.of("高兴", "喜悦", "快乐", "开心", "joy", "happy"),
+					1),
+			new OfficialPlaylistConfigResponse(
+					"official-sadness",
+					"官方·悲伤歌单",
+					"允许情绪被温柔接住，先陪你慢慢消化低落。",
+					"悲伤",
+					"sadness",
+					List.of("sadness"),
+					List.of("悲伤", "sad", "sadness", "孤独"),
+					2),
+			new OfficialPlaylistConfigResponse(
+					"official-fear",
+					"官方·恐惧歌单",
+					"给焦虑和不安留出缓冲区，慢慢找回安全感。",
+					"恐惧",
+					"fear",
+					List.of("fear"),
+					List.of("恐惧", "fear", "焦虑", "anxious", "anxiety"),
+					3),
+			new OfficialPlaylistConfigResponse(
+					"official-disgust",
+					"官方·厌恶歌单",
+					"适合需要与排斥感、烦躁感拉开距离，慢慢整理情绪的时刻。",
+					"厌恶",
+					"disgust",
+					List.of("disgust"),
+					List.of("厌恶", "disgust"),
+					4),
+			new OfficialPlaylistConfigResponse(
+					"official-calm",
+					"官方·平静歌单",
+					"适合放慢呼吸、慢慢松下来，让身心重新沉静的时刻。",
+					"平静",
+					"calm",
+					List.of("calm"),
+					List.of("平静", "calm", "放松", "舒缓"),
+					5),
+			new OfficialPlaylistConfigResponse(
+					"official-surprise",
+					"官方·惊讶歌单",
+					"适合感受新鲜、意外和被触动时的跳跃心情。",
+					"惊讶",
+					"surprise",
+					List.of("surprise"),
+					List.of("惊讶", "惊喜", "surprise"),
+					6),
+			new OfficialPlaylistConfigResponse(
+					"official-anger",
+					"官方·愤怒歌单",
+					"帮助释放紧绷与躁动，让身体和思绪重新稳定。",
+					"愤怒",
+					"anger",
+					List.of("anger"),
+					List.of("愤怒", "anger", "angry"),
+					7));
+
+	private static List<String> splitOfficialList(String raw) {
+		if (raw == null || raw.isBlank()) {
+			return List.of();
+		}
+		return java.util.Arrays.stream(raw.split("\\R"))
+				.map(String::strip)
+				.filter(s -> !s.isEmpty())
+				.distinct()
+				.toList();
+	}
+
+	private static String joinOfficialList(List<String> values) {
+		if (values == null || values.isEmpty()) {
+			return "";
+		}
+		return values.stream()
+				.filter(Objects::nonNull)
+				.map(String::strip)
+				.filter(s -> !s.isEmpty())
+				.distinct()
+				.collect(Collectors.joining(OFFICIAL_PLAYLIST_LIST_SEPARATOR));
+	}
+
+	private static OfficialPlaylistConfig toOfficialPlaylistEntity(OfficialPlaylistConfigResponse response) {
+		OfficialPlaylistConfig entity = new OfficialPlaylistConfig();
+		entity.setPlaylistKey(response.playlistKey());
+		entity.setName(response.name());
+		entity.setDescription(response.description());
+		entity.setTagName(response.tagName());
+		entity.setCoverEmotion(response.coverEmotion());
+		entity.setEmotionKeys(joinOfficialList(response.emotions()));
+		entity.setKeywords(joinOfficialList(response.keywords()));
+		entity.setSortOrder(response.sortOrder());
+		return entity;
+	}
+
+	private static OfficialPlaylistConfigResponse toOfficialPlaylistResponse(OfficialPlaylistConfig entity) {
+		return new OfficialPlaylistConfigResponse(
+				entity.getPlaylistKey(),
+				entity.getName(),
+				entity.getDescription(),
+				entity.getTagName(),
+				entity.getCoverEmotion(),
+				splitOfficialList(entity.getEmotionKeys()),
+				splitOfficialList(entity.getKeywords()),
+				entity.getSortOrder() == null ? 0 : entity.getSortOrder());
+	}
+
+	private static Optional<OfficialPlaylistConfigResponse> findDefaultOfficialPlaylist(String playlistKey) {
+		return DEFAULT_OFFICIAL_PLAYLISTS.stream()
+				.filter(item -> Objects.equals(item.playlistKey(), playlistKey))
+				.findFirst();
+	}
+
+	private static void copyOfficialPlaylistDefaults(OfficialPlaylistConfig entity, OfficialPlaylistConfigResponse defaults) {
+		entity.setPlaylistKey(defaults.playlistKey());
+		entity.setName(defaults.name());
+		entity.setDescription(defaults.description());
+		entity.setTagName(defaults.tagName());
+		entity.setCoverEmotion(defaults.coverEmotion());
+		entity.setEmotionKeys(joinOfficialList(defaults.emotions()));
+		entity.setKeywords(joinOfficialList(defaults.keywords()));
+		entity.setSortOrder(defaults.sortOrder());
+	}
+
+	private static boolean isLegacyOfficialPlaylistConfig(OfficialPlaylistConfig entity, OfficialPlaylistConfigResponse defaults) {
+		if (entity == null) {
+			return false;
+		}
+		if (Objects.equals(entity.getTagName(), defaults.tagName())) {
+			return false;
+		}
+		return switch (entity.getPlaylistKey()) {
+			case "official-neutral" -> Objects.equals(entity.getTagName(), "平静");
+			case "official-joy" -> Objects.equals(entity.getTagName(), "喜悦");
+			case "official-surprise" -> Objects.equals(entity.getTagName(), "惊喜");
+			default -> false;
+		};
+	}
+
+	private List<OfficialPlaylistConfig> ensureOfficialPlaylistConfigs() {
+		Map<String, OfficialPlaylistConfig> existingByKey = officialPlaylistConfigRepository.findAllByOrderBySortOrderAscPlaylistKeyAsc().stream()
+				.collect(Collectors.toMap(OfficialPlaylistConfig::getPlaylistKey, item -> item, (a, b) -> a, LinkedHashMap::new));
+
+		List<OfficialPlaylistConfig> ordered = new ArrayList<>();
+		for (OfficialPlaylistConfigResponse defaults : DEFAULT_OFFICIAL_PLAYLISTS) {
+			OfficialPlaylistConfig entity = existingByKey.get(defaults.playlistKey());
+			if (entity == null) {
+				entity = officialPlaylistConfigRepository.save(toOfficialPlaylistEntity(defaults));
+			} else if (isLegacyOfficialPlaylistConfig(entity, defaults)) {
+				copyOfficialPlaylistDefaults(entity, defaults);
+				entity = officialPlaylistConfigRepository.save(entity);
+			}
+			ordered.add(entity);
+		}
+		return ordered;
+	}
+
+	@Operation(summary = "列出官方情绪歌单配置", description = "首次访问会自动初始化默认八个官方歌单配置")
+	@GetMapping("/official-playlists")
+	public List<OfficialPlaylistConfigResponse> listOfficialPlaylists() {
+		return ensureOfficialPlaylistConfigs().stream()
+				.map(MusicApiController::toOfficialPlaylistResponse)
+				.toList();
+	}
+
+	@Operation(summary = "更新单个官方情绪歌单配置", description = "若配置不存在则按默认项初始化后再覆盖保存")
+	@PutMapping("/official-playlists/{playlistKey}")
+	public ResponseEntity<OfficialPlaylistConfigResponse> updateOfficialPlaylist(
+			@PathVariable("playlistKey") String playlistKey,
+			@RequestBody OfficialPlaylistConfigWriteRequest request) {
+		if (request == null
+				|| request.name() == null || request.name().isBlank()
+				|| request.tagName() == null || request.tagName().isBlank()
+				|| request.coverEmotion() == null || request.coverEmotion().isBlank()
+				|| request.emotions() == null || request.emotions().isEmpty()
+				|| request.keywords() == null || request.keywords().isEmpty()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		Optional<OfficialPlaylistConfigResponse> defaults = findDefaultOfficialPlaylist(playlistKey);
+		if (defaults.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+
+		OfficialPlaylistConfig entity = officialPlaylistConfigRepository.findByPlaylistKey(playlistKey)
+				.orElseGet(() -> toOfficialPlaylistEntity(defaults.get()));
+
+		entity.setPlaylistKey(playlistKey);
+		entity.setName(request.name().strip());
+		entity.setDescription(request.description());
+		entity.setTagName(request.tagName().strip());
+		entity.setCoverEmotion(request.coverEmotion().strip());
+		entity.setEmotionKeys(joinOfficialList(request.emotions()));
+		entity.setKeywords(joinOfficialList(request.keywords()));
+		entity.setSortOrder(request.sortOrder() != null ? request.sortOrder() : defaults.get().sortOrder());
+
+		OfficialPlaylistConfig saved = officialPlaylistConfigRepository.save(entity);
+		return ResponseEntity.ok(toOfficialPlaylistResponse(saved));
 	}
 
 	/** 列出音乐资源；可选 q 按标题或艺人模糊匹配（不区分大小写）。 */
@@ -955,5 +1177,26 @@ public class MusicApiController {
 
 	public static record EmotionTagWriteRequest(
 			String tagName) {
+	}
+
+	public static record OfficialPlaylistConfigWriteRequest(
+			String name,
+			String description,
+			String tagName,
+			String coverEmotion,
+			List<String> emotions,
+			List<String> keywords,
+			Integer sortOrder) {
+	}
+
+	public static record OfficialPlaylistConfigResponse(
+			String playlistKey,
+			String name,
+			String description,
+			String tagName,
+			String coverEmotion,
+			List<String> emotions,
+			List<String> keywords,
+			Integer sortOrder) {
 	}
 }

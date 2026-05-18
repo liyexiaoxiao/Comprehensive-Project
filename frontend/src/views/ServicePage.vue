@@ -16,6 +16,10 @@
               <span class="portal-icon">🌿</span>
               <span>个人空间</span>
             </button>
+            <button v-if="isAdmin" class="portal-btn" type="button" @click="$router.push({ name: 'admin' })">
+              <span class="portal-icon">🛠</span>
+              <span>管理员端</span>
+            </button>
           </div>
           <RouterLink class="back-link" to="/">回首页</RouterLink>
         </div>
@@ -27,6 +31,9 @@
               不同音乐区像花园里的不同小径，有的更安睡，有的更专注......
             </p>
           </div>
+          <button class="catalog-link-btn" type="button" @click="openAllPlaylists">
+            查看所有歌单
+          </button>
         </div>
 
         <div class="top-tools">
@@ -175,16 +182,18 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { initialMessages, mockReplies } from '@/data/mockContent'
-import { analyzeEmotionApi, getMusicFileByNameApi, getMusicFileUrl, getMusicListApi } from '@/api/python'
+import { analyzeEmotionApi, getMusicFileByNameApi } from '@/api/python'
 import { useMusicStore } from '@/stores/musicStore'
 import { useSpeechStore } from '@/stores/speech'
-import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
+import { buildMusicCategories, getRealMusicCover } from '@/utils/realMusic'
+import { getCurrentUserFromStorage, isAdminUser } from '@/api/user'
 
 const router = useRouter()
 const route = useRoute()
 const musicStore = useMusicStore()
 const speechStore = useSpeechStore()
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
+const isAdmin = computed(() => isAdminUser(getCurrentUserFromStorage()))
 
 const emptyTrack = {
   id: '',
@@ -215,8 +224,6 @@ const heardText = ref('')
 const isListening = ref(false)
 const recognition = ref(null)
 const categoryScrollRef = ref(null)
-const realMusicFiles = ref([])
-const realMusicDurations = ref({})
 const currentTrack = ref({ ...emptyTrack })
 const isLoadingAudio = ref(false)
 
@@ -228,20 +235,27 @@ const voiceSupported = typeof window !== 'undefined'
   ? Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   : false
 
+const currentEmotionForRecommend = computed(() => {
+  const storedEmotion = typeof window !== 'undefined'
+    ? window.localStorage.getItem('currentEmotion')
+    : ''
+  return speechStore.emotion || storedEmotion || 'neutral'
+})
+
 const musicCategories = computed(() => {
-  const realCategories = buildRealMusicCategories(realMusicFiles.value, {
+  const publicCategories = buildMusicCategories(musicStore.publicTracks, {
+    recommendedTracks: musicStore.recommendedTracks,
     likedIds: musicStore.likedTrackIds,
     collectedIds: musicStore.collectedTrackIds,
-    durationMap: realMusicDurations.value,
   })
-  const realLibrary = realCategories.flatMap(c => c.tracks)
+  const publicLibrary = musicStore.publicTracks
   const customCats = musicStore.customPlaylists.map((playlist) => ({
     id: playlist.id,
     name: playlist.name,
     description: playlist.description || '自建歌单',
-    tracks: playlist.trackIds?.map(id => musicStore.uploadedTracks.find(t => t.id === id) || realLibrary.find(t => t.id === id)).filter(Boolean) || [],
+    tracks: playlist.trackIds?.map(id => musicStore.resolveTrackById(id) || publicLibrary.find(track => track.id === id)).filter(Boolean) || [],
   }))
-  return [...realCategories, ...customCats]
+  return [...publicCategories, ...customCats]
 })
 
 const activeCategory = computed(
@@ -314,24 +328,21 @@ const ensureCurrentTrack = () => {
   }
 }
 
-const loadRealMusicLibrary = async () => {
+const loadMusicLibrary = async () => {
   try {
-    const response = await getMusicListApi()
-    realMusicFiles.value = Array.isArray(response?.data?.music_files) ? response.data.music_files : []
-    const durationEntries = await Promise.all(
-      realMusicFiles.value.map(async (filename) => [filename, await readRemoteAudioDuration(getMusicFileUrl(filename))]),
-    )
-    realMusicDurations.value = Object.fromEntries(durationEntries)
+    await Promise.all([
+      musicStore.fetchEmotionTags(),
+      musicStore.fetchPublicTracks(),
+    ])
+    await musicStore.fetchRecommendedTracks(currentEmotionForRecommend.value)
     if (!musicCategories.value.some((category) => category.id === activeCategoryId.value)) {
       activeCategoryId.value = musicCategories.value[0]?.id || 'recommend'
     }
     ensureCurrentTrack()
   } catch (error) {
-    realMusicFiles.value = []
-    realMusicDurations.value = {}
     currentTrack.value = { ...emptyTrack }
-    ElMessage.error('真实音乐目录加载失败，请确认 Python backend 已启动。')
-    console.error('Load real music list failed:', error)
+    ElMessage.error('音乐目录加载失败，请确认 music-service 已启动。')
+    console.error('Load music library failed:', error)
   }
 }
 
@@ -357,6 +368,18 @@ const loadAudioForTrack = async (track, autoplay = true) => {
 
     if (track.file) {
       sourceBlob = track.file
+    } else if (track.fileUrl) {
+      cleanupObjectUrl()
+      audioPlayer.src = track.fileUrl
+      audioPlayer.currentTime = progressSeconds.value || 0
+      audioPlayer.volume = volume.value / 100
+      lastLoadedTrackId = track.id
+
+      if (autoplay) {
+        await audioPlayer.play()
+        isPlaying.value = true
+      }
+      return
     } else if (track.filename) {
       const response = await getMusicFileByNameApi(track.filename)
       sourceBlob = response.data
@@ -453,6 +476,7 @@ const getTrackTags = (track, categoryId = activeCategory.value?.id) => {
 
 const normalizePlayerTrack = (track) => ({
   id: track.id,
+  musicResourceId: track.musicResourceId ?? null,
   title: track.title,
   artist: track.artist?.trim() || '佚名',
   duration: track.duration || 0,
@@ -461,6 +485,7 @@ const normalizePlayerTrack = (track) => ({
   type: track.file ? '本地上传' : '真实音乐',
   emotion: track.emotion || 'neutral',
   filename: track.filename,
+  fileUrl: track.fileUrl || '',
 })
 
 const openPlayerPage = () => {
@@ -472,12 +497,22 @@ const openPlayerPage = () => {
   window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
     source: 'service',
     returnTo: '/service',
+    categoryId: activeCategory.value?.id || 'recommend',
     categoryName: activeCategory.value?.name || '音乐空间',
     track: normalizePlayerTrack(currentTrack.value),
     queue: queuePayload,
   }))
 
   router.push({ name: 'music-player' })
+}
+
+const openAllPlaylists = () => {
+  router.push({
+    name: 'all-playlists',
+    query: {
+      playlist: activeCategory.value?.id || 'recommend',
+    },
+  })
 }
 
 const timeStamp = () =>
@@ -630,6 +665,17 @@ watch(
 )
 
 watch(
+  () => speechStore.emotion,
+  async (emotion) => {
+    const nextEmotion = emotion || currentEmotionForRecommend.value
+    await musicStore.fetchRecommendedTracks(nextEmotion)
+    if (activeCategoryId.value === 'recommend' || activeCategoryId.value === 'guess') {
+      ensureCurrentTrack()
+    }
+  },
+)
+
+watch(
   musicCategories,
   () => {
     syncCurrentTrackSnapshot()
@@ -687,8 +733,8 @@ audioPlayer.onended = () => {
 
 onMounted(async () => {
   setupVoiceRecognition()
-  await loadRealMusicLibrary()
   await musicStore.fetchUserData()
+  await loadMusicLibrary()
 })
 
 onBeforeUnmount(() => {
@@ -879,6 +925,7 @@ onBeforeUnmount(() => {
 }
 
 .back-link,
+.catalog-link-btn,
 .mood-chip,
 .count-pill,
 .status-pill {
@@ -899,6 +946,20 @@ onBeforeUnmount(() => {
 }
 .back-link:hover {
   background: var(--color-text-secondary);
+}
+
+.catalog-link-btn {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.catalog-link-btn:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
 }
 
 .mood-chip,
@@ -1327,6 +1388,11 @@ onBeforeUnmount(() => {
   }
   .volume-control {
     display: none;
+  }
+
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

@@ -6,10 +6,12 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -180,16 +183,16 @@ public class SocialApiController {
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@RequestBody MoodDiaryWriteRequest request) {
 		if (request == null || request.date() == null) {
-			return ResponseEntity.badRequest().build();
+			return ResponseEntity.<MoodDiary>badRequest().build();
 		}
 
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		LocalDate today = LocalDate.now();
 		if (!today.equals(request.date())) {
-			return ResponseEntity.status(403).build();
+			return ResponseEntity.<MoodDiary>status(403).build();
 		}
 		if (moodDiaryRepository.existsByUserIdAndDate(userId, request.date())) {
-			return ResponseEntity.status(409).build();
+			return ResponseEntity.<MoodDiary>status(409).build();
 		}
 		MoodDiary diary = new MoodDiary();
 		diary.setUserId(userId);
@@ -206,16 +209,45 @@ public class SocialApiController {
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("diaryId") Long diaryId,
 			@RequestBody MoodDiaryWriteRequest request) {
-		return ResponseEntity.status(403).build();
+		if (request == null) {
+			return ResponseEntity.<MoodDiary>badRequest().build();
+		}
+
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		LocalDate today = LocalDate.now();
+
+		MoodDiary existing = moodDiaryRepository.findByIdAndUserId(diaryId, userId).orElse(null);
+		if (existing == null) {
+			return ResponseEntity.<MoodDiary>notFound().build();
+		}
+		if (!today.equals(existing.getDate())) {
+			return ResponseEntity.status(HttpStatus.FORBIDDEN).<MoodDiary>build();
+		}
+		if (request.date() != null && !request.date().equals(existing.getDate())) {
+			return ResponseEntity.badRequest().<MoodDiary>build();
+		}
+		existing.setDominantEmotion(request.dominantEmotion());
+		existing.setContext(request.context());
+		return ResponseEntity.ok(moodDiaryRepository.save(existing));
 	}
 
 	/** 删除当前用户的一条情绪日记。 */
 	@Operation(summary = "删除情绪日记")
 	@DeleteMapping("/me/mood-diaries/{diaryId}")
+	@Transactional
 	public ResponseEntity<Void> deleteMoodDiary(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("diaryId") Long diaryId) {
-		return ResponseEntity.status(403).build();
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		try {
+			long deleted = moodDiaryRepository.deleteByIdAndUserId(diaryId, userId);
+			if (deleted <= 0) {
+				return ResponseEntity.notFound().build();
+			}
+			return ResponseEntity.noContent().build();
+		} catch (DataAccessException e) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot delete mood diary");
+		}
 	}
 
 	// --- social_post（广场与「我的」）---
@@ -493,10 +525,6 @@ public class SocialApiController {
 		return level != null && level >= 1 && level <= MAX_FRIENDSHIP_FLOWERS;
 	}
 
-	private static boolean isValidFriendshipScore(Integer level) {
-		return level != null && level >= 0 && level <= MAX_FRIENDSHIP_FLOWERS * FRIENDSHIP_FLOWER_STEP;
-	}
-
 	/** 发送好友申请 */
 	@Operation(summary = "发送好友申请")
 	@PostMapping("/me/friend-requests")
@@ -600,43 +628,6 @@ public class SocialApiController {
 				.stream()
 				.map(this::buildFriendshipResponse)
 				.toList();
-	}
-
-	/** 废弃的原直接添加好友接口 */
-	@Operation(summary = "废弃的直接新增好友", description = "请改用发送好友申请")
-	@PostMapping("/me/friends")
-	@Transactional
-	public ResponseEntity<?> addFriendLegacy(
-			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
-			@RequestBody FriendshipCreateRequest request) {
-		if (request == null || request.friendUserId() == null) {
-			return ResponseEntity.badRequest().build();
-		}
-		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		if (request.friendUserId().equals(userId)) {
-			return ResponseEntity.badRequest().build();
-		}
-		if (friendshipRepository.existsByUserIdAndFriendUserId(userId, request.friendUserId())) {
-			return ResponseEntity.status(409).build();
-		}
-		Integer intimacyLevel = request.intimacyLevel() == null ? 0 : request.intimacyLevel() * FRIENDSHIP_FLOWER_STEP;
-		if (!isValidFriendshipScore(intimacyLevel)) {
-			return ResponseEntity.badRequest().build();
-		}
-		Friendship selfSide = new Friendship();
-		selfSide.setUserId(userId);
-		selfSide.setFriendUserId(request.friendUserId());
-		selfSide.setIntimacyLevel(intimacyLevel);
-		Friendship savedSelfSide = friendshipRepository.save(selfSide);
-
-		if (!friendshipRepository.existsByUserIdAndFriendUserId(request.friendUserId(), userId)) {
-			Friendship peerSide = new Friendship();
-			peerSide.setUserId(request.friendUserId());
-			peerSide.setFriendUserId(userId);
-			peerSide.setIntimacyLevel(intimacyLevel);
-			friendshipRepository.save(peerSide);
-		}
-		return ResponseEntity.ok(buildFriendshipResponse(savedSelfSide));
 	}
 
 	/** 更新好友亲密度（1~3）。 */
