@@ -124,7 +124,7 @@ public class MusicApiController {
 	public List<MusicResource> listMusic(
 			@Parameter(name = "q", description = "关键词，匹配 title 或 artist", in = ParameterIn.QUERY) @RequestParam(value = "q", required = false) String q) {
 		if (q == null || q.isBlank()) {
-			return musicResourceRepository.findAll();
+		return musicResourceRepository.findAll();
 		}
 		String keyword = q.strip();
 		return musicResourceRepository.searchByTitleOrArtistIgnoreCase(keyword);
