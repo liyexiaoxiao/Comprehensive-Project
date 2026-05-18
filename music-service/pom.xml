@@ -14,7 +14,7 @@
 	<name>music-service</name>
 	<description>曲库、情绪标签与用户音乐偏好（emohealing_music_db）</description>
 	<properties>
-		<java.version>21</java.version>
+		<java.version>17</java.version>
 	</properties>
 	<dependencies>
 		<dependency>
