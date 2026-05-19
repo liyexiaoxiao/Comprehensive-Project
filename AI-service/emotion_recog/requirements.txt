@@ -1,0 +1,9 @@
+flask==3.0.3
+torch==2.6.0
+torchaudio==2.6.0
+transformers==4.46.3
+requests==2.32.3
+huggingface_hub==0.26.2
+langdetect==1.0.9
+deep-translator==1.11.4
+sentencepiece==0.2.0

@@ -29,8 +29,6 @@ coverage
 *.njsproj
 *.sln
 *.sw?
-*.class
-/target/
 
 *.tsbuildinfo
 # 忽略虚拟环境
@@ -44,8 +42,25 @@ backend/venv/Lib/site-packages/tensorflow/
 
 target/
 
+AI-service/backend/.env
+AI-service/backend/.env.*
+AI-service/backend/generated_audio/
+
 user-service/src/main/resources/application-dev.yml
 
 docs/
 api-gateway/src/main/resources/application-dev.yml
+
+backend/.venv/
+
 meditation-service/meditation-service/src/main/resources/application-dev.yml
+
+__pycache__/
+__pycache__/
+*.pyc
+.venv/
+.env
+__pycache__/
+*.pyc
+.venv/
+.env
