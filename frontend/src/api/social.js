@@ -35,3 +35,12 @@ export const searchUsersApi = (keyword) => http.get('/api/users/search', { param
 export const sendFriendRequestApi = (payload) => http.post('/api/social/v1/me/friend-requests', payload)
 export const getReceivedFriendRequestsApi = () => http.get('/api/social/v1/me/friend-requests/received')
 export const handleFriendRequestApi = (requestId, payload) => http.put(`/api/social/v1/me/friend-requests/${requestId}`, payload)
+
+// --- Friend Chat ---
+export const getChatConversationsApi = () => http.get('/api/social/v1/me/chat/conversations')
+export const getChatMessagesApi = (peerUserId, params) =>
+  http.get(`/api/social/v1/me/chat/with/${peerUserId}/messages`, { params })
+export const sendChatMessageApi = (peerUserId, payload) =>
+  http.post(`/api/social/v1/me/chat/with/${peerUserId}/messages`, payload)
+export const markChatAsReadApi = (peerUserId) =>
+  http.put(`/api/social/v1/me/chat/with/${peerUserId}/read`)
