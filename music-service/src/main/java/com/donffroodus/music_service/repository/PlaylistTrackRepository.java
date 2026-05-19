@@ -21,11 +21,7 @@ public interface PlaylistTrackRepository extends JpaRepository<PlaylistTrack, Lo
 
 	boolean existsByPlaylistIdAndMusicId(Long playlistId, String musicId);
 
-	void deleteByPlaylistIdAndMusicId(Long playlistId, String musicId);
-
 	void deleteByPlaylistId(Long playlistId);
-
-	List<PlaylistTrack> findByPlaylistId(Long playlistId);
 
 	@Query("SELECT COALESCE(MAX(t.sortOrder), 0) FROM PlaylistTrack t WHERE t.playlistId = :playlistId")
 	int findMaxSortOrderByPlaylistId(@Param("playlistId") Long playlistId);

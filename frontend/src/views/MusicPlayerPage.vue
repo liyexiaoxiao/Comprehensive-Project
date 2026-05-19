@@ -200,25 +200,30 @@ const emotionAliasMap = {
   anxiety: 'fear',
   anxious: 'fear',
   neutral: 'neutral',
-  calm: 'neutral',
-  relax: 'neutral',
-  focus: 'neutral',
-  tired: 'neutral',
-  hopeful: 'neutral',
+  calm: 'calm',
+  relax: 'calm',
+  focus: 'calm',
+  tired: 'calm',
+  hopeful: 'calm',
+  disgust: 'disgust',
   '喜悦': 'joy',
   '开心': 'joy',
   '快乐': 'joy',
-  '平静': 'neutral',
-  '放松': 'neutral',
-  '专注': 'neutral',
-  '疲惫': 'neutral',
+  '高兴': 'joy',
+  '平静': 'calm',
+  '放松': 'calm',
+  '专注': 'calm',
+  '疲惫': 'calm',
   '焦虑': 'fear',
   '悲伤': 'sadness',
   '孤独': 'sadness',
   '愤怒': 'anger',
-  '希望': 'neutral',
+  '希望': 'calm',
   '爱': 'love',
   '惊喜': 'surprise',
+  '惊讶': 'surprise',
+  '中性': 'neutral',
+  '厌恶': 'disgust',
 }
 
 const displayTags = computed(() => {
@@ -227,6 +232,7 @@ const displayTags = computed(() => {
 })
 
 const primaryMood = computed(() => displayTags.value[0] || '平静')
+const preferRecommendedNext = computed(() => ['recommend', 'guess'].includes(payload.value?.categoryId))
 
 const formatTime = (seconds) => {
   const safeValue = Number.isFinite(seconds) ? seconds : 0
@@ -337,6 +343,37 @@ const loadAudioBlob = async (requestFactory) => {
   }
 }
 
+const loadAudioUrl = async (sourceUrl) => {
+  if (!sourceUrl || isLoadingAudio.value) return
+
+  try {
+    isLoadingAudio.value = true
+    cleanupObjectUrl()
+    audioPlayer.src = sourceUrl
+    audioPlayer.currentTime = 0
+    progressSeconds.value = 0
+    audioPlayer.volume = volume.value / 100
+    await audioPlayer.play()
+    isPlaying.value = true
+
+    appendUserBehaviorLogApi({
+      actionType: 'play_music',
+      targetType: 'music',
+      targetId: currentTrack.value?.id || 0,
+      metadata: {
+        title: currentTrack.value?.title,
+        emotion: currentEmotion.value
+      }
+    }).catch(e => console.warn('Log user behavior failed', e))
+  } catch (error) {
+    isPlaying.value = false
+    ElMessage.error('音乐播放失败，请确认音乐服务已启动。')
+    console.error('Audio playback failed:', error)
+  } finally {
+    isLoadingAudio.value = false
+  }
+}
+
 const startTimer = () => {
   stopTimer()
   playTimer = setInterval(() => {
@@ -347,6 +384,11 @@ const startTimer = () => {
 }
 
 const playCurrentTrack = async () => {
+  if (currentTrack.value?.fileUrl) {
+    await loadAudioUrl(currentTrack.value.fileUrl)
+    return
+  }
+
   if (currentTrack.value?.filename) {
     await loadAudioBlob(() => getMusicFileByNameApi(currentTrack.value.filename))
     return
@@ -388,6 +430,20 @@ const togglePlayback = async () => {
 
 const playNext = async () => {
   if (!currentTrack.value) return
+
+  if (preferRecommendedNext.value && currentTrack.value?.musicResourceId) {
+    const nextTrack = await musicStore.fetchNextRecommendedTrack(currentTrack.value.musicResourceId, currentEmotion.value)
+    if (nextTrack) {
+      const queueIndex = queue.value.findIndex((track) => track.id === nextTrack.id)
+      if (queueIndex === -1) {
+        queue.value = [...queue.value, nextTrack]
+      }
+      currentTrack.value = nextTrack
+      await playCurrentTrack()
+      return
+    }
+  }
+
   syncTrackWithQueue(1)
   if (currentTrack.value?.filename) {
     await playCurrentTrack()

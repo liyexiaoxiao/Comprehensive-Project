@@ -51,6 +51,21 @@ public class UserService {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
+    private static String normalizeRoleForToken(String role) {
+        if (role == null) {
+            return "USER";
+        }
+        String trimmed = role.trim();
+        if (trimmed.isEmpty()) {
+            return "USER";
+        }
+        String upper = trimmed.toUpperCase();
+        if (upper.startsWith("ROLE_")) {
+            upper = upper.substring(5);
+        }
+        return upper;
+    }
+
     private Path ensureAvatarUploadDirectory() {
         try {
             Path dir = Paths.get(System.getProperty("user.dir"), "uploads", "avatars");
@@ -129,7 +144,7 @@ public class UserService {
         if (!passwordEncoder.matches(request.getPassword(), userInfo.getPassword())) {
             throw new RuntimeException("Invalid username or password");
         }
-        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getId(), userInfo.getRole());
+        return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getId(), normalizeRoleForToken(userInfo.getRole()));
     }
 
     private void logOperation(String adminUserName, String type, String details, String ip) {
@@ -178,7 +193,7 @@ public class UserService {
             targetUser.setNickname(request.getNickname());
         }
         if (request.getRole() != null) {
-            targetUser.setRole(request.getRole());
+            targetUser.setRole(normalizeRoleForToken(request.getRole()));
         }
         if (request.getStatus() != null) {
             targetUser.setStatus(request.getStatus());
@@ -323,6 +338,8 @@ public class UserService {
         safeUser.setNickname(user.getNickname());
         safeUser.setEmail(user.getEmail());
         safeUser.setPhone(user.getPhone());
+        safeUser.setRole(user.getRole());
+        safeUser.setStatus(user.getStatus());
         safeUser.setAvatarUrl(user.getAvatarUrl());
         safeUser.setBio(user.getBio());
 
@@ -407,6 +424,8 @@ public class UserService {
         safeUser.setNickname(user.getNickname());
         safeUser.setEmail(user.getEmail());
         safeUser.setPhone(user.getPhone());
+        safeUser.setRole(user.getRole());
+        safeUser.setStatus(user.getStatus());
         safeUser.setAvatarUrl(user.getAvatarUrl());
         safeUser.setBio(user.getBio());
         return safeUser;

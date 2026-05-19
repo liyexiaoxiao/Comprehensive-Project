@@ -26,7 +26,7 @@ public class MusicResource {
 	@Column(name = "file_url", nullable = false)
 	private String fileUrl;
 
-	@Column(name = "cover_url")
+	@Column(name = "cover_url", columnDefinition = "TEXT")
 	private String coverUrl;
 
 	private String source;
