@@ -109,11 +109,13 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { AUTH_TOKEN_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/api/http'
 import { getMeApi, loginApi, registerApi } from '@/api/auth'
+import { isAdminUser } from '@/api/user'
 
 const router = useRouter()
+const route = useRoute()
 
 const mode = ref('login')
 const isSubmitting = ref(false)
@@ -177,9 +179,15 @@ const handleSubmit = async () => {
       window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
 
       const currentUserResponse = await getMeApi()
-      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(currentUserResponse.data))
+      const currentUser = currentUserResponse.data
+      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(currentUser))
 
-      router.push('/service')
+      const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+      if (redirectPath) {
+        router.push(redirectPath)
+      } else {
+        router.push(isAdminUser(currentUser) ? '/admin' : '/service')
+      }
     } catch (error) {
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
       window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY)

@@ -107,22 +107,7 @@
             <div class="diary-editor-section">
               <h3 class="section-title">{{ selectedDateStr }} 情绪日记</h3>
               
-              <div v-if="selectedDiary" class="diary-view">
-                <div class="diary-tags">
-                  <span 
-                    v-for="emotion in selectedDiary.emotions" 
-                    :key="emotion"
-                    class="emotion-tag" 
-                    :style="{ backgroundColor: getEmotionColor(emotion) }"
-                  >
-                    {{ getEmotionName(emotion) }}
-                  </span>
-                </div>
-                <p class="diary-text">{{ selectedDiary.content }}</p>
-                <p class="diary-hint">日记写入后不可修改。</p>
-              </div>
-              
-              <div v-else-if="isSelectedDateToday" class="diary-edit">
+              <div v-if="isSelectedDateToday" class="diary-edit">
                 <div class="emotion-selector">
                   <span class="label">今日情绪：</span>
                   <div class="emotion-options">
@@ -142,11 +127,33 @@
                   class="diary-textarea" 
                   placeholder="写下今天的感受吧..."
                 ></textarea>
-                <button class="action-btn" @click="saveDiary">保存日记</button>
+                <div class="diary-actions">
+                  <button class="action-btn" @click="saveDiary">{{ selectedDiary ? '保存修改' : '保存日记' }}</button>
+                  <button v-if="selectedDiary" class="action-btn danger-btn" @click="deleteDiary">删除日记</button>
+                </div>
+                <p class="diary-hint">今日日记可反复修改；历史日记不可修改，但可删除。</p>
               </div>
 
+              <div v-else-if="selectedDiary" class="diary-view">
+                <div class="diary-tags">
+                  <span 
+                    v-for="emotion in selectedDiary.emotions" 
+                    :key="emotion"
+                    class="emotion-tag" 
+                    :style="{ backgroundColor: getEmotionColor(emotion) }"
+                  >
+                    {{ getEmotionName(emotion) }}
+                  </span>
+                </div>
+                <p class="diary-text">{{ selectedDiary.content }}</p>
+                <div class="diary-actions">
+                  <button class="action-btn danger-btn" @click="deleteDiary">删除日记</button>
+                </div>
+                <p class="diary-hint">历史日记不可修改，但可删除。</p>
+              </div>
+              
               <div v-else class="diary-empty-state">
-                <p class="diary-hint">只能编写今天的日记，历史日期仅支持查看。</p>
+                <p class="diary-hint">只能编写今天的日记；历史日期仅支持查看。</p>
               </div>
             </div>
           </div>
@@ -1101,11 +1108,12 @@ import {
   uploadMyAvatarApi,
   updateMyProfileApi,
 } from '@/api/user'
-import { getMusicFileUrl, getMusicListApi } from '@/api/python'
-import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
+import { getMusicFileUrl } from '@/api/python'
 import { 
   getMyMoodDiariesApi, 
   createMoodDiaryApi, 
+  updateMoodDiaryApi,
+  deleteMoodDiaryApi,
   getPostsApi,
   getMyPostsApi,
   getPostInteractionsApi,
@@ -1131,8 +1139,6 @@ import { appendUserBehaviorLogApi } from '@/api/data'
 import { getMyMeditationLogsApi, getMyGardenApi } from '@/api/meditation'
 
 const musicStore = useMusicStore()
-const realMusicFiles = ref([])
-const realMusicDurations = ref({})
 
 // --- Profile State ---
 const userProfile = ref({
@@ -1323,6 +1329,21 @@ const selectedDiary = computed(() => mockDiaries.value[selectedDateStr.value])
 
 const newDiary = ref({ emotions: ['Happy'], content: '' })
 
+const resetDiaryForm = () => {
+  newDiary.value = { emotions: ['Happy'], content: '' }
+}
+
+const syncDiaryFormFromSelected = () => {
+  if (!isSelectedDateToday.value) return
+  const diary = selectedDiary.value
+  if (!diary) {
+    resetDiaryForm()
+    return
+  }
+  const emotions = Array.isArray(diary.emotions) && diary.emotions.length ? [...diary.emotions] : ['Happy']
+  newDiary.value = { emotions, content: diary.content || '' }
+}
+
 const toggleEmotion = (emotion) => {
   const index = newDiary.value.emotions.indexOf(emotion)
   if (index > -1) {
@@ -1340,26 +1361,35 @@ const saveDiary = async () => {
     ElMessage.warning('只能编写今天的日记')
     return
   }
-  if (selectedDiary.value) {
-    ElMessage.warning('今日已写过日记，且不可修改')
+  if (!newDiary.value.content.trim()) {
+    ElMessage.warning('请先填写日记内容')
     return
   }
-  if (!newDiary.value.content.trim()) return
   try {
     const payload = {
       date: selectedDateStr.value,
       dominantEmotion: newDiary.value.emotions.join(','),
       context: newDiary.value.content
     }
-    const res = await createMoodDiaryApi(payload)
-    const targetId = res.data?.id || 0
-    ElMessage.success('日记保存成功')
+    const existingDiaryId = selectedDiary.value?.id
+    let targetId = 0
+    let actionType = 'save_diary'
+    if (existingDiaryId) {
+      await updateMoodDiaryApi(existingDiaryId, payload)
+      targetId = existingDiaryId
+      actionType = 'update_diary'
+      ElMessage.success('日记已更新')
+    } else {
+      const res = await createMoodDiaryApi(payload)
+      targetId = res.data?.id || 0
+      ElMessage.success('日记保存成功')
+    }
     await fetchDiaries()
     initDiaryWeeklyChart()
-    newDiary.value = { emotions: ['Happy'], content: '' }
+    syncDiaryFormFromSelected()
     
     appendUserBehaviorLogApi({
-      actionType: 'save_diary',
+      actionType,
       targetType: 'diary',
       targetId: targetId,
       metadata: { emotions: payload.dominantEmotion }
@@ -1367,14 +1397,49 @@ const saveDiary = async () => {
     
   } catch (e) {
     if (e.response?.status === 403) {
-      ElMessage.error('只能编写今天的日记')
+      ElMessage.error('历史日记不可修改')
     } else if (e.response?.status === 409) {
-      ElMessage.error('今日日记已存在，且不可修改')
+      ElMessage.error('今日日记已存在，请直接保存修改')
+      syncDiaryFormFromSelected()
+    } else if (e.response?.status === 404) {
+      ElMessage.error('日记不存在或已被删除')
     } else {
       ElMessage.error('保存失败')
     }
   }
 }
+
+const deleteDiary = async () => {
+  const diary = selectedDiary.value
+  if (!diary?.id) return
+  const confirmed = window.confirm('确定要删除这篇日记吗？删除后不可恢复。')
+  if (!confirmed) return
+  try {
+    await deleteMoodDiaryApi(diary.id)
+    ElMessage.success('日记已删除')
+    await fetchDiaries()
+    initDiaryWeeklyChart()
+    if (isSelectedDateToday.value) {
+      resetDiaryForm()
+    }
+    appendUserBehaviorLogApi({
+      actionType: 'delete_diary',
+      targetType: 'diary',
+      targetId: diary.id,
+      metadata: { date: selectedDateStr.value }
+    }).catch(e => console.warn('Log user behavior failed', e))
+  } catch (e) {
+    if (e.response?.status === 404) {
+      ElMessage.error('日记不存在或已被删除')
+    } else {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+watch([selectedDateStr, mockDiaries], () => {
+  syncDiaryFormFromSelected()
+})
 
 // --- Tab 2: Data State & Charts ---
 const trendChartRef = ref(null)
@@ -1693,6 +1758,17 @@ const fetchEmotionData = async () => {
     }
   } catch (e) {
     console.error('Failed to fetch emotion data:', e)
+    emotionSnapshots.value = []
+    trendData.value = [0, 0, 0, 0, 0, 0, 0]
+    distributionData.value = []
+    heatmapDataList.value = []
+    weeklyAverageScore.value = 0
+    syncDataCharts()
+    if (e?.code === 'ECONNABORTED' || String(e?.message || '').includes('timeout')) {
+      ElMessage.error('情绪数据服务请求超时，请确认 data-service 与 MongoDB 已启动')
+    } else {
+      ElMessage.error('获取情绪数据失败，请稍后重试')
+    }
   } finally {
     isEmotionDataLoading.value = false
     updateDataChartLoading(false)
@@ -1999,9 +2075,11 @@ watch(currentDate, () => {
 
 onMounted(() => {
   loadCurrentUserProfile()
-  loadRealMusicFiles().then(() => {
-    musicStore.fetchUserData()
-  })
+  Promise.all([
+    musicStore.fetchUserData(),
+    musicStore.fetchEmotionTags(),
+    musicStore.fetchPublicTracks(),
+  ])
   if (currentTab.value === 'diary') {
     fetchDiaries().then(() => {
       initDiaryWeeklyChart()
@@ -2047,29 +2125,25 @@ const uploadForm = ref({
 })
 
 const realMusicLibrary = computed(() => {
-  return buildRealMusicCategories(realMusicFiles.value, {
-    likedIds: musicStore.likedTrackIds,
-    collectedIds: musicStore.collectedTrackIds,
-    durationMap: realMusicDurations.value,
-  }).flatMap(category => category.tracks)
+  return musicStore.publicTracks
 })
 
 const likedTracksList = computed(() => {
   return musicStore.likedTrackIds.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+    return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
 
 const collectedTracksList = computed(() => {
   return musicStore.collectedTrackIds.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+    return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
 
 const playlistModalTracks = computed(() => {
   const ids = activePlaylist.value?.trackIds || []
   return ids.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+    return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
 
@@ -2092,26 +2166,11 @@ const formatDuration = (seconds) => {
 const formatPlaylistMeta = (playlist) => {
   const ids = playlist?.trackIds || []
   const tracks = ids.map(id => {
-    return musicStore.uploadedTracks.find(t => t.id === id) || realMusicLibrary.value.find(t => t.id === id)
+    return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
   const totalSeconds = tracks.reduce((sum, track) => sum + (track.duration || 0), 0)
   const totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
   return `${tracks.length} 首 · ${totalMinutes} 分钟`
-}
-
-const loadRealMusicFiles = async () => {
-  try {
-    const response = await getMusicListApi()
-    realMusicFiles.value = Array.isArray(response?.data?.music_files) ? response.data.music_files : []
-    const durationEntries = await Promise.all(
-      realMusicFiles.value.map(async (filename) => [filename, await readRemoteAudioDuration(getMusicFileUrl(filename))]),
-    )
-    realMusicDurations.value = Object.fromEntries(durationEntries)
-  } catch (error) {
-    realMusicFiles.value = []
-    realMusicDurations.value = {}
-    console.error('Personal space real music load failed:', error)
-  }
 }
 
 const handleAudioSelect = (event) => {
@@ -2141,7 +2200,7 @@ const stopUploadedTrackPreview = () => {
 }
 
 const toggleUploadedTrackPreview = async (track) => {
-  if (!uploadedPreviewAudio || !track?.filename) {
+  if (!uploadedPreviewAudio || (!track?.fileUrl && !track?.filename)) {
     ElMessage.warning('当前音乐暂不支持试听')
     return
   }
@@ -2154,7 +2213,7 @@ const toggleUploadedTrackPreview = async (track) => {
 
   try {
     uploadedPreviewAudio.pause()
-    uploadedPreviewAudio.src = getMusicFileUrl(track.filename)
+    uploadedPreviewAudio.src = track.fileUrl || getMusicFileUrl(track.filename)
     uploadedPreviewAudio.currentTime = 0
     await uploadedPreviewAudio.play()
     previewingUploadedTrackId.value = track.id
@@ -2271,13 +2330,12 @@ onBeforeUnmount(() => {
   stopUploadedTrackPreview()
 })
 
-const submitCreatePlaylist = () => {
+const submitCreatePlaylist = async () => {
   if (!newPlaylistName.value) return
-  musicStore.createPlaylist(newPlaylistName.value, newPlaylistDescription.value.trim())
+  await musicStore.createPlaylist(newPlaylistName.value, newPlaylistDescription.value.trim())
   newPlaylistName.value = ''
   newPlaylistDescription.value = ''
   closeMusicModal()
-  ElMessage.success('歌单创建成功')
 }
 
 const openAddToPlaylistModal = (track) => {
@@ -2285,10 +2343,9 @@ const openAddToPlaylistModal = (track) => {
   showAddToPlaylistModal.value = true
 }
 
-const confirmAddToPlaylist = (playlistId) => {
+const confirmAddToPlaylist = async (playlistId) => {
   if (trackToAdd.value) {
-    musicStore.addTrackToPlaylist(playlistId, trackToAdd.value)
-    ElMessage.success('已加入歌单')
+    await musicStore.addTrackToPlaylist(playlistId, trackToAdd.value)
   }
   showAddToPlaylistModal.value = false
   trackToAdd.value = null
@@ -2318,8 +2375,8 @@ const handlePlaylistWheel = (event) => {
   })
 }
 
-const deletePlaylistAndReset = (playlistId) => {
-  musicStore.deletePlaylist(playlistId)
+const deletePlaylistAndReset = async (playlistId) => {
+  await musicStore.deletePlaylist(playlistId)
   if (activePlaylist.value?.id === playlistId) {
     activePlaylist.value = null
     showPlaylistDetailModal.value = false
@@ -3566,6 +3623,17 @@ window.addEventListener('resize', () => {
   outline: none;
   border-color: var(--color-accent-sage);
   background: #fff;
+}
+
+.diary-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.diary-actions .action-btn {
+  width: auto;
+  flex: 1;
 }
 
 .action-btn {

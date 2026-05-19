@@ -16,6 +16,10 @@
               <span class="portal-icon">🌿</span>
               <span>个人空间</span>
             </button>
+            <button v-if="isAdmin" class="portal-btn" type="button" @click="$router.push({ name: 'admin' })">
+              <span class="portal-icon">🛠</span>
+              <span>管理员端</span>
+            </button>
           </div>
           <RouterLink class="back-link" to="/">回首页</RouterLink>
         </div>
@@ -27,6 +31,9 @@
               不同音乐区像花园里的不同小径，有的更安睡，有的更专注......
             </p>
           </div>
+          <button class="catalog-link-btn" type="button" @click="openAllPlaylists">
+            查看所有歌单
+          </button>
         </div>
 
         <div class="top-tools">
@@ -153,16 +160,57 @@
           >
             <span class="message-role">{{ message.role === 'assistant' ? '陪伴助手' : '你' }}</span>
             <p>{{ message.content }}</p>
+            <div v-if="message.emotions" class="emotion-tags">
+              <span v-if="message.emotions.speech" class="emotion-tag speech">
+                🎤 {{ message.emotions.speech }}
+              </span>
+              <span v-if="message.emotions.complex" class="emotion-tag complex">
+                💭 {{ message.emotions.complex }}
+              </span>
+            </div>
+            <div v-if="message.toolResults?.length" class="tool-results">
+              <section
+                v-for="(result, resultIndex) in message.toolResults"
+                :key="`${message.id}-tool-${resultIndex}`"
+                class="music-recommendations"
+              >
+                <button
+                  v-for="track in result.items"
+                  :key="track.id"
+                  class="recommend-track-card"
+                  type="button"
+                  @click="selectRecommendedTrack(track)"
+                >
+                  <img :src="track.cover" :alt="track.title" />
+                  <div>
+                    <strong>{{ track.title }}</strong>
+                    <span>{{ track.reason }}</span>
+                  </div>
+                </button>
+              </section>
+            </div>
             <small>{{ message.timestamp }}</small>
           </article>
         </div>
 
         <div class="voice-box">
+          <label class="voice-selector">
+            <span>AI 声线</span>
+            <select v-model="selectedTtsVoice">
+              <option
+                v-for="voice in ttsVoiceOptions"
+                :key="voice.value"
+                :value="voice.value"
+              >
+                {{ voice.label }}
+              </option>
+            </select>
+          </label>
           <button class="primary-button full" type="button" @click="toggleVoiceInput">
             <span>{{ isListening ? '结束语音输入' : '开始语音输入' }}</span>
           </button>
           <p class="heard-text">
-            {{ heardText || '点击后可直接说话；当前会先用浏览器识别语音，再调用后端进行情绪分析。' }}
+            {{ heardText || '点击后可直接说话；语音会转文字后发送给 AI，识别情绪并给出陪伴回复。' }}
           </p>
         </div>
       </section>
@@ -174,17 +222,20 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { initialMessages, mockReplies } from '@/data/mockContent'
-import { analyzeEmotionApi, getMusicFileByNameApi, getMusicFileUrl, getMusicListApi } from '@/api/python'
+import axios from 'axios'
+import { initialMessages } from '@/data/mockContent'
+import { getMusicFileByNameApi } from '@/api/python'
 import { useMusicStore } from '@/stores/musicStore'
 import { useSpeechStore } from '@/stores/speech'
-import { buildRealMusicCategories, getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
+import { buildMusicCategories, getRealMusicCover } from '@/utils/realMusic'
+import { getCurrentUserFromStorage, isAdminUser } from '@/api/user'
 
 const router = useRouter()
 const route = useRoute()
 const musicStore = useMusicStore()
 const speechStore = useSpeechStore()
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
+const isAdmin = computed(() => isAdminUser(getCurrentUserFromStorage()))
 
 const emptyTrack = {
   id: '',
@@ -213,35 +264,62 @@ const progressSeconds = ref(0)
 const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
+const selectedTtsVoice = ref('claire')
+const mediaRecorder = ref(null)
+const audioChunks = ref([])
+const audioCaptureActive = ref(false)
 const recognition = ref(null)
+const interimTranscript = ref('')
+const finalTranscript = ref('')
 const categoryScrollRef = ref(null)
-const realMusicFiles = ref([])
-const realMusicDurations = ref({})
 const currentTrack = ref({ ...emptyTrack })
 const isLoadingAudio = ref(false)
 
+const ttsVoiceOptions = [
+  { value: 'claire', label: 'Claire 温柔女声' },
+  { value: 'anna', label: 'Anna 沉稳女声' },
+  { value: 'bella', label: 'Bella 明亮女声' },
+  { value: 'diana', label: 'Diana 欢快女声' },
+  { value: 'alex', label: 'Alex 男声' },
+  { value: 'benjamin', label: 'Benjamin 男声' },
+  { value: 'charles', label: 'Charles 男声' },
+  { value: 'david', label: 'David 男声' },
+]
+
 const audioPlayer = new Audio()
+const assistantSpeechPlayer = new Audio()
 let currentObjectUrl = null
 let lastLoadedTrackId = ''
 
 const voiceSupported = typeof window !== 'undefined'
+  ? Boolean(navigator.mediaDevices?.getUserMedia)
+  : false
+
+const speechRecognitionSupported = typeof window !== 'undefined'
   ? Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   : false
 
+const currentEmotionForRecommend = computed(() => {
+  const storedEmotion = typeof window !== 'undefined'
+    ? window.localStorage.getItem('currentEmotion')
+    : ''
+  return speechStore.emotion || storedEmotion || 'neutral'
+})
+
 const musicCategories = computed(() => {
-  const realCategories = buildRealMusicCategories(realMusicFiles.value, {
+  const publicCategories = buildMusicCategories(musicStore.publicTracks, {
+    recommendedTracks: musicStore.recommendedTracks,
     likedIds: musicStore.likedTrackIds,
     collectedIds: musicStore.collectedTrackIds,
-    durationMap: realMusicDurations.value,
   })
-  const realLibrary = realCategories.flatMap(c => c.tracks)
+  const publicLibrary = musicStore.publicTracks
   const customCats = musicStore.customPlaylists.map((playlist) => ({
     id: playlist.id,
     name: playlist.name,
     description: playlist.description || '自建歌单',
-    tracks: playlist.trackIds?.map(id => musicStore.uploadedTracks.find(t => t.id === id) || realLibrary.find(t => t.id === id)).filter(Boolean) || [],
+    tracks: playlist.trackIds?.map(id => musicStore.resolveTrackById(id) || publicLibrary.find(track => track.id === id)).filter(Boolean) || [],
   }))
-  return [...realCategories, ...customCats]
+  return [...publicCategories, ...customCats]
 })
 
 const activeCategory = computed(
@@ -314,24 +392,21 @@ const ensureCurrentTrack = () => {
   }
 }
 
-const loadRealMusicLibrary = async () => {
+const loadMusicLibrary = async () => {
   try {
-    const response = await getMusicListApi()
-    realMusicFiles.value = Array.isArray(response?.data?.music_files) ? response.data.music_files : []
-    const durationEntries = await Promise.all(
-      realMusicFiles.value.map(async (filename) => [filename, await readRemoteAudioDuration(getMusicFileUrl(filename))]),
-    )
-    realMusicDurations.value = Object.fromEntries(durationEntries)
+    await Promise.all([
+      musicStore.fetchEmotionTags(),
+      musicStore.fetchPublicTracks(),
+    ])
+    await musicStore.fetchRecommendedTracks(currentEmotionForRecommend.value)
     if (!musicCategories.value.some((category) => category.id === activeCategoryId.value)) {
       activeCategoryId.value = musicCategories.value[0]?.id || 'recommend'
     }
     ensureCurrentTrack()
   } catch (error) {
-    realMusicFiles.value = []
-    realMusicDurations.value = {}
     currentTrack.value = { ...emptyTrack }
-    ElMessage.error('真实音乐目录加载失败，请确认 Python backend 已启动。')
-    console.error('Load real music list failed:', error)
+    ElMessage.error('音乐目录加载失败，请确认 music-service 已启动。')
+    console.error('Load music library failed:', error)
   }
 }
 
@@ -357,6 +432,18 @@ const loadAudioForTrack = async (track, autoplay = true) => {
 
     if (track.file) {
       sourceBlob = track.file
+    } else if (track.fileUrl) {
+      cleanupObjectUrl()
+      audioPlayer.src = track.fileUrl
+      audioPlayer.currentTime = progressSeconds.value || 0
+      audioPlayer.volume = volume.value / 100
+      lastLoadedTrackId = track.id
+
+      if (autoplay) {
+        await audioPlayer.play()
+        isPlaying.value = true
+      }
+      return
     } else if (track.filename) {
       const response = await getMusicFileByNameApi(track.filename)
       sourceBlob = response.data
@@ -397,6 +484,15 @@ const selectTrack = async (track) => {
   currentTrack.value = { ...track }
   progressSeconds.value = 0
   await loadAudioForTrack(currentTrack.value, true)
+}
+
+const selectRecommendedTrack = async (track) => {
+  if (!track?.filename) return
+  await selectTrack({
+    ...track,
+    type: track.type || 'AI推荐',
+    tags: Array.isArray(track.tags) ? track.tags : [track.emotion || 'neutral'],
+  })
 }
 
 const togglePlayback = async () => {
@@ -453,6 +549,7 @@ const getTrackTags = (track, categoryId = activeCategory.value?.id) => {
 
 const normalizePlayerTrack = (track) => ({
   id: track.id,
+  musicResourceId: track.musicResourceId ?? null,
   title: track.title,
   artist: track.artist?.trim() || '佚名',
   duration: track.duration || 0,
@@ -461,6 +558,7 @@ const normalizePlayerTrack = (track) => ({
   type: track.file ? '本地上传' : '真实音乐',
   emotion: track.emotion || 'neutral',
   filename: track.filename,
+  fileUrl: track.fileUrl || '',
 })
 
 const openPlayerPage = () => {
@@ -472,6 +570,7 @@ const openPlayerPage = () => {
   window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
     source: 'service',
     returnTo: '/service',
+    categoryId: activeCategory.value?.id || 'recommend',
     categoryName: activeCategory.value?.name || '音乐空间',
     track: normalizePlayerTrack(currentTrack.value),
     queue: queuePayload,
@@ -480,117 +579,448 @@ const openPlayerPage = () => {
   router.push({ name: 'music-player' })
 }
 
+const openAllPlaylists = () => {
+  router.push({
+    name: 'all-playlists',
+    query: {
+      playlist: activeCategory.value?.id || 'recommend',
+    },
+  })
+}
+
 const timeStamp = () =>
   new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
-const pushAssistantMessage = (content) => {
+const pushAssistantMessage = (content, emotions = null, toolResults = null) => {
   messages.value.push({
     id: `assistant-${Date.now()}-${Math.random()}`,
     role: 'assistant',
     content,
     timestamp: timeStamp(),
+    emotions,
+    toolResults,
   })
 }
 
-const buildEmotionReply = (emotion) => {
-  const normalizedEmotion = String(emotion || '').toLowerCase()
-
-  if (normalizedEmotion.includes('joy') || normalizedEmotion.includes('happy')) {
-    return `我感受到你现在更接近“${emotion}”。可以顺着这份轻盈感，去听一些更明亮的旋律。`
-  }
-
-  if (normalizedEmotion.includes('sad')) {
-    return `我感受到你现在更接近“${emotion}”。先不用急着振作，我们可以先去冥想室，让情绪慢慢落下来。`
-  }
-
-  if (normalizedEmotion.includes('anger')) {
-    return `我感受到你现在更接近“${emotion}”。先放慢呼吸，再选择一些舒缓的声音，通常会更容易稳下来。`
-  }
-
-  if (normalizedEmotion.includes('fear') || normalizedEmotion.includes('anxiety')) {
-    return `我感受到你现在更接近“${emotion}”。先给自己一点安全感，去冥想室或轻音乐区会更合适。`
-  }
-
-  return `我感受到你现在更接近“${emotion}”。如果你愿意，可以继续说下去，我会根据你的状态继续陪你。`
-}
-
-const handleTranscript = async (transcript) => {
-  heardText.value = `已识别：${transcript}`
+const pushUserMessage = (content) => {
+  const msgId = `user-${Date.now()}-${Math.random()}`
   messages.value.push({
-    id: `user-${Date.now()}`,
+    id: msgId,
     role: 'user',
-    content: transcript,
+    content,
     timestamp: timeStamp(),
   })
+  return msgId
+}
+
+const updateUserMessage = (msgId, content) => {
+  const msg = messages.value.find(m => m.id === msgId)
+  if (msg) {
+    msg.content = content
+  }
+}
+
+const playAssistantSpeech = async (audioUrl) => {
+  if (!audioUrl) return
+
+  const sourceUrl = audioUrl.startsWith('http')
+    ? audioUrl
+    : `http://127.0.0.1:5000${audioUrl}`
 
   try {
-    const response = await analyzeEmotionApi({ text: transcript })
-    const emotion = response?.data?.emotion?.trim()
+    assistantSpeechPlayer.pause()
+    assistantSpeechPlayer.src = sourceUrl
+    assistantSpeechPlayer.currentTime = 0
+    await assistantSpeechPlayer.play()
+  } catch (error) {
+    console.error('AI speech playback failed:', error)
+  }
+}
 
-    if (!emotion) {
-      throw new Error('empty emotion')
+const getCompanionSessionId = () => {
+  const storageKey = 'companion_session_id'
+  let sid = localStorage.getItem(storageKey)
+  if (!sid) {
+    sid = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    localStorage.setItem(storageKey, sid)
+  }
+  return sid
+}
+
+const getCurrentUserId = () => {
+  const candidates = [
+    localStorage.getItem('userId'),
+    localStorage.getItem('user_id'),
+    localStorage.getItem('uid'),
+  ]
+  for (const item of candidates) {
+    const n = Number(item)
+    if (Number.isInteger(n) && n > 0) {
+      return n
+    }
+  }
+  return 10001
+}
+
+const createAssistantPlaceholder = () => {
+  const id = `assistant-${Date.now()}-${Math.random()}`
+  const msg = {
+    id,
+    role: 'assistant',
+    content: '正在思考中...',
+    timestamp: timeStamp(),
+    emotions: null,
+    toolResults: null,
+  }
+  messages.value.push(msg)
+  return id
+}
+
+const updateAssistantMessage = (msgId, content, emotions = null, toolResults = undefined) => {
+  const msg = messages.value.find(m => m.id === msgId)
+  if (!msg) return
+  msg.content = content
+  if (emotions) {
+    msg.emotions = emotions
+  }
+  if (toolResults !== undefined) {
+    msg.toolResults = toolResults
+  }
+}
+
+const readStreamAsText = async (streamResponse, assistantMsgId) => {
+  const reader = streamResponse.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let collectedText = ''
+  let finalDone = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() || ''
+
+    for (const chunk of chunks) {
+      const line = chunk.split('\n').find(l => l.startsWith('data: '))
+      if (!line) continue
+
+      const raw = line.slice(6)
+      if (!raw) continue
+
+      let payload
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        continue
+      }
+
+      if (payload.type === 'delta') {
+        collectedText += payload.text || ''
+        updateAssistantMessage(assistantMsgId, collectedText || '正在思考中...')
+      } else if (payload.type === 'done') {
+        finalDone = payload
+      } else if (payload.type === 'error') {
+        throw new Error(payload.error || 'stream error')
+      }
+    }
+  }
+
+  return { collectedText, finalDone }
+}
+
+const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
+  try {
+    const userId = getCurrentUserId()
+    const sessionId = getCompanionSessionId()
+
+    let finalTranscript = (transcript || '').trim()
+    let detectedEmotion = null
+    let emotionDetails = null
+
+    // 阶段1：语音先做识别与情绪分析
+    if (audioBlob) {
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.wav')
+      if (finalTranscript) {
+        formData.append('transcript', finalTranscript)
+      }
+
+      const analyzeResp = await axios.post('/py-api/api/companion/audio/analyze', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000,
+      })
+
+      const analyzeData = analyzeResp.data || {}
+      finalTranscript = (analyzeData.transcript || finalTranscript).trim()
+      detectedEmotion = analyzeData.detected_emotion || null
+      emotionDetails = analyzeData.emotion_details || null
+
+      if (!finalTranscript) {
+        throw new Error('No transcript from audio analyze')
+      }
+
+      if (userMsgId) {
+        updateUserMessage(userMsgId, finalTranscript)
+      } else {
+        pushUserMessage(finalTranscript)
+      }
+      heardText.value = `已识别：${finalTranscript}`
     }
 
-    speechStore.setEmotion(emotion)
-    window.localStorage.setItem('currentEmotion', emotion)
-    heardText.value = `已识别：${transcript} | 当前情绪：${emotion}`
-    pushAssistantMessage(buildEmotionReply(emotion))
-    return
+    // 阶段2：普通聊天，支持后端 LLM tool calling
+    const assistantMsgId = createAssistantPlaceholder()
+    const chatResp = await axios.post('/py-api/api/companion/chat', {
+      userId,
+      sessionId,
+      text: finalTranscript,
+      detected_emotion: detectedEmotion,
+      tts_voice: selectedTtsVoice.value,
+    }, { timeout: 180000 })
+
+    const chatData = chatResp.data || {}
+    const replyText = chatData.reply || '我在这里。'
+    const llmEmotion = chatData.emotion || null
+    const toolResults = chatData.tool_results || []
+
+    const emotions = {
+      speech: detectedEmotion,
+      llm: llmEmotion,
+      complex: emotionDetails?.complex_emotion || null,
+    }
+    updateAssistantMessage(assistantMsgId, replyText, emotions, toolResults)
+    await playAssistantSpeech(chatData.audio_url)
   } catch (error) {
-    const reply = mockReplies[Math.floor(Math.random() * mockReplies.length)]
-    pushAssistantMessage(reply)
-    ElMessage.warning('情绪分析暂时不可用，已切换为本地陪伴回复。')
-    console.error('Emotion analysis failed:', error)
+    console.error(error)
+    pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
+    ElMessage.error('陪伴接口调用失败，请检查后端服务与 API Key。')
   }
 }
 
 const stopVoiceRecognition = () => {
-  if (recognition.value && isListening.value) {
-    recognition.value.stop()
-  }
-  isListening.value = false
-}
+  console.log('停止录音和语音识别')
 
-const setupVoiceRecognition = () => {
-  if (!voiceSupported) {
-    return
-  }
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  const instance = new SpeechRecognition()
-  instance.lang = 'zh-CN'
-  instance.interimResults = false
-  instance.maxAlternatives = 1
-
-  instance.onstart = () => {
-    isListening.value = true
-    heardText.value = '正在聆听，请开始说话。'
-  }
-
-  instance.onresult = (event) => {
-    const transcript = event.results?.[0]?.[0]?.transcript?.trim()
-    if (transcript) {
-      handleTranscript(transcript)
+  // 停止语音识别
+  if (recognition.value) {
+    try {
+      recognition.value.stop()
+    } catch (e) {
+      console.warn('停止语音识别失败:', e)
     }
   }
 
-  instance.onerror = () => {
-    isListening.value = false
-    heardText.value = '语音识别暂时失败了，可以稍后再试。'
-    pushAssistantMessage('刚才的语音没有顺利识别，我们也可以先听会儿音乐，再重新开始。')
+  // 停止录音
+  if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
+    console.log('停止 MediaRecorder，状态:', mediaRecorder.value.state)
+    mediaRecorder.value.stop()
   }
-
-  instance.onend = () => {
-    isListening.value = false
-  }
-
-  recognition.value = instance
+  // 注意：isListening 会在 mediaRecorder.onstop 中设置为 false
 }
 
-const toggleVoiceInput = () => {
+const setupMediaRecorder = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const recorder = new MediaRecorder(stream)
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.value.push(event.data)
+      }
+    }
+
+    recorder.onstop = async () => {
+      console.log('录音停止，开始处理音频...')
+      // 合并音频块
+      const audioBlob = new Blob(audioChunks.value, { type: recorder.mimeType })
+      audioChunks.value = []
+      console.log('音频块大小:', audioBlob.size)
+
+      // 停止所有音频轨道
+      stream.getTracks().forEach(track => track.stop())
+
+      // 转换为 WAV 格式
+      if (audioBlob.size > 0) {
+        heardText.value = '正在处理音频...'
+
+        // 先添加用户消息占位符
+        const userText = finalTranscript.value.trim() || '正在识别中...'
+        const userMsgId = pushUserMessage(userText)
+
+        try {
+          const wavBlob = await convertToWav(audioBlob)
+          console.log('WAV 转换完成，大小:', wavBlob.size)
+
+          console.log('准备调用 askCompanion...')
+          // 传递浏览器识别的文本和用户消息ID
+          await askCompanion(finalTranscript.value.trim(), wavBlob, userMsgId)
+          console.log('askCompanion 调用完成')
+        } catch (error) {
+          console.error('音频转换失败:', error)
+          ElMessage.error('音频处理失败，请重试')
+        }
+      } else {
+        console.log('音频块为空，跳过处理')
+      }
+
+      // 重置状态
+      audioCaptureActive.value = false
+      isListening.value = false
+      finalTranscript.value = ''
+      interimTranscript.value = ''
+    }
+
+    mediaRecorder.value = recorder
+    return true
+  } catch (error) {
+    console.error('无法访问麦克风:', error)
+    ElMessage.error('无法访问麦克风，请检查浏览器权限。')
+    return false
+  }
+}
+
+const convertToWav = async (blob) => {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+  const arrayBuffer = await blob.arrayBuffer()
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+  // 转换为 WAV 格式
+  const wavBuffer = audioBufferToWav(audioBuffer)
+  return new Blob([wavBuffer], { type: 'audio/wav' })
+}
+
+const audioBufferToWav = (buffer) => {
+  const numOfChan = buffer.numberOfChannels
+  const length = buffer.length * numOfChan * 2 + 44
+  const bufferArray = new ArrayBuffer(length)
+  const view = new DataView(bufferArray)
+  const channels = []
+  let pos = 0
+
+  // 写入 WAV 文件头
+  setUint32(0x46464952) // "RIFF"
+  setUint32(length - 8) // file length - 8
+  setUint32(0x45564157) // "WAVE"
+
+  setUint32(0x20746d66) // "fmt " chunk
+  setUint32(16) // length = 16
+  setUint16(1) // PCM (uncompressed)
+  setUint16(numOfChan)
+  setUint32(buffer.sampleRate)
+  setUint32(buffer.sampleRate * 2 * numOfChan) // avg. bytes/sec
+  setUint16(numOfChan * 2) // block-align
+  setUint16(16) // 16-bit
+
+  setUint32(0x61746164) // "data" - chunk
+  setUint32(length - pos - 4) // chunk length
+
+  // 写入音频数据
+  for (let i = 0; i < buffer.numberOfChannels; i++) {
+    channels.push(buffer.getChannelData(i))
+  }
+
+  // 交错写入所有声道的样本
+  for (let i = 0; i < buffer.length; i++) {
+    for (let channel = 0; channel < numOfChan; channel++) {
+      const sample = Math.max(-1, Math.min(1, channels[channel][i]))
+      view.setInt16(pos, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
+      pos += 2
+    }
+  }
+
+  return bufferArray
+
+  function setUint16(data) {
+    view.setUint16(pos, data, true)
+    pos += 2
+  }
+
+  function setUint32(data) {
+    view.setUint32(pos, data, true)
+    pos += 4
+  }
+}
+
+const setupSpeechRecognition = () => {
+  if (!speechRecognitionSupported) {
+    console.log('浏览器不支持语音识别')
+    return false
+  }
+
+  try {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognitionInstance = new SpeechRecognition()
+
+    recognitionInstance.continuous = true
+    recognitionInstance.interimResults = true
+    recognitionInstance.lang = 'zh-CN'
+
+    recognitionInstance.onstart = () => {
+      console.log('语音识别已启动')
+      finalTranscript.value = ''
+      interimTranscript.value = ''
+    }
+
+    recognitionInstance.onresult = (event) => {
+      let interim = ''
+      let final = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          final += transcript
+        } else {
+          interim += transcript
+        }
+      }
+
+      if (final) {
+        finalTranscript.value += final
+        console.log('最终识别结果:', finalTranscript.value)
+      }
+
+      interimTranscript.value = interim
+
+      // 更新显示文本
+      const displayText = finalTranscript.value + (interim ? ` ${interim}` : '')
+      if (displayText) {
+        heardText.value = `正在识别：${displayText}`
+      }
+    }
+
+    recognitionInstance.onerror = (event) => {
+      console.error('语音识别错误:', event.error)
+
+      // 处理不同类型的错误
+      if (event.error === 'network') {
+        console.warn('语音识别网络错误（这是正常的，Chrome的语音识别需要网络）')
+        // 不显示错误消息，因为录音仍然可以工作
+      } else if (event.error === 'no-speech') {
+        console.log('未检测到语音')
+      } else if (event.error === 'aborted') {
+        console.log('语音识别被中止')
+      } else {
+        console.error('其他语音识别错误:', event.error)
+      }
+    }
+
+    recognitionInstance.onend = () => {
+      console.log('语音识别已结束')
+    }
+
+    recognition.value = recognitionInstance
+    return true
+  } catch (error) {
+    console.error('初始化语音识别失败:', error)
+    return false
+  }
+}
+
+const toggleVoiceInput = async () => {
   if (!voiceSupported) {
-    ElMessage.warning('当前浏览器暂不支持语音识别。')
-    pushAssistantMessage('这个浏览器还不能直接语音输入，但页面结构已经为后续接口接入预留好了。')
+    ElMessage.warning('当前浏览器暂不支持录音。')
+    pushAssistantMessage('这个浏览器暂时不能录音，可以换用 Chrome 或 Edge 再试一次。')
     return
   }
 
@@ -599,7 +1029,31 @@ const toggleVoiceInput = () => {
     return
   }
 
-  recognition.value?.start()
+  // 每次录音前重新初始化 MediaRecorder（因为 stream 在上次录音结束时已关闭）
+  const success = await setupMediaRecorder()
+  if (!success) {
+    return
+  }
+
+  // 尝试启动语音识别（可选功能，失败不影响录音）
+  if (speechRecognitionSupported) {
+    const recognitionReady = setupSpeechRecognition()
+    if (recognitionReady && recognition.value) {
+      try {
+        recognition.value.start()
+        console.log('语音识别已启动')
+      } catch (error) {
+        console.warn('启动语音识别失败（不影响录音）:', error)
+      }
+    }
+  }
+
+  // 开始录音
+  audioChunks.value = []
+  mediaRecorder.value.start()
+  audioCaptureActive.value = true
+  isListening.value = true
+  heardText.value = '正在录音，请开始说话...'
 }
 
 watch(activeCategoryId, () => {
@@ -627,6 +1081,17 @@ watch(
     ensureCurrentTrack()
   },
   { deep: true },
+)
+
+watch(
+  () => speechStore.emotion,
+  async (emotion) => {
+    const nextEmotion = emotion || currentEmotionForRecommend.value
+    await musicStore.fetchRecommendedTracks(nextEmotion)
+    if (activeCategoryId.value === 'recommend' || activeCategoryId.value === 'guess') {
+      ensureCurrentTrack()
+    }
+  },
 )
 
 watch(
@@ -686,13 +1151,15 @@ audioPlayer.onended = () => {
 }
 
 onMounted(async () => {
-  setupVoiceRecognition()
-  await loadRealMusicLibrary()
+  setupSpeechRecognition()
   await musicStore.fetchUserData()
+  await loadMusicLibrary()
 })
 
 onBeforeUnmount(() => {
   stopVoiceRecognition()
+  assistantSpeechPlayer.pause()
+  assistantSpeechPlayer.src = ''
   audioPlayer.pause()
   audioPlayer.src = ''
   cleanupObjectUrl()
@@ -879,6 +1346,7 @@ onBeforeUnmount(() => {
 }
 
 .back-link,
+.catalog-link-btn,
 .mood-chip,
 .count-pill,
 .status-pill {
@@ -899,6 +1367,20 @@ onBeforeUnmount(() => {
 }
 .back-link:hover {
   background: var(--color-text-secondary);
+}
+
+.catalog-link-btn {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.catalog-link-btn:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
 }
 
 .mood-chip,
@@ -1284,6 +1766,91 @@ onBeforeUnmount(() => {
   align-self: flex-end;
 }
 
+.emotion-tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.emotion-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-primary);
+}
+
+.emotion-tag.speech {
+  background: rgba(200, 138, 117, 0.2);
+  color: var(--color-accent-terracotta);
+}
+
+.emotion-tag.complex {
+  background: rgba(139, 166, 140, 0.2);
+  color: var(--color-accent-sage);
+}
+
+.tool-results {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.music-recommendations {
+  display: grid;
+  gap: 10px;
+}
+
+.recommend-track-card {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(44, 48, 46, 0.08);
+  text-align: left;
+  color: var(--color-text-primary);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recommend-track-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.recommend-track-card img {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.recommend-track-card div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.recommend-track-card strong,
+.recommend-track-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recommend-track-card span {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
 .voice-box {
   margin-top: auto;
   display: flex;
@@ -1297,6 +1864,30 @@ onBeforeUnmount(() => {
   color: var(--color-bg-primary);
   padding: 16px;
   font-size: 1.1rem;
+}
+
+.voice-selector {
+  display: grid;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.voice-selector select {
+  width: 100%;
+  border: 1px solid rgba(92, 78, 61, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--color-text-primary);
+  padding: 12px 14px;
+  font: inherit;
+  outline: none;
+}
+
+.voice-selector select:focus {
+  border-color: var(--color-accent-sage);
+  box-shadow: 0 0 0 3px rgba(139, 166, 140, 0.18);
 }
 
 @keyframes spin {
@@ -1327,6 +1918,11 @@ onBeforeUnmount(() => {
   }
   .volume-control {
     display: none;
+  }
+
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

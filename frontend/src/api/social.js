@@ -27,7 +27,6 @@ export const deleteInteractionApi = (interactionId) => http.delete(`/api/social/
 
 // --- Friends ---
 export const getMyFriendsApi = () => http.get('/api/social/v1/me/friends')
-export const addFriendApi = (payload) => http.post('/api/social/v1/me/friends', payload)
 export const updateFriendIntimacyApi = (friendshipId, payload) => http.put(`/api/social/v1/me/friends/${friendshipId}/intimacy`, payload)
 export const deleteFriendshipApi = (friendshipId) => http.delete(`/api/social/v1/me/friends/${friendshipId}`)
 

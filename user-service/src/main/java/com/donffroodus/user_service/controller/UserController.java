@@ -202,6 +202,8 @@ public class UserController {
             userInfoRequest.setNickname(user.getNickname());
             userInfoRequest.setEmail(user.getEmail());
             userInfoRequest.setPhone(user.getPhone());
+            userInfoRequest.setRole(user.getRole());
+            userInfoRequest.setStatus(user.getStatus());
             userInfoRequest.setAvatarUrl(user.getAvatarUrl());
             userInfoRequest.setBio(user.getBio());
             userInfoRequests[i] = userInfoRequest;
