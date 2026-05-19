@@ -66,6 +66,7 @@ services:
       - DB_HOST=${DB_HOST}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
 
   social-service:
     build: ./social-service
