@@ -7,3 +7,4 @@ huggingface_hub==0.26.2
 langdetect==1.0.9
 deep-translator==1.11.4
 sentencepiece==0.2.0
+pytest==9.0.3
