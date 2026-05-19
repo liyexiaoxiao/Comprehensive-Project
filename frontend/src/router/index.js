@@ -29,6 +29,19 @@ const routes = [
     name: 'admin',
     component: () => import('@/views/AdminDashboard.vue'),
     meta: { requiresAdmin: true },
+    redirect: { name: 'admin-users' },
+    children: [
+      {
+        path: 'users',
+        name: 'admin-users',
+        component: () => import('@/views/admin/AdminUsersPage.vue'),
+      },
+      {
+        path: 'official-playlists',
+        name: 'admin-official-playlists',
+        component: () => import('@/views/admin/AdminOfficialPlaylistsPage.vue'),
+      },
+    ],
   },
 ]
 

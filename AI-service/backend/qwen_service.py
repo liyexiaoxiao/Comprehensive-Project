@@ -6,9 +6,9 @@ from openai import OpenAI
 from music_tools import recommend_music
 
 
-load_dotenv()
-
-QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+BASE_DIR = os.path.dirname(__file__)
+DOTENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(DOTENV_PATH)
 
 COMPANION_TOOLS = [
     {
@@ -50,12 +50,13 @@ def _has_music_intent(text: str):
     return any(keyword in lowered for keyword in MUSIC_INTENT_KEYWORDS)
 
 
-def _run_companion_tool(name: str, arguments: dict):
+def _run_companion_tool(name: str, arguments: dict, user_id: int = 10001):
     if name == "recommend_music":
         return recommend_music(
             query=arguments.get("query", ""),
             emotion=arguments.get("emotion"),
             limit=arguments.get("limit", 3),
+            user_id=user_id,
         )
     raise ValueError(f"Unsupported tool: {name}")
 
@@ -122,11 +123,12 @@ def build_companion_prompt(user_text: str, detected_emotion: str = None, history
 
 def analyze_emotion_by_qwen(user_text: str):
     """通过 Qwen 输出单一情绪标签。"""
-    if not QWEN_API_KEY:
+    qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not qwen_api_key:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
     client = OpenAI(
-        api_key=QWEN_API_KEY,
+        api_key=qwen_api_key,
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
@@ -148,10 +150,11 @@ def analyze_emotion_by_qwen(user_text: str):
 
 def query_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
     """调用 DashScope 兼容 OpenAI 接口，返回模型原始文本。"""
-    if not QWEN_API_KEY:
+    qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not qwen_api_key:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
-    client = OpenAI(api_key=QWEN_API_KEY, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     completion = client.chat.completions.create(
         model="qwen3.5-plus",
@@ -165,12 +168,13 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None, history: 
     return content
 
 
-def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None, history: list = None):
+def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None, history: list = None, user_id: int = 10001):
     """Call Qwen with native tool calling and return parsed reply plus tool results."""
-    if not QWEN_API_KEY:
+    qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not qwen_api_key:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
-    client = OpenAI(api_key=QWEN_API_KEY, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
     messages = build_companion_prompt(user_text, detected_emotion, history)
     messages.insert(1, {
         "role": "system",
@@ -208,7 +212,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
             arguments = json.loads(function.arguments or "{}")
             if not arguments.get("emotion") and detected_emotion:
                 arguments["emotion"] = detected_emotion
-            result = _run_companion_tool(function.name, arguments)
+            result = _run_companion_tool(function.name, arguments, user_id=user_id)
             tool_results.append(result)
             messages.append({
                 "role": "tool",
@@ -248,10 +252,11 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
 
 def stream_qwen_companion(user_text: str, detected_emotion: str = None, history: list = None):
     """流式调用 Qwen，逐段产出文本 token。"""
-    if not QWEN_API_KEY:
+    qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not qwen_api_key:
         raise RuntimeError("未配置 DASHSCOPE_API_KEY")
 
-    client = OpenAI(api_key=QWEN_API_KEY, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     stream = client.chat.completions.create(
         model="qwen3.5-plus",

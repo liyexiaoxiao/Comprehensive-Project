@@ -1,0 +1,11 @@
+flask>=3.0.0
+flask-cors>=4.0.0
+transformers>=4.36.2
+torch
+langdetect>=1.0.9
+deep-translator>=1.11.4
+numpy
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+

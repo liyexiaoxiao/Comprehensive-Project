@@ -10,6 +10,8 @@ echo.
 echo Cleaning existing backend processes on service ports...
 
 call :stop_port 5000 Python Backend
+call :stop_port 5001 AI Service
+call :stop_port 5003 Emotion Recognition
 call :stop_port 8080 API Gateway
 call :stop_port 8081 Music Service
 call :stop_port 8082 User Service
@@ -20,6 +22,12 @@ call :stop_port 8085 Meditation Service
 echo.
 echo Starting Python Backend...
 start "Python Backend" cmd /k "cd /d ""%ROOT%\backend"" && call pip install -r requirements.txt && python app.py"
+
+echo Starting AI Service...
+start "AI Service" cmd /k "cd /d ""%ROOT%\AI-service\backend"" && call pip install -r requirements.txt && set AI_SERVICE_PORT=5001 && python app.py"
+
+echo Starting Emotion Recognition Service...
+start "Emotion Recognition" cmd /k "cd /d ""%ROOT%\AI-service\emotion_recog"" && call pip install -r requirements.txt && set PORT=5003 && python app.py"
 
 echo Starting API Gateway...
 start "API Gateway" cmd /k "cd /d ""%ROOT%\api-gateway"" && call mvnw.cmd spring-boot:run"

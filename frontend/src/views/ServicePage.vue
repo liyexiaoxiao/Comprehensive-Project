@@ -222,7 +222,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import { analyzeCompanionAudioApi, askCompanionApi, getAiAssetUrl } from '@/api/ai'
 import { initialMessages } from '@/data/mockContent'
 import { getMusicFileByNameApi } from '@/api/python'
 import { useMusicStore } from '@/stores/musicStore'
@@ -623,9 +623,7 @@ const updateUserMessage = (msgId, content) => {
 const playAssistantSpeech = async (audioUrl) => {
   if (!audioUrl) return
 
-  const sourceUrl = audioUrl.startsWith('http')
-    ? audioUrl
-    : `http://127.0.0.1:5000${audioUrl}`
+  const sourceUrl = getAiAssetUrl(audioUrl)
 
   try {
     assistantSpeechPlayer.pause()
@@ -748,7 +746,7 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
         formData.append('transcript', finalTranscript)
       }
 
-      const analyzeResp = await axios.post('/py-api/api/companion/audio/analyze', formData, {
+      const analyzeResp = await analyzeCompanionAudioApi(formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 180000,
       })
@@ -772,7 +770,7 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
 
     // 阶段2：普通聊天，支持后端 LLM tool calling
     const assistantMsgId = createAssistantPlaceholder()
-    const chatResp = await axios.post('/py-api/api/companion/chat', {
+    const chatResp = await askCompanionApi({
       userId,
       sessionId,
       text: finalTranscript,

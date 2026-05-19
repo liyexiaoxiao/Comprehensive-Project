@@ -7,6 +7,7 @@ import requests
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
+from kimi_service import generate_meditation_guide
 from music_tools import MUSIC_DIR, list_music_files
 from qwen_service import query_qwen_companion_with_tools, stream_qwen_companion
 from tts_service import synthesize_speech
@@ -116,6 +117,30 @@ def emotion_music(emotion):
     return send_from_directory(MUSIC_DIR, files[0], mimetype='audio/mpeg')
 
 
+@app.route('/api/meditation/guide', methods=['POST', 'OPTIONS'])
+def meditation_guide():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    payload = request.get_json(silent=True) or {}
+    emotion_name = (payload.get('emotion') or '').strip()
+    if not emotion_name:
+        return jsonify({'error': 'emotion is required'}), 400
+
+    try:
+        guide = generate_meditation_guide(emotion_name)
+        return jsonify({
+            'emotion': emotion_name,
+            'guide': guide,
+        })
+    except RuntimeError as e:
+        error_message = str(e)
+        status_code = 400 if '不支持的情绪类型' in error_message else 500
+        return jsonify({'error': error_message}), status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/companion/chat', methods=['POST', 'OPTIONS'])
 def companion_chat():
     """Support text/audio chat, emotion recognition, TTS, and MongoDB history."""
@@ -196,7 +221,7 @@ def companion_chat():
             emotion_label=detected_emotion,
         )
 
-        model_result = query_qwen_companion_with_tools(transcript, detected_emotion, history)
+        model_result = query_qwen_companion_with_tools(transcript, detected_emotion, history, user_id=user_id)
         model_raw = model_result.get('raw', '')
         emotion = model_result.get('emotion') or '平静'
         reply = model_result.get('reply') or model_raw
@@ -411,4 +436,4 @@ def companion_history():
 
 if __name__ == '__main__':
     print('Flask running...')
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('AI_SERVICE_PORT', '5001')), debug=True)

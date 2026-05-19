@@ -207,8 +207,8 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
 import CircleTimer from '@/components/CircleTimer.vue'
+import { getMeditationGuideApi } from '@/api/ai'
 import { getMyMeditationLogsApi, saveMeditationLogApi, rewardGardenItemApi } from '@/api/meditation'
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
@@ -418,14 +418,14 @@ const guideText = ref('请选择一种冥想背景音，我会为你生成对应
 const fetchMeditationGuide = async (emotionName) => {
   isGuideLoading.value = true
   try {
-    const { data } = await axios.post('http://127.0.0.1:5000/api/meditation/guide', {
+    const { data } = await getMeditationGuideApi({
       emotion: emotionName,
     })
     guideText.value = data?.guide || '当前引导词生成失败，请稍后重试。'
   } catch (error) {
     console.error(error)
     guideText.value = '冥想引导服务暂时不可用，请稍后再试。'
-    ElMessage.error('冥想引导生成失败，请检查后端服务与 Kimi API Key。')
+    ElMessage.error(error?.response?.data?.error || '冥想引导生成失败，请检查 AI 服务与 Kimi API Key。')
   } finally {
     isGuideLoading.value = false
   }

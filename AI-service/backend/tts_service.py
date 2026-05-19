@@ -5,9 +5,10 @@ import requests
 from dotenv import load_dotenv
 
 
-load_dotenv()
+BASE_DIR = os.path.dirname(__file__)
+DOTENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(DOTENV_PATH)
 
-SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 SILICONFLOW_TTS_URL = "https://api.siliconflow.cn/v1/audio/speech"
 DEFAULT_TTS_MODEL = os.getenv("SILICONFLOW_TTS_MODEL", "FunAudioLLM/CosyVoice2-0.5B")
 DEFAULT_TTS_VOICE = os.getenv("SILICONFLOW_TTS_VOICE", "FunAudioLLM/CosyVoice2-0.5B:alex")
@@ -37,7 +38,8 @@ def synthesize_speech(text: str, output_dir: str, voice: str = None) -> str:
     clean_text = (text or "").strip()
     if not clean_text:
         raise ValueError("TTS input text is empty")
-    if not SILICONFLOW_API_KEY:
+    siliconflow_api_key = (os.getenv("SILICONFLOW_API_KEY") or "").strip()
+    if not siliconflow_api_key:
         raise RuntimeError("SILICONFLOW_API_KEY is not configured")
 
     os.makedirs(output_dir, exist_ok=True)
@@ -58,7 +60,7 @@ def synthesize_speech(text: str, output_dir: str, voice: str = None) -> str:
     response = requests.post(
         SILICONFLOW_TTS_URL,
         headers={
-            "Authorization": f"Bearer {SILICONFLOW_API_KEY}",
+            "Authorization": f"Bearer {siliconflow_api_key}",
             "Content-Type": "application/json",
         },
         json=payload,
