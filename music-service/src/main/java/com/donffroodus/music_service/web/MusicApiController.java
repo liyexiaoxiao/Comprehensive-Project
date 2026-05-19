@@ -44,6 +44,9 @@ import com.donffroodus.music_service.repository.MusicTagMappingRepository;
 import com.donffroodus.music_service.repository.PlaylistRepository;
 import com.donffroodus.music_service.repository.PlaylistTrackRepository;
 import com.donffroodus.music_service.repository.UserPreferenceRepository;
+import com.donffroodus.music_service.service.ai.AiEmotionTaggingService;
+import com.donffroodus.music_service.service.ai.AiEmotionTaggingService.AiTaggingOptions;
+import com.donffroodus.music_service.service.ai.AiEmotionTaggingService.AiTaggingResult;
 
 /**
  * 音乐服务 HTTP API：曲库与情绪标签、用户偏好，以及基于情绪/上下文的推荐。
@@ -61,6 +64,7 @@ public class MusicApiController {
 	private final UserPreferenceRepository userPreferenceRepository;
 	private final PlaylistRepository playlistRepository;
 	private final PlaylistTrackRepository playlistTrackRepository;
+	private final AiEmotionTaggingService aiEmotionTaggingService;
 
 	public MusicApiController(
 			MusicResourceRepository musicResourceRepository,
@@ -68,13 +72,15 @@ public class MusicApiController {
 			MusicTagMappingRepository musicTagMappingRepository,
 			UserPreferenceRepository userPreferenceRepository,
 			PlaylistRepository playlistRepository,
-			PlaylistTrackRepository playlistTrackRepository) {
+			PlaylistTrackRepository playlistTrackRepository,
+			AiEmotionTaggingService aiEmotionTaggingService) {
 		this.musicResourceRepository = musicResourceRepository;
 		this.emotionTagRepository = emotionTagRepository;
 		this.musicTagMappingRepository = musicTagMappingRepository;
 		this.userPreferenceRepository = userPreferenceRepository;
 		this.playlistRepository = playlistRepository;
 		this.playlistTrackRepository = playlistTrackRepository;
+		this.aiEmotionTaggingService = aiEmotionTaggingService;
 	}
 
 	/** preference_type：1=喜欢，2=收藏（推荐排序与喜欢同等加权），-1=黑名单。 */
@@ -501,6 +507,51 @@ public class MusicApiController {
 			saved.add(musicTagMappingRepository.save(mapping));
 		}
 		return saved;
+	}
+
+	/**
+	 * 使用 Qwen3-Omni-Captioner 分析音频并推断情绪标签，默认写入 {@code source=ai} 的映射（保留人工标签）。
+	 */
+	@Operation(summary = "AI 自动打情绪标签",
+			description = "调用阿里云 Qwen3-Omni-Captioner 生成英文描述，再映射为情绪标签；需配置 DASHSCOPE_API_KEY；"
+					+ "默认仅替换 source=ai 的映射")
+	@PostMapping("/music-resources/{musicId}/tags/ai")
+	public ResponseEntity<AiTaggingResponse> aiTagMusicEmotions(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("musicId") Long musicId,
+			@RequestBody(required = false) AiTaggingRequest request) {
+		GatewayAuthSupport.requireUserId(xUserId);
+		if (musicResourceRepository.findById(musicId).isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+
+		boolean persist = request == null || request.persist() == null || request.persist();
+		boolean replaceAiOnly = request == null || request.replaceAiOnly() == null || request.replaceAiOnly();
+		Integer maxTags = request != null ? request.maxTags() : null;
+
+		AiTaggingResult result = aiEmotionTaggingService.tagMusicByAi(
+				musicId,
+				new AiTaggingOptions(persist, replaceAiOnly, maxTags));
+
+		Map<Long, String> tagNames = emotionTagRepository.findAllById(result.tagIds()).stream()
+				.collect(Collectors.toMap(EmotionTag::getId, EmotionTag::getTagName));
+
+		List<Map<String, Object>> mappingBodies = result.mappings().stream()
+				.map(m -> Map.<String, Object>of(
+						"mappingId", m.getId(),
+						"tagId", m.getTagId(),
+						"tagName", tagNames.getOrDefault(m.getTagId(), ""),
+						"source", m.getSource() != null ? m.getSource() : ""))
+				.toList();
+
+		return ResponseEntity.ok(new AiTaggingResponse(
+				result.musicId(),
+				result.caption(),
+				result.inferredEmotionKeys(),
+				result.tagIds(),
+				result.tagNames(),
+				mappingBodies,
+				result.persisted()));
 	}
 
 	/** 覆盖写入某首音乐的情绪标签绑定（先清空旧映射再保存新标签集）。 */
@@ -955,5 +1006,26 @@ public class MusicApiController {
 
 	public static record EmotionTagWriteRequest(
 			String tagName) {
+	}
+
+	/**
+	 * @param persist 是否写入数据库，默认 true
+	 * @param replaceAiOnly 为 true 时仅替换 source=ai 的映射并保留人工标签；为 false 时清空全部再写入 AI 标签
+	 * @param maxTags 最多推断几种情绪，默认 3
+	 */
+	public static record AiTaggingRequest(
+			Boolean persist,
+			Boolean replaceAiOnly,
+			Integer maxTags) {
+	}
+
+	public static record AiTaggingResponse(
+			Long musicId,
+			String caption,
+			List<String> inferredEmotionKeys,
+			List<Long> tagIds,
+			List<String> tagNames,
+			List<Map<String, Object>> mappings,
+			boolean persisted) {
 	}
 }

@@ -14,3 +14,7 @@ export const deletePlaylistApi = (id) => http.delete(`/api/music/v1/playlists/${
 export const getPlaylistTracksApi = (id) => http.get(`/api/music/v1/playlists/${id}/tracks`)
 export const addTrackToPlaylistApi = (id, payload) => http.post(`/api/music/v1/playlists/${id}/tracks`, payload)
 export const removeTrackFromPlaylistApi = (id, musicId) => http.delete(`/api/music/v1/playlists/${id}/tracks/${musicId}`)
+
+/** AI 情绪打标（Qwen3-Omni-Captioner）；payload: { persist?, replaceAiOnly?, maxTags? } */
+export const aiTagMusicEmotionsApi = (musicId, payload = {}) =>
+  http.post(`/api/music/v1/music-resources/${musicId}/tags/ai`, payload)
