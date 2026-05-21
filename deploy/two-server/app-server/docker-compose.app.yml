@@ -1,0 +1,166 @@
+name: comprehensive-project-app
+
+x-java-env: &java-env
+  JAVA_TOOL_OPTIONS: "-Xms128m -Xmx384m -XX:+UseSerialGC"
+  SPRING_PROFILES_ACTIVE: prod
+
+x-db-env: &db-env
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT:-3306}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+
+x-rabbit-env: &rabbit-env
+  RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: 5672
+  RABBITMQ_USERNAME: ${RABBITMQ_USER}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASS}
+
+services:
+  frontend:
+    build:
+      context: ../../../frontend
+      args:
+        VITE_GATEWAY_BASE_URL: /
+        VITE_PYTHON_BASE_URL: /py-api
+        VITE_AI_SERVICE_BASE_URL: /ai-api
+        VITE_ENABLE_PYTHON_PUBLIC_FALLBACK: ${VITE_ENABLE_PYTHON_PUBLIC_FALLBACK:-false}
+    container_name: emohealing-frontend
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-gateway
+      - python-backend
+      - ai-service
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: emohealing-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  api-gateway:
+    build: ../../../api-gateway
+    container_name: emohealing-api-gateway
+    environment:
+      <<: *java-env
+      USER_SERVICE_URL: http://user-service:8082
+      MUSIC_SERVICE_URL: http://music-service:8081
+      SOCIAL_SERVICE_URL: http://social-service:8083
+      DATA_SERVICE_URL: http://data-service:8084
+      MEDITATION_SERVICE_URL: http://meditation-service:8085
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "127.0.0.1:${GATEWAY_DEBUG_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  user-service:
+    build: ../../../user-service
+    container_name: emohealing-user-service
+    environment:
+      <<: [*java-env, *db-env, *rabbit-env]
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-false}
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin123456}
+      ADMIN_BOOTSTRAP_FORCE: ${ADMIN_BOOTSTRAP_FORCE:-false}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    volumes:
+      - user_uploads:/app/uploads
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped
+
+  music-service:
+    build: ../../../music-service
+    container_name: emohealing-music-service
+    environment:
+      <<: [*java-env, *db-env]
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      DASHSCOPE_CAPTION_MODEL: ${DASHSCOPE_CAPTION_MODEL:-qwen3-omni-30b-a3b-captioner}
+    restart: unless-stopped
+
+  social-service:
+    build: ../../../social-service
+    container_name: emohealing-social-service
+    environment:
+      <<: [*java-env, *db-env]
+    restart: unless-stopped
+
+  data-service:
+    build: ../../../data-service
+    container_name: emohealing-data-service
+    environment:
+      <<: *java-env
+      MONGO_URI: ${MONGO_URI}
+    restart: unless-stopped
+
+  meditation-service:
+    build: ../../../meditation-service
+    container_name: emohealing-meditation-service
+    environment:
+      <<: [*java-env, *db-env, *rabbit-env]
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped
+
+  python-backend:
+    build: ../../../backend
+    container_name: emohealing-python-backend
+    volumes:
+      - python_uploaded_music:/app/uploaded_music
+    restart: unless-stopped
+
+  ai-service:
+    build: ../../../AI-service/backend
+    container_name: emohealing-ai-service
+    environment:
+      AI_SERVICE_PORT: 5001
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
+      SILICONFLOW_TTS_MODEL: ${SILICONFLOW_TTS_MODEL:-FunAudioLLM/CosyVoice2-0.5B}
+      SILICONFLOW_TTS_VOICE: ${SILICONFLOW_TTS_VOICE:-FunAudioLLM/CosyVoice2-0.5B:alex}
+      EMOTION_SERVICE_URL: ${EMOTION_SERVICE_URL:-http://emotion-recog:5003/predict}
+      MUSIC_SERVICE_URL: http://music-service:8081/api/v1
+      MONGO_URI: ${AI_MONGO_URI}
+      MONGO_DB: ${AI_MONGO_DB:-comprehensive_project}
+      MONGO_COLLECTION: ${AI_MONGO_COLLECTION:-ai_chat_log}
+    volumes:
+      - ai_generated_audio:/app/generated_audio
+    depends_on:
+      - music-service
+    restart: unless-stopped
+
+  emotion-recog:
+    profiles:
+      - emotion-recog
+    build: ../../../AI-service/emotion_recog
+    container_name: emohealing-emotion-recog
+    environment:
+      PORT: 5003
+      HF_HOME: /models/hf
+      TRANSFORMERS_CACHE: /models/hf
+      HF_HUB_OFFLINE: 1
+      TRANSFORMERS_OFFLINE: 1
+    volumes:
+      - emotion_models:/models/hf
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+  user_uploads:
+  python_uploaded_music:
+  ai_generated_audio:
+  emotion_models:

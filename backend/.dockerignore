@@ -1,0 +1,6 @@
+__pycache__
+.pytest_cache
+uploaded_music
+*.pyc
+*.pyo
+*.pyd
