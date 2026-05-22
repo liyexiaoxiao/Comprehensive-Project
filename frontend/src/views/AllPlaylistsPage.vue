@@ -331,9 +331,12 @@ onMounted(async () => {
 <style scoped>
 .all-playlists-page {
   position: relative;
-  min-height: 100vh;
+  height: calc(100vh + 72px);
   padding: 20px;
   overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .blur-orb {
@@ -372,11 +375,14 @@ onMounted(async () => {
 .page-shell {
   position: relative;
   z-index: 1;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 18px;
   max-width: 1440px;
   margin: 0 auto;
+  min-height: 0;
 }
 
 .surface {
@@ -524,7 +530,9 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(340px, 0.95fr) minmax(0, 1.35fr);
   gap: 18px;
-  min-height: 720px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .playlist-panel,
@@ -534,6 +542,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 18px;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .section-head {
@@ -555,7 +565,7 @@ onMounted(async () => {
   align-content: flex-start;
   overflow: auto;
   min-height: 0;
-  max-height: 480px;
+  flex: 1;
   padding-right: 4px;
 }
 
@@ -699,7 +709,7 @@ onMounted(async () => {
   gap: 12px;
   overflow: auto;
   min-height: 0;
-  max-height: 480px;
+  flex: 1;
   padding-right: 4px;
 }
 
@@ -758,6 +768,20 @@ onMounted(async () => {
 }
 
 @media (max-width: 1180px) {
+  .all-playlists-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .page-shell {
+    height: auto;
+  }
+
+  .content-layout {
+    flex: none;
+  }
+
   .content-layout {
     grid-template-columns: 1fr;
   }

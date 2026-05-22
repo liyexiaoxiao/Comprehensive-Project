@@ -28,10 +28,26 @@ public class MeditationController {
     private Long getUserIdFromSecurityContext() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()) {
-            return Long.parseLong(authentication.getPrincipal().toString()); 
+            try {
+                return Long.parseLong(authentication.getPrincipal().toString());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         }
         return null; 
     }
+
+    private Long resolveUserId(String xUserId) {
+        if (xUserId != null && !xUserId.isBlank()) {
+            try {
+                return Long.parseLong(xUserId.trim());
+            } catch (NumberFormatException ignored) {
+                // fall back to SecurityContext below
+            }
+        }
+        return getUserIdFromSecurityContext();
+    }
+
     private String getUserRoleFromSecurityContext() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()) {
@@ -42,9 +58,10 @@ public class MeditationController {
 
     @GetMapping("/test")
     public ResponseEntity<String> testGatewayHeaders(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
             @RequestHeader(value = "X-User-Name", required = false) String headerUsername) {
         
-        Long userId = getUserIdFromSecurityContext();
+        Long userId = resolveUserId(xUserId);
         String role = getUserRoleFromSecurityContext();
 
         // 2. 拼装返回信息
@@ -59,40 +76,53 @@ public class MeditationController {
     }
 
     @GetMapping("/my-meditation-logs")
-    public ResponseEntity<?> getAllMyLogs() {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> getAllMyLogs(@RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
         return ResponseEntity.ok(meditationService.getMediListByUserId(userId));
     }
     
     @PostMapping("/my-meditation-logs")
-    public ResponseEntity<?> saveMyLog(@RequestBody MeditationRequest request) {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> saveMyLog(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
+            @RequestBody MeditationRequest request) {
+        Long userId = resolveUserId(xUserId);
         return ResponseEntity.ok(meditationService.saveMeditationLog(userId, request));
     }
 
     @PostMapping("/my-meditation-logs/delete")
-    public ResponseEntity<?> deleteMyLog(@RequestBody MeditationLogDeleteRequest request) {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> deleteMyLog(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
+            @RequestBody MeditationLogDeleteRequest request) {
+        Long userId = resolveUserId(xUserId);
         meditationService.userDeleteMeditationLog(userId, request.getLogId());
         return ResponseEntity.ok("Deleted meditation log with ID: " + request.getLogId());
     }
 
     @PostMapping("/start-countdown")
-    public ResponseEntity<?> startCountdown(@RequestBody MeditationCountDownStartRequest request) {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> startCountdown(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
+            @RequestBody MeditationCountDownStartRequest request) {
+        Long userId = resolveUserId(xUserId);
         return ResponseEntity.ok(meditationService.startCountDownSession(userId, request));
     }
 
     @PostMapping("/stop-countdown")
-    public ResponseEntity<?> stopCountdown() {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> stopCountdown(@RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
         meditationService.finishCountDownSession(userId);
         return ResponseEntity.ok("Meditation session stopped for user ID: " + userId);
     }
 
+    @PostMapping("/complete-countdown")
+    public ResponseEntity<?> completeCountdown(@RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
+        meditationService.completeCountDownSession(userId);
+        return ResponseEntity.ok("Meditation session completed for user ID: " + userId);
+    }
+
     @GetMapping("/countdown-left")
-    public ResponseEntity<?> getCountdownLeft() {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> getCountdownLeft(@RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
         Integer leftDuration = meditationService.getSessionLeftDuration(userId);
         return ResponseEntity.ok(leftDuration);
     }

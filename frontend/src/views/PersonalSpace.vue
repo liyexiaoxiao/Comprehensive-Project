@@ -334,6 +334,11 @@
                 <strong>{{ musicStore.customPlaylists.length }}</strong>
                 <p>个自建歌单，把常用氛围整理成自己的入口。</p>
               </article>
+              <article class="music-overview-card">
+                <span class="overview-label">黑名单</span>
+                <strong>{{ blockedTracksList.length }}</strong>
+                <p>首暂时不想再被推荐的歌曲，会从推荐结果里排除。</p>
+              </article>
             </div>
 
             <div class="music-sections-grid">
@@ -483,6 +488,42 @@
                 </div>
                 <div v-else class="empty-state compact-empty-state">
                   暂无歌单，点击上方新建歌单吧！
+                </div>
+              </section>
+
+              <section class="music-showcase-card blocked-card">
+                <div class="music-showcase-header">
+                  <div>
+                    <span class="music-card-kicker">Blocked Tracks</span>
+                    <h4>黑名单</h4>
+                    <p>这些歌曲会从推荐结果里排除；如果想重新接收推荐，可以在这里移除。</p>
+                  </div>
+                  <span class="section-meta">{{ blockedTracksList.length }} 首</span>
+                </div>
+
+                <div v-if="blockedTracksList.length" class="music-track-scroll-area">
+                  <div class="music-track-stack">
+                  <article class="music-track-card compact-track-card" v-for="track in blockedTracksList" :key="track.id">
+                    <div class="track-main">
+                      <div class="track-title-row">
+                        <strong>{{ track.title }}</strong>
+                        <span class="track-duration">{{ formatDuration(track.duration) }}</span>
+                      </div>
+                      <span class="track-artist-name">{{ getTrackArtist(track) }}</span>
+                      <div class="track-tag-row">
+                        <span class="small-tag blocked-tag">不再推荐</span>
+                        <span v-for="tag in getTrackTags(track)" :key="tag" class="small-tag subtle-tag">{{ tag }}</span>
+                      </div>
+                    </div>
+                    <div class="track-action-row">
+                      <button class="icon-btn" @click="musicStore.toggleBlock(track.id)" title="移出黑名单">✅</button>
+                      <button class="icon-btn" @click="openAddToPlaylistModal(track)" title="加入歌单">➕</button>
+                    </div>
+                  </article>
+                  </div>
+                </div>
+                <div v-else class="empty-state compact-empty-state">
+                  暂无黑名单歌曲。
                 </div>
               </section>
             </div>
@@ -820,10 +861,141 @@
                 </div>
 
                 <div class="friend-detail-actions">
+                  <button class="action-btn outline friend-chat-btn" @click="openChatWithFriend(selectedFriend)">发消息</button>
                   <button class="action-btn danger-btn friend-delete-btn" @click="deleteFriend(selectedFriend.friendshipId)">删除好友</button>
                 </div>
               </div>
             </aside>
+          </div>
+        </div>
+
+        <!-- Tab 7: 聊天室 -->
+        <div v-else-if="currentTab === 'chat'" class="tab-content chat-tab">
+          <div class="chat-header">
+            <div>
+              <h3 class="section-title">聊天室</h3>
+              <p class="chat-header-desc">从已添加好友中选择一位，打开一对一聊天窗口并查看历史消息。</p>
+            </div>
+            <span class="friend-count-badge">{{ sortedChatFriends.length }} 位好友可聊天</span>
+          </div>
+
+          <div class="chat-dashboard">
+            <section class="chat-friend-panel glass-panel-inner">
+              <div class="friends-list-panel-header">
+                <div>
+                  <h4 class="sub-section-title">好友会话</h4>
+                  <p class="friend-panel-hint">优先展示最近有消息的好友，也可以直接点开尚未开始聊天的好友。</p>
+                </div>
+                <span v-if="isChatListLoading" class="chat-status-text">刷新中...</span>
+              </div>
+
+              <div v-if="sortedChatFriends.length > 0" class="chat-friend-list">
+                <button
+                  v-for="friend in sortedChatFriends"
+                  :key="friend.id"
+                  type="button"
+                  class="chat-friend-item"
+                  :class="{ active: activeChatFriendId === friend.id }"
+                  @click="openChatWithFriend(friend)"
+                >
+                  <div class="friend-info">
+                    <div class="friend-avatar">
+                      <img v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
+                      <font-awesome-icon v-else icon="user" />
+                    </div>
+                    <div class="friend-details">
+                      <div class="chat-friend-topline">
+                        <span class="friend-name">{{ friend.name }}</span>
+                        <span class="chat-list-time">{{ formatChatListTime(friend.lastMessageAt) }}</span>
+                      </div>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <div class="chat-preview-row">
+                        <span class="chat-last-message">{{ friend.lastMessagePreview || '点击开始聊天' }}</span>
+                        <span v-if="friend.unreadCount > 0" class="chat-unread-badge">
+                          {{ friend.unreadCount > 99 ? '99+' : friend.unreadCount }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div v-else class="empty-state compact-empty-state">
+                暂无可聊天的好友，请先在“好友”页添加朋友。
+              </div>
+            </section>
+
+            <section class="chat-window-panel glass-panel-inner">
+              <template v-if="activeChatFriend">
+                <div class="chat-window-header">
+                  <div class="friend-info">
+                    <div class="friend-avatar large-avatar">
+                      <img v-if="activeChatFriend.avatarUrl" :src="activeChatFriend.avatarUrl" alt="avatar" />
+                      <font-awesome-icon v-else icon="user" />
+                    </div>
+                    <div class="friend-details">
+                      <div class="chat-friend-topline">
+                        <h4>{{ activeChatFriend.name }}</h4>
+                        <span class="friendship-badge">{{ activeChatFriend.intimacy }}/3 朵花</span>
+                      </div>
+                      <span class="friend-id">{{ activeChatFriend.username ? `账号：${activeChatFriend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-desc">{{ activeChatFriend.bio || '和这位朋友聊聊最近的心情吧。' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div ref="chatMessageListRef" class="chat-message-list">
+                  <div v-if="isChatLoading" class="empty-state compact-empty-state">
+                    正在加载聊天记录...
+                  </div>
+                  <template v-else-if="chatMessages.length > 0">
+                    <div
+                      v-for="message in chatMessages"
+                      :key="message.messageId"
+                      class="chat-message-row"
+                      :class="{ own: Number(message.senderId) === currentUserId }"
+                    >
+                      <div class="chat-message-bubble">
+                        <p>{{ message.content }}</p>
+                        <span class="chat-message-meta">
+                          {{ formatChatMessageTime(message.createdAt) }}
+                          <template v-if="Number(message.senderId) === currentUserId">
+                            {{ message.readAt ? ' · 已读' : ' · 已发送' }}
+                          </template>
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="empty-state compact-empty-state">
+                    还没有聊天记录，发送第一条消息开始对话吧。
+                  </div>
+                </div>
+
+                <div class="chat-composer">
+                  <textarea
+                    v-model="chatDraft"
+                    class="chat-textarea"
+                    placeholder="输入你想发送的内容，按 Enter 发送，Shift + Enter 换行"
+                    maxlength="2000"
+                    @keydown.enter.exact.prevent="sendCurrentChatMessage"
+                  ></textarea>
+                  <div class="chat-composer-footer">
+                    <span class="chat-status-text">按 Enter 发送，Shift + Enter 换行</span>
+                    <button
+                      class="action-btn friend-chat-send-btn"
+                      :disabled="isSendingChat || !chatDraft.trim()"
+                      @click="sendCurrentChatMessage"
+                    >
+                      {{ isSendingChat ? '发送中...' : '发送' }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-else class="empty-state compact-empty-state">
+                从左侧选择一位好友，打开聊天窗口。
+              </div>
+            </section>
           </div>
         </div>
       </main>
@@ -858,9 +1030,12 @@
                 <input type="text" v-model="uploadForm.tagInput" placeholder="输入情绪(如: 安静)" class="info-input" />
                 <div class="tag-action-row">
                   <button class="modal-btn secondary-btn" @click="addTag">添加标签</button>
-                  <button class="modal-btn ai-btn" @click="autoDetectTags">AI 辅助判别</button>
+                  <button class="modal-btn ai-btn" @click="autoDetectTags" :disabled="isDetectingUploadTags">
+                    {{ isDetectingUploadTags ? '识别中...' : 'AI 识别标签' }}
+                  </button>
                 </div>
               </div>
+              <p v-if="uploadForm.aiCaption" class="music-upload-ai-caption">AI 描述：{{ uploadForm.aiCaption }}</p>
               <div class="current-tags">
                 <span v-for="(tag, index) in uploadForm.tags" :key="index" class="small-tag">
                   {{ tag }} <span class="remove-tag" @click="uploadForm.tags.splice(index, 1)">&times;</span>
@@ -1129,8 +1304,13 @@ import {
   getReceivedFriendRequestsApi,
   handleFriendRequestApi,
   searchUsersApi,
-  deleteFriendshipApi
+  deleteFriendshipApi,
+  getChatConversationsApi,
+  getChatMessagesApi,
+  sendChatMessageApi,
+  markChatAsReadApi,
 } from '@/api/social'
+import { formatApiDateTime, parseApiDateTime } from '@/utils/dateTime'
 
 import { getMyEmotionSnapshotsApi } from '@/api/data'
 
@@ -1270,7 +1450,8 @@ const tabs = [
   { id: 'meditation', name: '冥想数据', icon: 'leaf' },
   { id: 'music', name: '音乐库', icon: 'music' },
   { id: 'social', name: '朋友圈', icon: 'users' },
-  { id: 'friends', name: '好友', icon: 'user-friends' }
+  { id: 'friends', name: '好友', icon: 'user-friends' },
+  { id: 'chat', name: '聊天室', icon: 'users' }
 ]
 const currentTab = ref('profile')
 const currentMonth = ref(new Date().getMonth() + 1)
@@ -2046,6 +2227,9 @@ watch(currentTab, (newTab) => {
   if (newTab !== 'friends') {
     selectedFriend.value = null
   }
+  if (newTab !== 'chat') {
+    stopChatPolling()
+  }
   if (newTab === 'diary') {
     fetchDiaries().then(() => {
       initDiaryWeeklyChart()
@@ -2064,6 +2248,9 @@ watch(currentTab, (newTab) => {
   } else if (newTab === 'friends') {
     fetchFriends()
     fetchFriendRequests()
+  } else if (newTab === 'chat') {
+    loadChatTabData()
+    startChatPolling()
   }
 })
 
@@ -2098,6 +2285,9 @@ onMounted(() => {
   } else if (currentTab.value === 'friends') {
     fetchFriends()
     fetchFriendRequests()
+  } else if (currentTab.value === 'chat') {
+    loadChatTabData()
+    startChatPolling()
   }
 })
 
@@ -2106,6 +2296,7 @@ const activeMusicModal = ref('')
 const showAddToPlaylistModal = ref(false)
 const showPlaylistDetailModal = ref(false)
 const isUploadingTrack = ref(false)
+const isDetectingUploadTags = ref(false)
 const previewingUploadedTrackId = ref('')
 const newPlaylistName = ref('')
 const newPlaylistDescription = ref('')
@@ -2114,6 +2305,7 @@ const activePlaylist = ref(null)
 const audioInputRef = ref(null)
 const playlistCarouselRef = ref(null)
 const uploadedPreviewAudio = typeof Audio === 'undefined' ? null : new Audio()
+const MAX_AI_PREVIEW_FILE_BYTES = 20 * 1024 * 1024
 
 const uploadForm = ref({
   file: null,
@@ -2121,7 +2313,8 @@ const uploadForm = ref({
   artist: '',
   duration: 0,
   tagInput: '',
-  tags: []
+  tags: [],
+  aiCaption: '',
 })
 
 const realMusicLibrary = computed(() => {
@@ -2136,6 +2329,12 @@ const likedTracksList = computed(() => {
 
 const collectedTracksList = computed(() => {
   return musicStore.collectedTrackIds.map(id => {
+    return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
+  }).filter(Boolean)
+})
+
+const blockedTracksList = computed(() => {
+  return musicStore.blockedTrackIds.map(id => {
     return musicStore.resolveTrackById(id) || realMusicLibrary.value.find(t => t.id === id)
   }).filter(Boolean)
 })
@@ -2177,6 +2376,8 @@ const handleAudioSelect = (event) => {
   const file = event.target.files[0]
   if (file) {
     uploadForm.value.file = file
+    uploadForm.value.tags = []
+    uploadForm.value.aiCaption = ''
     if (!uploadForm.value.title) {
       uploadForm.value.title = file.name.replace(/\.[^/.]+$/, "") // Remove extension
     }
@@ -2239,7 +2440,8 @@ const resetUploadForm = () => {
     artist: '',
     duration: 0,
     tagInput: '',
-    tags: []
+    tags: [],
+    aiCaption: '',
   }
   if (audioInputRef.value) {
     audioInputRef.value.value = ''
@@ -2265,21 +2467,53 @@ const addTag = () => {
   uploadForm.value.tagInput = ''
 }
 
-const autoDetectTags = () => {
-  ElMessage.info('AI 正在分析音频情绪特征...')
-  setTimeout(() => {
-    const mockAITags = ['平静', '治愈', '孤独']
-    mockAITags.forEach(t => {
-      if (!uploadForm.value.tags.includes(t)) {
-        uploadForm.value.tags.push(t)
-      }
+const autoDetectTags = async () => {
+  if (!uploadForm.value.file) {
+    ElMessage.warning('请先选择要上传的 MP3 文件')
+    return
+  }
+  if (uploadForm.value.file.size > MAX_AI_PREVIEW_FILE_BYTES) {
+    ElMessage.warning('当前文件超过 20MB，暂不支持上传前 AI 识别，请手动添加标签或压缩后重试')
+    return
+  }
+
+  try {
+    isDetectingUploadTags.value = true
+    const result = await musicStore.previewTrackEmotionTags(uploadForm.value.file, {
+      maxTags: 3,
+      title: uploadForm.value.title,
+      artist: uploadForm.value.artist,
     })
-    ElMessage.success('AI 标签生成完成')
-  }, 1000)
+    uploadForm.value.tags = result.tagNames
+    uploadForm.value.aiCaption = result.caption
+    if (result.tagNames.length) {
+      ElMessage.success('AI 已完成预识别，请确认标签后再上传')
+    } else {
+      ElMessage.warning('AI 未识别出明确标签，请手动补充后再上传')
+    }
+  } catch (error) {
+    console.error('Preview upload tag detection failed:', error)
+    const status = error?.response?.status
+    if (status === 413) {
+      ElMessage.error('当前音频文件过大，AI 预识别暂不支持，请压缩文件或先手动添加标签')
+    } else if (status === 503) {
+      ElMessage.error('AI 识别服务暂不可用，当前环境可能未配置 DASHSCOPE_API_KEY')
+    } else if (status === 504 || error?.code === 'ECONNABORTED') {
+      ElMessage.error('AI 识别超时，请稍后重试')
+    } else {
+      ElMessage.error(error?.response?.data?.message || error?.response?.data?.error || 'AI 识别失败，请稍后重试')
+    }
+  } finally {
+    isDetectingUploadTags.value = false
+  }
 }
 
 const submitUpload = async () => {
   if (!uploadForm.value.file || !uploadForm.value.title) return
+  if (!uploadForm.value.tags.length) {
+    ElMessage.warning('请先识别或手动确认至少一个情绪标签')
+    return
+  }
   
   try {
     isUploadingTrack.value = true
@@ -2328,6 +2562,7 @@ if (uploadedPreviewAudio) {
 onBeforeUnmount(() => {
   resetPendingAvatarUpload()
   stopUploadedTrackPreview()
+  stopChatPolling()
 })
 
 const submitCreatePlaylist = async () => {
@@ -2503,18 +2738,18 @@ const getSocialAvatar = (userId) => getSocialUserSummary(userId)?.avatarUrl || '
 
 const formatSocialTime = (value) => {
   if (!value) return '未知时间'
-  const date = new Date(value)
+  const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) return '未知时间'
 
   const diffMs = Date.now() - date.getTime()
   if (diffMs < 0) {
-    return date.toLocaleString()
+    return formatApiDateTime(date, {}, '未知时间')
   }
   if (diffMs < 60 * 1000) return '刚刚'
   if (diffMs < 60 * 60 * 1000) return `${Math.floor(diffMs / (60 * 1000))} 分钟前`
   if (diffMs < 24 * 60 * 60 * 1000) return `${Math.floor(diffMs / (60 * 60 * 1000))} 小时前`
   if (diffMs < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(diffMs / (24 * 60 * 60 * 1000))} 天前`
-  return date.toLocaleString()
+  return formatApiDateTime(date, {}, '未知时间')
 }
 
 const formatSocialLikeNames = (likeUsers = []) => {
@@ -2535,7 +2770,7 @@ const endOfToday = computed(() => {
 })
 
 const isWithinToday = (value) => {
-  const date = new Date(value)
+  const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) return false
   return date >= startOfToday.value && date < endOfToday.value
 }
@@ -2888,9 +3123,20 @@ const searchResults = ref([])
 const isSearching = ref(false)
 const selectedFriend = ref(null)
 const friendUserMap = ref({})
+const chatConversations = ref([])
+const chatMessages = ref([])
+const activeChatFriendId = ref(null)
+const chatDraft = ref('')
+const isChatListLoading = ref(false)
+const isChatLoading = ref(false)
+const isSendingChat = ref(false)
+const chatMessageListRef = ref(null)
 const FRIENDSHIP_FLOWER_STEP = 50
 const MAX_FRIENDSHIP_FLOWERS = 3
 const MAX_FRIENDSHIP_SCORE = FRIENDSHIP_FLOWER_STEP * MAX_FRIENDSHIP_FLOWERS
+const CHAT_FETCH_LIMIT = 50
+const CHAT_POLL_INTERVAL = 5000
+let chatPollingTimer = null
 
 const getDisplayName = (user) => {
   if (!user) return ''
@@ -2922,19 +3168,154 @@ const buildNextGoalText = (score, flowerCount) => {
   return `${Math.max(0, (flowerCount + 1) * FRIENDSHIP_FLOWER_STEP - score)} 分后升级`
 }
 
+const getDateTimeValue = (value) => {
+  if (!value) return 0
+  const date = parseApiDateTime(value)
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
 const formatFriendDate = (value) => {
   if (!value) return '暂未记录'
-  const date = new Date(value)
+  const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) {
     return '暂未记录'
   }
-  return date.toLocaleString('zh-CN', {
+  return formatApiDateTime(date, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
+  }, '暂未记录')
+}
+
+const chatConversationMap = computed(() => {
+  const map = {}
+  chatConversations.value.forEach((conversation) => {
+    const peerUserId = Number(conversation.peerUserId)
+    if (Number.isFinite(peerUserId) && peerUserId > 0) {
+      map[peerUserId] = {
+        ...conversation,
+        unreadCount: Number(conversation.unreadCount) || 0,
+      }
+    }
   })
+  return map
+})
+
+const sortedChatFriends = computed(() => (
+  friendsList.value
+    .map((friend) => {
+      const conversation = chatConversationMap.value[Number(friend.id)]
+      return {
+        ...friend,
+        conversationId: conversation?.conversationId || null,
+        lastMessagePreview: conversation?.lastMessagePreview || '',
+        lastMessageAt: conversation?.lastMessageAt || '',
+        unreadCount: Number(conversation?.unreadCount) || 0,
+      }
+    })
+    .sort((a, b) => {
+      const timeDiff = getDateTimeValue(b.lastMessageAt) - getDateTimeValue(a.lastMessageAt)
+      if (timeDiff !== 0) {
+        return timeDiff
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN')
+    })
+))
+
+const activeChatFriend = computed(() => (
+  sortedChatFriends.value.find((friend) => Number(friend.id) === Number(activeChatFriendId.value))
+  || null
+))
+
+const normalizeChatMessages = (messages = []) => (
+  [...messages]
+    .map((message) => ({
+      ...message,
+      messageId: Number(message.messageId) || 0,
+      senderId: Number(message.senderId) || 0,
+    }))
+    .sort((a, b) => {
+      const timeDiff = getDateTimeValue(a.createdAt) - getDateTimeValue(b.createdAt)
+      if (timeDiff !== 0) {
+        return timeDiff
+      }
+      return a.messageId - b.messageId
+    })
+)
+
+const formatChatListTime = (value) => {
+  if (!value) return ''
+  const date = parseApiDateTime(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const now = new Date()
+  const isSameYear = now.getFullYear() === date.getFullYear()
+  const isSameDay = isSameYear
+    && now.getMonth() === date.getMonth()
+    && now.getDate() === date.getDate()
+
+  if (isSameDay) {
+    return formatApiDateTime(date, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }, '')
+  }
+
+  return formatApiDateTime(date, isSameYear
+    ? {
+        month: '2-digit',
+        day: '2-digit',
+      }
+    : {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }, '')
+}
+
+const formatChatMessageTime = (value) => {
+  if (!value) return '刚刚'
+  const date = parseApiDateTime(value)
+  if (Number.isNaN(date.getTime())) return '刚刚'
+  return formatApiDateTime(date, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }, '刚刚')
+}
+
+const scrollChatToBottom = () => {
+  nextTick(() => {
+    const container = chatMessageListRef.value
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  })
+}
+
+const stopChatPolling = () => {
+  if (chatPollingTimer) {
+    window.clearInterval(chatPollingTimer)
+    chatPollingTimer = null
+  }
+}
+
+const startChatPolling = () => {
+  stopChatPolling()
+  if (currentTab.value !== 'chat') return
+  chatPollingTimer = window.setInterval(async () => {
+    if (currentTab.value !== 'chat') return
+    await fetchChatConversations({ silent: true })
+    if (activeChatFriendId.value) {
+      await fetchChatMessages(activeChatFriendId.value, {
+        silent: true,
+        scroll: false,
+        markRead: true,
+      })
+    }
+  }, CHAT_POLL_INTERVAL)
 }
 
 const ensureUserSummaries = async (userIds = []) => {
@@ -3010,6 +3391,93 @@ const fetchFriendRequests = async () => {
   }
 }
 
+const fetchChatConversations = async ({ silent = false } = {}) => {
+  try {
+    if (!silent) {
+      isChatListLoading.value = true
+    }
+    const res = await getChatConversationsApi()
+    const conversations = Array.isArray(res.data) ? res.data : []
+    await ensureUserSummaries(conversations.map(item => item.peerUserId))
+    chatConversations.value = conversations
+  } catch (e) {
+    console.error('获取聊天会话失败:', e)
+    if (!silent) {
+      ElMessage.error('获取聊天会话失败')
+    }
+  } finally {
+    if (!silent) {
+      isChatListLoading.value = false
+    }
+  }
+}
+
+const fetchChatMessages = async (peerUserId, options = {}) => {
+  const {
+    silent = false,
+    scroll = true,
+    markRead = true,
+  } = options
+
+  const numericPeerUserId = Number(peerUserId)
+  if (!Number.isFinite(numericPeerUserId) || numericPeerUserId <= 0) {
+    chatMessages.value = []
+    return
+  }
+
+  try {
+    if (!silent) {
+      isChatLoading.value = true
+    }
+    const res = await getChatMessagesApi(numericPeerUserId, { limit: CHAT_FETCH_LIMIT })
+    chatMessages.value = normalizeChatMessages(Array.isArray(res.data) ? res.data : [])
+    if (scroll) {
+      scrollChatToBottom()
+    }
+
+    if (markRead && (chatConversationMap.value[numericPeerUserId]?.unreadCount || 0) > 0) {
+      await markChatAsReadApi(numericPeerUserId)
+      await fetchChatConversations({ silent: true })
+    }
+  } catch (e) {
+    console.error('获取聊天记录失败:', e)
+    if (!silent) {
+      ElMessage.error('获取聊天记录失败')
+    }
+  } finally {
+    if (!silent) {
+      isChatLoading.value = false
+    }
+  }
+}
+
+const loadChatTabData = async ({ preferredFriendId = null } = {}) => {
+  await fetchFriends()
+  await fetchChatConversations()
+
+  const validFriendIds = new Set(friendsList.value.map(friend => Number(friend.id)))
+  const candidates = [
+    Number(preferredFriendId),
+    Number(activeChatFriendId.value),
+    Number(selectedFriend.value?.id),
+    Number(chatConversations.value[0]?.peerUserId),
+    Number(friendsList.value[0]?.id),
+  ].filter(id => Number.isFinite(id) && validFriendIds.has(id))
+
+  const nextActiveFriendId = candidates[0] || null
+  if (!nextActiveFriendId) {
+    activeChatFriendId.value = null
+    chatMessages.value = []
+    return
+  }
+
+  if (Number(activeChatFriendId.value) !== nextActiveFriendId) {
+    activeChatFriendId.value = nextActiveFriendId
+  } else {
+    await fetchChatMessages(nextActiveFriendId, { markRead: true, scroll: true })
+  }
+}
+
 const searchUser = async () => {
   const keyword = newFriendId.value.trim()
   if (!keyword) {
@@ -3063,6 +3531,66 @@ const closeSelectedFriend = () => {
   selectedFriend.value = null
 }
 
+const openChatWithFriend = async (friend) => {
+  const nextFriendId = Number(friend?.id || friend?.peerUserId)
+  if (!Number.isFinite(nextFriendId) || nextFriendId <= 0) {
+    return
+  }
+
+  if (currentTab.value !== 'chat') {
+    activeChatFriendId.value = nextFriendId
+    currentTab.value = 'chat'
+    return
+  }
+
+  if (Number(activeChatFriendId.value) === nextFriendId) {
+    await fetchChatMessages(nextFriendId, { markRead: true, scroll: true })
+    return
+  }
+
+  activeChatFriendId.value = nextFriendId
+}
+
+const sendCurrentChatMessage = async () => {
+  const peerUserId = Number(activeChatFriendId.value)
+  const content = chatDraft.value.trim()
+
+  if (!Number.isFinite(peerUserId) || peerUserId <= 0 || !content || isSendingChat.value) {
+    return
+  }
+
+  try {
+    isSendingChat.value = true
+    const res = await sendChatMessageApi(peerUserId, { content })
+    chatMessages.value = normalizeChatMessages([
+      ...chatMessages.value,
+      ...(res.data ? [res.data] : []),
+    ])
+    chatDraft.value = ''
+    scrollChatToBottom()
+    await fetchChatConversations({ silent: true })
+  } catch (e) {
+    console.error('发送聊天消息失败:', e)
+    ElMessage.error(typeof e?.response?.data === 'string' ? e.response.data : '发送消息失败')
+  } finally {
+    isSendingChat.value = false
+  }
+}
+
+watch(activeChatFriendId, (newFriendId) => {
+  if (currentTab.value !== 'chat') {
+    return
+  }
+
+  chatDraft.value = ''
+  if (!newFriendId) {
+    chatMessages.value = []
+    return
+  }
+
+  fetchChatMessages(newFriendId, { markRead: true, scroll: true })
+})
+
 const deleteFriend = async (friendshipId) => {
   if (confirm('确定要删除这位好友吗？')) {
     try {
@@ -3070,6 +3598,11 @@ const deleteFriend = async (friendshipId) => {
       ElMessage.success('删除成功')
       selectedFriend.value = null
       await fetchFriends()
+      await fetchChatConversations({ silent: true })
+      if (!friendsList.value.some(friend => Number(friend.id) === Number(activeChatFriendId.value))) {
+        activeChatFriendId.value = null
+        chatMessages.value = []
+      }
     } catch (e) {
       ElMessage.error('删除好友失败')
     }
@@ -3341,6 +3874,7 @@ window.addEventListener('resize', () => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   padding: 22px 18px 20px;
   position: relative;
   background:
@@ -3399,8 +3933,13 @@ window.addEventListener('resize', () => {
 .space-nav {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
   padding: 0;
+  padding-right: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
   position: relative;
   z-index: 1;
 }
@@ -3409,12 +3948,12 @@ window.addEventListener('resize', () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 15px 20px;
+  padding: 13px 16px;
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid transparent;
   border-radius: 18px;
   color: #68807a;
-  font-size: 1.05rem;
+  font-size: 0.96rem;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -3463,9 +4002,9 @@ window.addEventListener('resize', () => {
 }
 
 .nav-icon {
-  width: 20px;
-  height: 20px;
-  padding: 9px;
+  width: 18px;
+  height: 18px;
+  padding: 8px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
   color: #6a857c;
@@ -4932,6 +5471,8 @@ window.addEventListener('resize', () => {
   justify-content: center;
   align-items: center;
   font-size: 1.2rem;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .friend-details {
@@ -5014,11 +5555,12 @@ window.addEventListener('resize', () => {
   gap: 10px;
 }
 
-.friend-item .friend-avatar img {
+.friend-avatar img {
   width: 100%;
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  display: block;
 }
 
 .friend-detail-card {
@@ -5232,8 +5774,10 @@ window.addEventListener('resize', () => {
   margin-top: auto;
   display: flex;
   justify-content: flex-start;
+  gap: 12px;
 }
 
+.friend-chat-btn,
 .friend-delete-btn {
   width: auto;
   min-width: 112px;
@@ -5244,8 +5788,222 @@ window.addEventListener('resize', () => {
   flex: 0 0 auto;
 }
 
+.chat-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 18px;
+  min-height: 0;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.chat-header-desc {
+  margin: 6px 0 0;
+  color: #69828a;
+  line-height: 1.6;
+}
+
+.chat-dashboard {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+  gap: 20px;
+}
+
+.chat-friend-panel,
+.chat-window-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(245, 250, 248, 0.92) 100%);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.chat-status-text {
+  color: #7b9198;
+  font-size: 0.88rem;
+}
+
+.chat-friend-list,
+.chat-message-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 6px;
+}
+
+.chat-friend-item {
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.6);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.chat-friend-item:hover {
+  background: rgba(255,255,255,0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(118, 150, 157, 0.14);
+}
+
+.chat-friend-item.active {
+  border-color: rgba(118, 150, 157, 0.28);
+  background: linear-gradient(135deg, rgba(222, 241, 234, 0.92), rgba(250, 252, 251, 0.96));
+  box-shadow: 0 14px 30px rgba(118, 150, 157, 0.16);
+}
+
+.chat-friend-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.chat-friend-topline h4 {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.chat-list-time {
+  color: #7b9198;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.chat-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-last-message {
+  flex: 1;
+  min-width: 0;
+  color: #56727a;
+  font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #4f6f61;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.chat-window-header {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.large-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 1.4rem;
+}
+
+.chat-message-row {
+  display: flex;
+}
+
+.chat-message-row.own {
+  justify-content: flex-end;
+}
+
+.chat-message-bubble {
+  max-width: min(78%, 520px);
+  padding: 12px 14px;
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+  box-shadow: 0 10px 24px rgba(118, 150, 157, 0.08);
+}
+
+.chat-message-row.own .chat-message-bubble {
+  border-radius: 18px 18px 6px 18px;
+  background: rgba(222, 241, 234, 0.94);
+}
+
+.chat-message-bubble p {
+  margin: 0;
+  color: var(--color-text-primary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-message-meta {
+  display: inline-block;
+  margin-top: 8px;
+  color: #7b9198;
+  font-size: 0.78rem;
+}
+
+.chat-composer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.chat-textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: none;
+  border-radius: 18px;
+  border: 1px solid rgba(118, 150, 157, 0.18);
+  background: rgba(255,255,255,0.72);
+  padding: 14px 16px;
+  outline: none;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+}
+
+.chat-composer-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.friend-chat-send-btn {
+  width: auto;
+  min-width: 108px;
+  padding: 10px 22px;
+}
+
 @media (max-width: 1120px) {
   .friends-dashboard.detail-open {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-dashboard {
     grid-template-columns: 1fr;
   }
 
@@ -5261,7 +6019,10 @@ window.addEventListener('resize', () => {
 @media (max-width: 768px) {
   .friends-header,
   .friends-list-panel-header,
-  .friend-detail-heading {
+  .friend-detail-heading,
+  .chat-header,
+  .chat-friend-topline,
+  .chat-composer-footer {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -5292,8 +6053,17 @@ window.addEventListener('resize', () => {
     justify-content: stretch;
   }
 
+  .friend-chat-btn,
   .friend-delete-btn {
     width: 100%;
+  }
+
+  .friend-chat-send-btn {
+    width: 100%;
+  }
+
+  .chat-message-bubble {
+    max-width: 92%;
   }
 }
 
@@ -5345,7 +6115,7 @@ window.addEventListener('resize', () => {
 
 .music-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
 }
 
@@ -5432,6 +6202,10 @@ window.addEventListener('resize', () => {
 
 .playlists-card {
   background: linear-gradient(180deg, rgba(250, 252, 251, 0.98) 0%, rgba(239, 247, 243, 0.96) 100%);
+}
+
+.blocked-card {
+  background: linear-gradient(180deg, rgba(255, 249, 249, 0.98) 0%, rgba(252, 241, 241, 0.96) 100%);
 }
 
 .music-showcase-header {
@@ -5561,6 +6335,11 @@ window.addEventListener('resize', () => {
 .subtle-tag {
   background: rgba(111, 126, 160, 0.12);
   color: #5b6f96;
+}
+
+.blocked-tag {
+  background: rgba(226, 93, 93, 0.14);
+  color: #c14d4d;
 }
 
 .compact-empty-state {
@@ -6080,6 +6859,16 @@ window.addEventListener('resize', () => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.music-upload-ai-caption {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(140, 133, 255, 0.1);
+  color: #4a458a;
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 .current-tags {

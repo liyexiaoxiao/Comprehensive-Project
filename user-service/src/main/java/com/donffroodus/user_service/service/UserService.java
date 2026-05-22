@@ -147,6 +147,13 @@ public class UserService {
         return jwtUtils.generateToken(userInfo.getUsername(), userInfo.getId(), normalizeRoleForToken(userInfo.getRole()));
     }
 
+    public void logoutUser(Long userId) {
+        // Current implementation uses stateless JWT. Frontend clears local session after calling this endpoint.
+        if (userId != null) {
+            System.out.println("User logged out: " + userId);
+        }
+    }
+
     private void logOperation(String adminUserName, String type, String details, String ip) {
         userInfoRepository.findByUsername(adminUserName).ifPresent(admin -> {
             OperationLog log = new OperationLog();

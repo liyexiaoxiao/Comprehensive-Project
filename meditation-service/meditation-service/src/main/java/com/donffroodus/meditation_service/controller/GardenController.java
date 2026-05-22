@@ -5,8 +5,6 @@ import com.donffroodus.meditation_service.dto.GardenItemDTO;
 import com.donffroodus.meditation_service.service.GardenService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,17 +14,21 @@ public class GardenController {
     @Autowired
     private GardenService gardenService;
 
-    private Long getUserIdFromSecurityContext() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated()) {
-            return Long.parseLong(authentication.getPrincipal().toString()); 
+    private Long resolveUserId(String xUserId) {
+        if (xUserId == null || xUserId.isBlank()) {
+            return null;
         }
-        return null; 
+        try {
+            return Long.parseLong(xUserId.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     @GetMapping("/me")
-    public ResponseEntity<GardenDataResponse> getMyGarden() {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<GardenDataResponse> getMyGarden(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
         if (userId == null) {
             return ResponseEntity.status(401).build();
         }
@@ -34,8 +36,9 @@ public class GardenController {
     }
 
     @PostMapping("/me/reward")
-    public ResponseEntity<GardenItemDTO> rewardItem() {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<GardenItemDTO> rewardItem(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId) {
+        Long userId = resolveUserId(xUserId);
         if (userId == null) {
             return ResponseEntity.status(401).build();
         }
@@ -43,8 +46,10 @@ public class GardenController {
     }
 
     @PostMapping("/me/unlock-plant/{plantId}")
-    public ResponseEntity<?> unlockPlant(@PathVariable Integer plantId) {
-        Long userId = getUserIdFromSecurityContext();
+    public ResponseEntity<?> unlockPlant(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
+            @PathVariable Integer plantId) {
+        Long userId = resolveUserId(xUserId);
         if (userId == null) {
             return ResponseEntity.status(401).build();
         }

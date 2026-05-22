@@ -1,6 +1,7 @@
 import aiHttp from './aiHttp'
 
 export const getMeditationGuideApi = (payload) => aiHttp.post('/api/meditation/guide', payload)
+export const getCompanionTtsApi = (payload) => aiHttp.post('/api/companion/tts', payload)
 export const analyzeCompanionAudioApi = (formData, config = {}) =>
   aiHttp.post('/api/companion/audio/analyze', formData, config)
 export const askCompanionApi = (payload, config = {}) =>

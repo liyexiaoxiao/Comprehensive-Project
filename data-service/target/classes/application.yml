@@ -7,7 +7,7 @@ spring:
 
   data:
     mongodb:
-      uri: ${MONGO_URI:mongodb://127.0.0.1:27017/emohealing_log_db}
+      uri: ${MONGO_URI:mongodb://127.0.0.1:27017/emohealing_log_db?serverSelectionTimeoutMS=3000&connectTimeoutMS=3000&socketTimeoutMS=5000}
 
   messages:
     encoding: UTF-8

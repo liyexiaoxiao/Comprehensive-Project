@@ -15,6 +15,7 @@
 | --- | --- | --- |
 | `POST /api/users/register` | 已使用 | `LoginPage.vue` |
 | `POST /api/users/login` | 已使用 | `LoginPage.vue` |
+| `POST /api/users/logout` | 已使用 | `ServicePage.vue`、`AdminDashboard.vue` |
 | `GET /api/users/me` | 已使用 | `LoginPage.vue`、`PersonalSpace.vue` |
 | `POST /api/users/me/avatar` | 已使用 | `PersonalSpace.vue` |
 | `GET /api/users/avatars/{filename}` | 间接使用 | 头像 `avatarUrl` 作为资源地址直接访问 |
@@ -57,6 +58,10 @@
 | `GET /api/social/v1/me/friends` | 已使用 | `PersonalSpace.vue` |
 | `PUT /api/social/v1/me/friends/{friendshipId}/intimacy` | 未接入 | 前端保留封装但无实际调用 |
 | `DELETE /api/social/v1/me/friends/{friendshipId}` | 已使用 | `PersonalSpace.vue` |
+| `GET /api/social/v1/me/chat/conversations` | 已使用 | `PersonalSpace.vue` 聊天室子页 |
+| `GET /api/social/v1/me/chat/with/{peerUserId}/messages` | 已使用 | `PersonalSpace.vue` 聊天室子页 |
+| `POST /api/social/v1/me/chat/with/{peerUserId}/messages` | 已使用 | `PersonalSpace.vue` 聊天室子页 |
+| `PUT /api/social/v1/me/chat/with/{peerUserId}/read` | 已使用 | `PersonalSpace.vue` 聊天室子页 |
 
 ## data-service
 
@@ -77,8 +82,9 @@
 | `GET /api/meditation/my-meditation-logs` | 已使用 | `Meditation.vue`、`PersonalSpace.vue` |
 | `POST /api/meditation/my-meditation-logs` | 已使用 | `Meditation.vue` |
 | `POST /api/meditation/my-meditation-logs/delete` | 未接入 | 前端保留封装但未使用 |
-| `POST /api/meditation/start-countdown` | 未接入 | 无前端调用 |
-| `POST /api/meditation/stop-countdown` | 未接入 | 无前端调用 |
+| `POST /api/meditation/start-countdown` | 已使用 | `Meditation.vue` 开始/继续倒计时 |
+| `POST /api/meditation/stop-countdown` | 已使用 | `Meditation.vue` 暂停/重置倒计时 |
+| `POST /api/meditation/complete-countdown` | 已使用 | `Meditation.vue` 倒计时完成后通知后端归档 |
 | `GET /api/meditation/countdown-left` | 未接入 | 无前端调用 |
 | `GET /api/meditation/garden/me` | 已使用 | `PersonalSpace.vue` |
 | `POST /api/meditation/garden/me/reward` | 已使用 | `Meditation.vue` |
@@ -105,13 +111,15 @@
 | `GET /api/music/v1/me/music-preferences` | 已使用 | `musicStore.js` |
 | `POST /api/music/v1/me/music-preferences` | 已使用 | `musicStore.js` |
 | `DELETE /api/music/v1/me/music-preferences/{musicId}/{preferenceType}` | 已使用 | `musicStore.js` |
-| `GET /api/music/v1/me/music-preferences/by-music/{musicId}` | 未接入 | 无前端调用 |
+| `GET /api/music/v1/me/music-preferences/by-music/{musicId}` | 已使用 | `musicStore.js` / `MusicPlayerPage.vue` 切歌后同步当前单曲偏好状态 |
 | `POST /api/music/v1/me/music-recommendations/by-emotion` | 已使用 | `musicStore.js`，服务页推荐列表 |
 | `POST /api/music/v1/me/music-recommendations/next` | 已使用 | `musicStore.js`，播放器推荐下一首 |
 | `POST /api/music/v1/music-resources` | 已使用 | `musicStore.js` 用户上传后同步注册资源，`AdminDashboard.vue` 官方歌单上传后同步注册资源 |
 | `PUT /api/music/v1/music-resources/{musicId}` | 已使用 | `AdminDashboard.vue` 编辑官方歌单曲目元数据 |
 | `DELETE /api/music/v1/music-resources/{musicId}` | 已使用 | `musicStore.js`、`AdminDashboard.vue` 删除资源元数据 |
-| `POST /api/music/v1/music-resources/{musicId}/tags` | 已使用 | `AdminDashboard.vue` 维护官方歌单曲目标签映射 |
+| `POST /api/music/v1/music-resources/{musicId}/tags` | 已使用 | `musicStore.js` 用户上传音乐后写入确认过的情绪标签；`AdminDashboard.vue` 维护官方歌单曲目标签映射 |
+| `POST /api/music/v1/music-resources/{musicId}/tags/ai` | 未接入 | 用户上传流程已改为上传前预识别，不再在落库后自动调用 |
+| `POST /api/music/v1/music-resources/tags/ai-preview` | 已使用 | `PersonalSpace.vue` 上传弹窗中先对待上传音频做 AI 预识别并回填标签 |
 | `POST /api/music/v1/music-resources/tags/batch` | 未接入 | 无前端调用 |
 | `POST /api/music/v1/emotion-tags` | 已使用 | `AdminDashboard.vue` 为官方歌单上传 / 编辑时补齐缺失情绪标签 |
 | `PUT /api/music/v1/emotion-tags/{tagId}` | 未接入 | 无前端调用 |
@@ -125,6 +133,16 @@
 | `DELETE /api/music/v1/me/playlists/{playlistId}` | 已使用 | `musicStore.js` |
 | `POST /api/music/v1/me/playlists/{playlistId}/tracks` | 已使用 | `musicStore.js` |
 | `DELETE /api/music/v1/me/playlists/{playlistId}/tracks/{musicId}` | 已使用 | `musicStore.js` |
+
+## AI-service
+
+| 接口 | 状态 | 调用位置 / 备注 |
+| --- | --- | --- |
+| `POST /api/meditation/guide` | 已使用 | `Meditation.vue` 生成情绪冥想引导文案 |
+| `POST /api/companion/audio/analyze` | 已使用 | `ServicePage.vue` 语音陪伴场景下做转写与情绪分析 |
+| `POST /api/companion/chat` | 已使用 | `ServicePage.vue` 陪伴对话主入口 |
+| `POST /api/companion/tts` | 已使用 | `Meditation.vue` 冥想引导逐句 TTS 播报 |
+| `GET /api/companion/history` | 未接入 | 前端暂无会话历史回放调用 |
 
 ## Python backend
 

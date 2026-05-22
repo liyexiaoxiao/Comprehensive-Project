@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,10 +23,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -774,6 +777,38 @@ public class MusicApiController {
 				result.tagNames(),
 				mappingBodies,
 				result.persisted()));
+	}
+
+	@Operation(summary = "预览 AI 自动打情绪标签",
+			description = "直接分析待上传音频文件并返回建议标签，不创建 music_resource，也不写入标签映射")
+	@PostMapping(path = "/music-resources/tags/ai-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<AiTaggingResponse> previewAiTagMusicEmotions(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@RequestPart("file") MultipartFile file,
+			@RequestParam(value = "maxTags", required = false) Integer maxTags,
+			@RequestParam(value = "title", required = false) String title,
+			@RequestParam(value = "artist", required = false) String artist) throws Exception {
+		GatewayAuthSupport.requireUserId(xUserId);
+		if (file == null || file.isEmpty()) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		AiTaggingResult result = aiEmotionTaggingService.previewTagging(
+				file.getOriginalFilename(),
+				file.getContentType(),
+				file.getBytes(),
+				maxTags,
+				title,
+				artist);
+
+		return ResponseEntity.ok(new AiTaggingResponse(
+				null,
+				result.caption(),
+				result.inferredEmotionKeys(),
+				result.tagIds(),
+				result.tagNames(),
+				List.of(),
+				false));
 	}
 
 	/** 覆盖写入某首音乐的情绪标签绑定（先清空旧映射再保存新标签集）。 */

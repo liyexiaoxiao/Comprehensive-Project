@@ -61,6 +61,12 @@ public class UserController {
         }
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader(value = "X-User-Id", required = false) Long userId) {
+        userService.logoutUser(userId);
+        return ResponseEntity.ok("Logout successful");
+    }
+
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
         return ResponseEntity.ok(userService.getUserById(userId));

@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,25 +55,26 @@ public class AiEmotionTaggingService {
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Music not found"));
 
 		ResolvedAudio audio = audioSourceResolver.resolve(music.getFileUrl());
-		String caption = captionClient.caption(audio);
+		return analyzeResolvedAudio(musicId, audio, options);
+	}
 
-		int maxTags = options.maxTags() != null && options.maxTags() > 0 ? options.maxTags() : 3;
-		List<String> emotionKeys = emotionCaptionMapper.inferEmotionKeys(caption, maxTags);
-		List<EmotionTag> tags = resolveOrCreateTags(emotionKeys);
-
-		List<MusicTagMapping> persisted = List.of();
-		if (options.persist()) {
-			persisted = persistMappings(musicId, tags, options.replaceAiOnly());
+	public AiTaggingResult previewTagging(
+			String originalFilename,
+			String contentType,
+			byte[] bytes,
+			Integer maxTags,
+			String title,
+			String artist) {
+		int effectiveMaxTags = maxTags != null && maxTags > 0 ? maxTags : 3;
+		if (!captionClient.isConfigured()) {
+			return analyzeFallbackHints(originalFilename, title, artist, effectiveMaxTags);
 		}
-
-		return new AiTaggingResult(
-				musicId,
-				caption,
-				emotionKeys,
-				tags.stream().map(EmotionTag::getId).toList(),
-				tags.stream().map(EmotionTag::getTagName).toList(),
-				persisted,
-				options.persist());
+		if (bytes == null || bytes.length == 0) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Audio content is empty");
+		}
+		String mime = normalizeMimeType(originalFilename, contentType);
+		ResolvedAudio audio = ResolvedAudio.base64DataUri(bytes, mime);
+		return analyzeResolvedAudio(null, audio, new AiTaggingOptions(false, true, effectiveMaxTags));
 	}
 
 	private List<EmotionTag> resolveOrCreateTags(List<String> emotionKeys) {
@@ -90,12 +92,13 @@ public class AiEmotionTaggingService {
 
 	private Optional<EmotionTag> findTagForEmotionKey(String emotionKey) {
 		String key = emotionKey.toLowerCase(Locale.ROOT);
-		Optional<EmotionTag> byKey = emotionTagRepository.findByTagName(key);
-		if (byKey.isPresent()) {
-			return byKey;
+		for (String candidate : emotionCaptionMapper.candidateTagNames(key)) {
+			Optional<EmotionTag> matched = emotionTagRepository.findByTagName(candidate);
+			if (matched.isPresent()) {
+				return matched;
+			}
 		}
-		String label = emotionCaptionMapper.defaultTagLabel(key);
-		return emotionTagRepository.findByTagName(label);
+		return Optional.empty();
 	}
 
 	private EmotionTag createTagForEmotionKey(String emotionKey) {
@@ -143,6 +146,67 @@ public class AiEmotionTaggingService {
 			saved.add(musicTagMappingRepository.save(mapping));
 		}
 		return saved;
+	}
+
+	private AiTaggingResult analyzeResolvedAudio(Long musicId, ResolvedAudio audio, AiTaggingOptions options) {
+		String caption = captionClient.caption(audio);
+
+		int maxTags = options.maxTags() != null && options.maxTags() > 0 ? options.maxTags() : 3;
+		List<String> emotionKeys = emotionCaptionMapper.inferEmotionKeys(caption, maxTags);
+		List<EmotionTag> tags = resolveOrCreateTags(emotionKeys);
+
+		List<MusicTagMapping> persisted = List.of();
+		if (options.persist()) {
+			persisted = persistMappings(musicId, tags, options.replaceAiOnly());
+		}
+
+		return new AiTaggingResult(
+				musicId,
+				caption,
+				emotionKeys,
+				tags.stream().map(EmotionTag::getId).toList(),
+				tags.stream().map(EmotionTag::getTagName).toList(),
+				persisted,
+				options.persist());
+	}
+
+	private String normalizeMimeType(String originalFilename, String contentType) {
+		String normalizedContentType = contentType != null ? contentType.strip() : "";
+		if (!normalizedContentType.isEmpty() && !MediaType.APPLICATION_OCTET_STREAM_VALUE.equalsIgnoreCase(normalizedContentType)) {
+			return normalizedContentType;
+		}
+		return AudioSourceResolver.guessMimeFromPath(originalFilename);
+	}
+
+	private AiTaggingResult analyzeFallbackHints(String originalFilename, String title, String artist, int maxTags) {
+		String hint = buildFallbackHint(originalFilename, title, artist);
+		List<String> emotionKeys = emotionCaptionMapper.inferEmotionKeysFromHint(hint, maxTags);
+		List<EmotionTag> tags = resolveOrCreateTags(emotionKeys);
+		String caption = hint.isBlank()
+				? "DashScope 未配置，已使用默认兜底标签。"
+				: "DashScope 未配置，已根据歌曲信息做兜底识别。";
+		return new AiTaggingResult(
+				null,
+				caption,
+				emotionKeys,
+				tags.stream().map(EmotionTag::getId).toList(),
+				tags.stream().map(EmotionTag::getTagName).toList(),
+				List.of(),
+				false);
+	}
+
+	private String buildFallbackHint(String originalFilename, String title, String artist) {
+		List<String> parts = new ArrayList<>();
+		if (title != null && !title.isBlank()) {
+			parts.add(title.strip());
+		}
+		if (artist != null && !artist.isBlank()) {
+			parts.add(artist.strip());
+		}
+		if (originalFilename != null && !originalFilename.isBlank()) {
+			parts.add(originalFilename.replaceFirst("\\.[^.]+$", "").strip());
+		}
+		return String.join(" ", parts);
 	}
 
 	public record AiTaggingOptions(boolean persist, boolean replaceAiOnly, Integer maxTags) {

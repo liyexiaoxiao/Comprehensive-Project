@@ -23,6 +23,7 @@
               :is-running="isMeditationRunning"
               :reset-token="timerResetToken"
               :colors="['#D97A6C', '#8ca595']" 
+              @tick="handleTimerTick"
               @complete="handleTimerComplete"
             />
           </div>
@@ -77,101 +78,165 @@
           </div>
         </div>
 
-        <!-- Right: Playlist and Player -->
-        <div class="playlist-panel glass-panel">
-          <div class="panel-header">
-            <h2>冥想背景音</h2>
-            <p>选择符合当下情绪的背景音</p>
-          </div>
-
-          <div class="emotion-scroll-container" ref="emotionScrollRef" @wheel.prevent="handleWheel">
-            <button 
-              v-for="emotion in emotions" 
-              :key="emotion.id"
-              :class="['emotion-btn', { active: currentTrack?.id === emotion.id }]"
-              @click="selectTrack(emotion)"
-            >
-              <span class="emotion-name">{{ emotion.name }}</span>
-              <span class="emotion-desc">{{ emotion.title }}</span>
-            </button>
-          </div>
-
-          <div class="guide-section">
-            <button class="guide-btn" :class="{ active: showGuideText }" @click="toggleGuide">
-              <span class="guide-icon">✨</span>
-              <span>冥想引导</span>
-            </button>
-            <transition name="fade-slide">
-              <div class="guide-text-box" v-if="showGuideText">
-                <p v-if="isGuideLoading">正在生成与你当前情绪匹配的冥想引导...</p>
-                <p v-else>{{ guideText }}</p>
+        <div class="right-panels-shell">
+          <div class="right-panels-grid">
+            <!-- Right: Playlist and Player -->
+            <div class="playlist-panel glass-panel">
+              <div class="panel-header">
+                <h2>冥想背景音</h2>
+                <p>选择系统官方情绪，循环播放对应的官方歌单</p>
               </div>
-            </transition>
-          </div>
 
-          <div class="player-controls" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
-            <div class="now-playing-info" v-if="currentTrack">
-              <strong>{{ currentTrack.name }}</strong>
-              <span>{{ formatTime(progressSeconds) }} / {{ formatTime(currentTrack.duration) }}</span>
-            </div>
-            <div class="now-playing-info" v-else>
-              <strong>未选择音乐</strong>
-              <span>00:00 / 00:00</span>
-            </div>
-
-            <div class="control-buttons">
-              <button class="ctrl-btn" @click.stop="playPrevious" :disabled="!currentTrack">
-                <font-awesome-icon icon="backward-step" />
-              </button>
-              <button class="ctrl-btn play-btn" @click.stop="togglePlayback" :disabled="!currentTrack">
-                <font-awesome-icon :icon="isPlaying ? 'pause' : 'play'" />
-              </button>
-              <button class="ctrl-btn" @click.stop="playNext" :disabled="!currentTrack">
-                <font-awesome-icon icon="forward-step" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Far Right: Plant Growth -->
-        <div class="plant-panel glass-panel">
-          <div class="panel-header plant-header">
-            <div>
-              <h2>冥想森林</h2>
-              <p>记录你的专注时光</p>
-            </div>
-            <button class="info-btn" @click="showPlantInfo = true">
-              <font-awesome-icon icon="circle-info" />
-            </button>
-          </div>
-          
-          <div class="plant-display">
-            <div class="plant-stage">
-              <span class="plant-emoji">{{ currentPlantEmoji }}</span>
-            </div>
-            
-            <div class="plant-stats">
-              <div class="stat-item">
-                <span class="stat-label">总冥想时间</span>
-                <span class="stat-value"><strong>{{ totalMeditationTime }}</strong> 分钟</span>
+              <div class="emotion-scroll-container" ref="emotionScrollRef" @wheel.prevent="handleWheel">
+                <button 
+                  v-for="emotion in emotions" 
+                  :key="emotion.id"
+                  :class="['emotion-btn', { active: activeEmotionPlaylistId === emotion.id }]"
+                  @click="selectEmotionPlaylist(emotion)"
+                >
+                  <span class="emotion-name">{{ emotion.tagName }}</span>
+                  <span class="emotion-desc">{{ emotion.tracks.length ? `${emotion.tracks.length} 首官方歌曲` : '歌单待补充' }}</span>
+                </button>
               </div>
-              <div class="stat-item">
-                <span class="stat-label">当前植物</span>
-                <span class="stat-value"><strong>{{ currentTreeName }}</strong> ({{ currentStageName }})</span>
+
+              <div class="guide-section">
+                <button class="guide-btn" :class="{ active: guideModalVisible }" @click="openGuideModal">
+                  <span class="guide-icon">✨</span>
+                  <span>{{ guideModalVisible ? '重新生成引导' : '冥想引导' }}</span>
+                </button>
+                <p class="guide-hint">生成后会以逐句字幕和语音播报的方式播放</p>
               </div>
-              <div class="stat-item" v-if="fruits > 0">
-                <span class="stat-label">已结果实</span>
-                <span class="stat-value fruit-emojis">{{ '🍎'.repeat(fruits) }}</span>
+
+              <div class="player-controls" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
+                <div class="now-playing-info" v-if="currentTrack">
+                  <strong>{{ currentTrack.title }}</strong>
+                  <span>{{ formatTime(progressSeconds) }} / {{ formatTime(currentTrack.duration) }}</span>
+                </div>
+                <div class="now-playing-info" v-else>
+                  <strong>未选择音乐</strong>
+                  <span>00:00 / 00:00</span>
+                </div>
+
+                <div class="control-buttons">
+                  <button class="ctrl-btn" @click.stop="playPrevious" :disabled="!currentTrack">
+                    <font-awesome-icon icon="backward-step" />
+                  </button>
+                  <button class="ctrl-btn play-btn" @click.stop="togglePlayback" :disabled="!currentTrack">
+                    <font-awesome-icon :icon="isPlaying ? 'pause' : 'play'" />
+                  </button>
+                  <button class="ctrl-btn" @click.stop="playNext" :disabled="!currentTrack">
+                    <font-awesome-icon icon="forward-step" />
+                  </button>
+                </div>
               </div>
             </div>
-            
-            <div class="progress-section">
-              <div class="progress-bar-container">
-                <div class="progress-bar" :style="{ width: progressPercentage + '%' }"></div>
+
+            <!-- Far Right: Plant Growth -->
+            <div class="plant-panel glass-panel">
+              <div class="panel-header plant-header">
+                <div>
+                  <h2>冥想森林</h2>
+                  <p>记录你的专注时光</p>
+                </div>
+                <button class="info-btn" @click="showPlantInfo = true">
+                  <font-awesome-icon icon="circle-info" />
+                </button>
               </div>
-              <p class="next-stage-text">{{ nextStageText }}</p>
+              
+              <div class="plant-display">
+                <div class="plant-stage">
+                  <span class="plant-emoji">{{ currentPlantEmoji }}</span>
+                </div>
+                
+                <div class="plant-stats">
+                  <div class="stat-item">
+                    <span class="stat-label">总冥想时间</span>
+                    <span class="stat-value"><strong>{{ totalMeditationTime }}</strong> 分钟</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-label">当前植物</span>
+                    <span class="stat-value"><strong>{{ currentTreeName }}</strong> ({{ currentStageName }})</span>
+                  </div>
+                  <div class="stat-item" v-if="fruits > 0">
+                    <span class="stat-label">已结果实</span>
+                    <span class="stat-value fruit-emojis">{{ '🍎'.repeat(fruits) }}</span>
+                  </div>
+                </div>
+                
+                <div class="progress-section">
+                  <div class="progress-bar-container">
+                    <div class="progress-bar" :style="{ width: progressPercentage + '%' }"></div>
+                  </div>
+                  <p class="next-stage-text">{{ nextStageText }}</p>
+                </div>
+              </div>
             </div>
           </div>
+
+          <transition name="guide-overlay-fade">
+            <div class="guide-overlay" v-if="guideModalVisible">
+              <div class="guide-modal-card" @click.stop>
+                <div class="guide-modal-header">
+                  <div>
+                    <p class="guide-modal-kicker">冥想引导</p>
+                    <h3 class="guide-modal-title">{{ getGuideEmotionName() }} 情绪引导</h3>
+                  </div>
+                  <button class="close-btn guide-modal-close" @click="closeGuideModal">
+                    <font-awesome-icon icon="xmark" />
+                  </button>
+                </div>
+
+                <div class="guide-modal-toolbar">
+                  <span :class="['guide-status-pill', guideStatusClass]">{{ guideStatusText }}</span>
+                  <span class="guide-progress-text" v-if="guideLines.length">
+                    第 {{ currentGuideLineDisplay }} / {{ guideLines.length }} 句
+                  </span>
+                </div>
+
+                <div class="guide-lyrics-area">
+                  <div class="guide-placeholder" v-if="isGuideLoading">
+                    正在生成与你当前情绪匹配的冥想引导...
+                  </div>
+                  <div class="guide-placeholder" v-else-if="!guideLines.length">
+                    {{ guideText }}
+                  </div>
+                  <div class="guide-lines" v-else ref="guideLinesContainerRef">
+                    <p
+                      v-for="(line, index) in guideLines"
+                      :key="`${index}-${line}`"
+                      :ref="(el) => setGuideLineRef(el, index)"
+                      :class="[
+                        'guide-line',
+                        {
+                          active: index === currentGuideLineIndex,
+                          passed: index < currentGuideLineIndex,
+                          upcoming: index > currentGuideLineIndex,
+                        },
+                      ]"
+                    >
+                      {{ line }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="guide-modal-actions">
+                  <button class="guide-modal-btn" @click="regenerateGuide" :disabled="isGuideLoading">
+                    重新生成
+                  </button>
+                  <button
+                    class="guide-modal-btn primary"
+                    @click="replayGuideNarration"
+                    :disabled="isGuideLoading || !guideLines.length"
+                  >
+                    重播引导
+                  </button>
+                  <button class="guide-modal-btn" @click="closeGuideModal">
+                    关闭
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </div>
@@ -204,29 +269,63 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import CircleTimer from '@/components/CircleTimer.vue'
-import { getMeditationGuideApi } from '@/api/ai'
-import { getMyMeditationLogsApi, saveMeditationLogApi, rewardGardenItemApi } from '@/api/meditation'
+import { getCompanionTtsApi, getMeditationGuideApi, getAiAssetUrl } from '@/api/ai'
+import { getOfficialPlaylistConfigsApi } from '@/api/music'
+import { getMusicFileUrl } from '@/api/python'
+import {
+  completeMeditationCountdownApi,
+  getMyMeditationLogsApi,
+  rewardGardenItemApi,
+  saveMeditationLogApi,
+  startMeditationCountdownApi,
+  stopMeditationCountdownApi,
+} from '@/api/meditation'
+import { useMusicStore } from '@/stores/musicStore'
+import {
+  buildOfficialEmotionPlaylists,
+  getDefaultOfficialPlaylists,
+  mergeOfficialPlaylistConfigs,
+} from '@/utils/playlistCatalog'
+import { getRealMusicCover, normalizeEmotion } from '@/utils/realMusic'
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
-
-const emotions = [
-  { id: 'calm', name: '平静', title: '平静之声', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'relax', name: '放松', title: '放松频率', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'focus', name: '专注', title: '深度专注', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'tired', name: '疲惫', title: '缓解疲惫', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'anxious', name: '焦虑', title: '抚平焦虑', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'sad', name: '悲伤', title: '拥抱悲伤', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'lonely', name: '孤独', title: '陪伴孤独', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'joyful', name: '喜悦', title: '喜悦共振', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'angry', name: '愤怒', title: '释放愤怒', artist: 'Emotion Healing', duration: 1800 },
-  { id: 'hopeful', name: '充满希望', title: '希望之光', artist: 'Emotion Healing', duration: 1800 }
-]
+const GUIDE_TTS_VOICE = 'claire'
+const MEDITATION_BG_VOLUME = 0.72
+const GUIDE_ACTIVE_BG_VOLUME = 0.2
+const GUIDE_VOICE_VOLUME = 1
+const GUIDE_EMOTION_REQUEST_MAP = {
+  anger: '愤怒',
+  calm: '平静',
+  disgust: '愤怒',
+  fear: '焦虑',
+  joy: '喜悦',
+  love: '喜悦',
+  neutral: '平静',
+  sadness: '悲伤',
+  surprise: '充满希望',
+}
 
 const router = useRouter()
+const musicStore = useMusicStore()
+const officialPlaylistConfigs = ref(getDefaultOfficialPlaylists())
+const activeEmotionPlaylistId = ref(officialPlaylistConfigs.value[0]?.id || '')
+
+const emotions = computed(() => buildOfficialEmotionPlaylists(
+  musicStore.publicTracks,
+  officialPlaylistConfigs.value,
+))
+
+const activeEmotionPlaylist = computed(() =>
+  emotions.value.find((playlist) => playlist.id === activeEmotionPlaylistId.value)
+  || emotions.value[0]
+  || null)
+
+const currentPlaylistTracks = computed(() =>
+  Array.isArray(activeEmotionPlaylist.value?.tracks) ? activeEmotionPlaylist.value.tracks : [])
 
 const goBack = () => {
   router.push('/service')
@@ -249,6 +348,26 @@ const fetchLogs = async () => {
 
 onMounted(() => {
   fetchLogs()
+})
+
+const loadOfficialMeditationPlaylists = async () => {
+  try {
+    const [officialConfigResponse] = await Promise.all([
+      getOfficialPlaylistConfigsApi(),
+      musicStore.fetchPublicTracks(),
+    ])
+    officialPlaylistConfigs.value = mergeOfficialPlaylistConfigs(officialConfigResponse.data)
+    if (!emotions.value.some((playlist) => playlist.id === activeEmotionPlaylistId.value)) {
+      activeEmotionPlaylistId.value = emotions.value[0]?.id || ''
+    }
+  } catch (error) {
+    console.error('Failed to load official meditation playlists:', error)
+    ElMessage.error('加载官方冥想歌单失败，请确认 music-service 已启动。')
+  }
+}
+
+onMounted(() => {
+  loadOfficialMeditationPlaylists()
 })
 
 const TREE_CYCLE_TIME = 160 // 100 mins to mature + 3 * 20 mins for 3 fruits
@@ -336,6 +455,11 @@ const isMeditationRunning = ref(false)
 const isRoundCompleted = ref(false)
 const timerResetToken = ref(0)
 const roundStartedAt = ref(null)
+const remainingSeconds = ref(selectedTime.value)
+
+const handleTimerTick = (timeLeft) => {
+  remainingSeconds.value = Math.max(0, Number(timeLeft) || 0)
+}
 
 const selectTime = (option) => {
   selectedTime.value = option
@@ -353,10 +477,18 @@ const timerStatusText = computed(() => {
   return '点击“开始”后才会真正开始倒计时。'
 })
 
-const restartMeditation = () => {
+const restartMeditation = async () => {
+  if (isMeditationRunning.value) {
+    try {
+      await stopMeditationCountdownApi()
+    } catch (e) {
+      console.warn('Failed to stop countdown before restart', e)
+    }
+  }
   isMeditationRunning.value = false
   isRoundCompleted.value = false
   roundStartedAt.value = null
+  remainingSeconds.value = selectedTime.value
   timerResetToken.value += 1
 }
 
@@ -372,15 +504,29 @@ const applyCustomDuration = () => {
   restartMeditation()
 }
 
-const startMeditation = () => {
+const startMeditation = async () => {
   if (isMeditationRunning.value || isRoundCompleted.value) return
   if (!roundStartedAt.value) {
     roundStartedAt.value = new Date().toISOString()
   }
-  isMeditationRunning.value = true
+  try {
+    await startMeditationCountdownApi({
+      duration: remainingSeconds.value || selectedTime.value,
+      musicId: currentTrack.value?.musicResourceId || Number(currentTrack.value?.id) || null,
+      imageId: null,
+    })
+    isMeditationRunning.value = true
+  } catch (e) {
+    ElMessage.error('启动倒计时失败')
+  }
 }
 
-const pauseMeditation = () => {
+const pauseMeditation = async () => {
+  try {
+    await stopMeditationCountdownApi()
+  } catch (e) {
+    console.warn('Failed to pause meditation countdown', e)
+  }
   isMeditationRunning.value = false
 }
 
@@ -389,6 +535,7 @@ const handleTimerComplete = async () => {
   isRoundCompleted.value = true
   const meditatedMins = Math.floor(selectedTime.value / 60)
   try {
+    await completeMeditationCountdownApi()
     await saveMeditationLogApi({
       startTime: roundStartedAt.value || new Date().toISOString(),
       duration: meditatedMins,
@@ -408,34 +555,264 @@ const handleTimerComplete = async () => {
     ElMessage.error('保存记录失败')
   } finally {
     roundStartedAt.value = null
+    remainingSeconds.value = 0
   }
 }
 
-const showGuideText = ref(false)
+const guideModalVisible = ref(false)
 const isGuideLoading = ref(false)
 const guideText = ref('请选择一种冥想背景音，我会为你生成对应的冥想引导。')
+const guideLines = ref([])
+const currentGuideLineIndex = ref(-1)
+const isGuideSpeaking = ref(false)
+const isGuidePreparingAudio = ref(false)
+const guideSpeechError = ref('')
+const guideLineRefs = ref([])
+const guideLinesContainerRef = ref(null)
+const guideSpeechPlayer = new Audio()
+let guidePlaybackSession = 0
+let guideRequestSerial = 0
+let resolveGuideSpeechWait = null
+
+const currentGuideLineDisplay = computed(() => {
+  if (!guideLines.value.length || currentGuideLineIndex.value < 0) {
+    return 0
+  }
+  return Math.min(currentGuideLineIndex.value + 1, guideLines.value.length)
+})
+
+const guideStatusText = computed(() => {
+  if (isGuideLoading.value) return '引导生成中'
+  if (guideSpeechError.value) return '语音播报异常'
+  if (isGuidePreparingAudio.value) return '正在准备语音'
+  if (isGuideSpeaking.value) return '语音播报中'
+  if (guideLines.value.length && currentGuideLineIndex.value === guideLines.value.length - 1) {
+    return '本轮播报完成'
+  }
+  return '等待开始'
+})
+
+const guideStatusClass = computed(() => {
+  if (isGuideLoading.value || isGuidePreparingAudio.value) return 'loading'
+  if (guideSpeechError.value) return 'error'
+  if (isGuideSpeaking.value) return 'speaking'
+  return 'idle'
+})
+
+const getGuideEmotionName = () =>
+  activeEmotionPlaylist.value?.tagName
+  || currentTrack.value?.tags?.[0]
+  || currentTrack.value?.emotion
+  || '平静'
+
+const getGuideRequestEmotion = () => {
+  const rawEmotion = getGuideEmotionName()
+  const normalizedEmotion = normalizeEmotion(rawEmotion)
+  return GUIDE_EMOTION_REQUEST_MAP[normalizedEmotion] || rawEmotion || '平静'
+}
+
+const splitGuideIntoLines = (text) => {
+  const normalized = String(text || '').replace(/\r/g, '\n')
+  const lines = normalized
+    .split('\n')
+    .flatMap((paragraph) => paragraph.split(/(?<=[。！？!?；;])/))
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return lines.length ? lines : [String(text || '').trim()].filter(Boolean)
+}
+
+const setGuideLineRef = (element, index) => {
+  if (element) {
+    guideLineRefs.value[index] = element
+  }
+}
+
+const clearGuideSpeechWaiter = () => {
+  guideSpeechPlayer.onended = null
+  guideSpeechPlayer.onerror = null
+  resolveGuideSpeechWait = null
+}
+
+const syncMeditationAudioMix = () => {
+  guideSpeechPlayer.volume = GUIDE_VOICE_VOLUME
+  audioPlayer.volume = (guideModalVisible.value && (isGuideSpeaking.value || isGuidePreparingAudio.value))
+    ? GUIDE_ACTIVE_BG_VOLUME
+    : MEDITATION_BG_VOLUME
+}
+
+const scrollGuideLineIntoView = (index, behavior = 'smooth') => {
+  const container = guideLinesContainerRef.value
+  const line = guideLineRefs.value[index]
+  if (!container || !line) return
+
+  const targetTop = line.offsetTop - ((container.clientHeight - line.offsetHeight) / 2)
+  const maxScrollTop = Math.max(container.scrollHeight - container.clientHeight, 0)
+  container.scrollTo({
+    top: Math.min(Math.max(targetTop, 0), maxScrollTop),
+    behavior,
+  })
+}
+
+const waitForGuideSpeechToFinish = () => new Promise((resolve, reject) => {
+  clearGuideSpeechWaiter()
+  resolveGuideSpeechWait = resolve
+  guideSpeechPlayer.onended = () => {
+    clearGuideSpeechWaiter()
+    resolve()
+  }
+  guideSpeechPlayer.onerror = () => {
+    clearGuideSpeechWaiter()
+    reject(new Error('guide speech playback failed'))
+  }
+})
+
+const stopGuidePlayback = (resetLine = false) => {
+  guidePlaybackSession += 1
+  if (resolveGuideSpeechWait) {
+    const resolve = resolveGuideSpeechWait
+    clearGuideSpeechWaiter()
+    resolve()
+  }
+  guideSpeechPlayer.pause()
+  guideSpeechPlayer.src = ''
+  isGuideSpeaking.value = false
+  isGuidePreparingAudio.value = false
+  syncMeditationAudioMix()
+  if (resetLine) {
+    currentGuideLineIndex.value = -1
+  }
+}
+
+const playGuideLineAudio = async (line, playbackSession) => {
+  const { data } = await getCompanionTtsApi({
+    text: line,
+    tts_voice: GUIDE_TTS_VOICE,
+  })
+
+  if (playbackSession !== guidePlaybackSession || !guideModalVisible.value) {
+    return
+  }
+
+  if (data?.tts_error) {
+    throw new Error(data.tts_error)
+  }
+
+  const audioUrl = getAiAssetUrl(data?.audio_url)
+  if (!audioUrl) {
+    throw new Error('TTS 未返回可播放音频')
+  }
+
+  guideSpeechPlayer.pause()
+  guideSpeechPlayer.src = audioUrl
+  guideSpeechPlayer.currentTime = 0
+  syncMeditationAudioMix()
+  await guideSpeechPlayer.play()
+  await waitForGuideSpeechToFinish()
+}
+
+const startGuideNarration = async (startIndex = 0) => {
+  if (!guideLines.value.length || !guideModalVisible.value) return
+
+  stopGuidePlayback(false)
+  guideSpeechError.value = ''
+  const playbackSession = guidePlaybackSession
+  isGuideSpeaking.value = true
+
+  if (startIndex <= 0) {
+    await nextTick()
+    if (guideLinesContainerRef.value) {
+      guideLinesContainerRef.value.scrollTop = 0
+    }
+  }
+
+  for (let index = Math.max(0, startIndex); index < guideLines.value.length; index += 1) {
+    if (playbackSession !== guidePlaybackSession || !guideModalVisible.value) {
+      if (playbackSession === guidePlaybackSession) {
+        isGuideSpeaking.value = false
+        isGuidePreparingAudio.value = false
+      }
+      return
+    }
+
+    currentGuideLineIndex.value = index
+    isGuidePreparingAudio.value = true
+
+    try {
+      await playGuideLineAudio(guideLines.value[index], playbackSession)
+    } catch (error) {
+      if (playbackSession !== guidePlaybackSession) {
+        return
+      }
+      console.error('Failed to play guide narration:', error)
+      guideSpeechError.value = '语音播报失败'
+      isGuideSpeaking.value = false
+      isGuidePreparingAudio.value = false
+      ElMessage.error('冥想引导语音播放失败，请检查 AI 服务 TTS 配置。')
+      return
+    } finally {
+      if (playbackSession === guidePlaybackSession) {
+        isGuidePreparingAudio.value = false
+      }
+    }
+  }
+
+  if (playbackSession === guidePlaybackSession) {
+    isGuideSpeaking.value = false
+    isGuidePreparingAudio.value = false
+  }
+}
 
 const fetchMeditationGuide = async (emotionName) => {
+  const requestSerial = ++guideRequestSerial
+  guideModalVisible.value = true
   isGuideLoading.value = true
+  guideSpeechError.value = ''
+  guideLines.value = []
+  stopGuidePlayback(true)
   try {
     const { data } = await getMeditationGuideApi({
       emotion: emotionName,
     })
+    if (requestSerial !== guideRequestSerial) return
     guideText.value = data?.guide || '当前引导词生成失败，请稍后重试。'
+    guideLines.value = splitGuideIntoLines(guideText.value)
+    currentGuideLineIndex.value = guideLines.value.length ? 0 : -1
+    if (guideLines.value.length) {
+      isGuideLoading.value = false
+      await nextTick()
+      await startGuideNarration(0)
+    }
   } catch (error) {
+    if (requestSerial !== guideRequestSerial) return
     console.error(error)
+    guideLines.value = []
     guideText.value = '冥想引导服务暂时不可用，请稍后再试。'
     ElMessage.error(error?.response?.data?.error || '冥想引导生成失败，请检查 AI 服务与 Kimi API Key。')
   } finally {
-    isGuideLoading.value = false
+    if (requestSerial === guideRequestSerial) {
+      isGuideLoading.value = false
+    }
   }
 }
 
-const toggleGuide = () => {
-  showGuideText.value = !showGuideText.value
-  if (showGuideText.value && currentTrack.value) {
-    fetchMeditationGuide(currentTrack.value.name)
-  }
+const openGuideModal = () => {
+  fetchMeditationGuide(getGuideRequestEmotion())
+}
+
+const closeGuideModal = () => {
+  guideRequestSerial += 1
+  guideModalVisible.value = false
+  stopGuidePlayback(false)
+}
+
+const regenerateGuide = () => {
+  fetchMeditationGuide(getGuideRequestEmotion())
+}
+
+const replayGuideNarration = () => {
+  guideSpeechError.value = ''
+  startGuideNarration(0)
 }
 
 // Emotion Scroll Logic
@@ -456,7 +833,24 @@ const handleWheel = (e) => {
 const currentTrack = ref(null)
 const isPlaying = ref(false)
 const progressSeconds = ref(0)
-let playTimer = null
+const audioPlayer = new Audio()
+
+const createMeditationPlayerTrack = (track, playlist = activeEmotionPlaylist.value) => ({
+  id: track.id,
+  musicResourceId: track.musicResourceId ?? null,
+  title: track.title,
+  artist: track.artist?.trim() || playlist?.tagName || 'Emotion Healing',
+  duration: Number(track.duration) || 0,
+  cover: track.cover || getRealMusicCover(track.emotion || playlist?.coverEmotion || 'neutral'),
+  tags: Array.isArray(track.tags) && track.tags.length
+    ? [...track.tags]
+    : [playlist?.tagName || '冥想', '官方歌单'],
+  type: '冥想背景音',
+  emotion: track.emotion || playlist?.coverEmotion || 'neutral',
+  filename: track.filename || '',
+  fileUrl: track.fileUrl || '',
+  source: track.source || '',
+})
 
 const formatTime = (seconds) => {
   const safeValue = Number.isFinite(seconds) ? seconds : 0
@@ -465,80 +859,136 @@ const formatTime = (seconds) => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-const stopTimer = () => {
-  if (playTimer) {
-    clearInterval(playTimer)
-    playTimer = null
-  }
-}
-
-const startTimer = () => {
-  stopTimer()
-  playTimer = setInterval(() => {
-    if (!isPlaying.value || !currentTrack.value) return
-    
-    if (progressSeconds.value >= currentTrack.value.duration) {
-      playNext()
-      return
-    }
-    progressSeconds.value += 1
-  }, 1000)
-}
-
-const selectTrack = (track) => {
-  currentTrack.value = track
+const stopAudioPlayback = () => {
+  audioPlayer.pause()
+  audioPlayer.currentTime = 0
   progressSeconds.value = 0
-  isPlaying.value = true
-  startTimer()
+  isPlaying.value = false
+}
 
-  if (showGuideText.value) {
-    fetchMeditationGuide(track.name)
+const resolveTrackSource = (track) => {
+  if (track?.fileUrl) {
+    return track.fileUrl
+  }
+  if (track?.filename) {
+    return getMusicFileUrl(track.filename)
+  }
+  return ''
+}
+
+const playAudioForTrack = async (track) => {
+  const sourceUrl = resolveTrackSource(track)
+  if (!sourceUrl) {
+    isPlaying.value = false
+    ElMessage.warning('当前曲目缺少可播放的音频地址')
+    return
+  }
+
+  try {
+    audioPlayer.pause()
+    audioPlayer.src = sourceUrl
+    audioPlayer.currentTime = 0
+    progressSeconds.value = 0
+    syncMeditationAudioMix()
+    await audioPlayer.play()
+    isPlaying.value = true
+  } catch (error) {
+    isPlaying.value = false
+    console.error('Failed to play meditation track:', error)
+    ElMessage.error('背景音播放失败，请确认音乐服务已启动且资源可访问。')
   }
 }
 
-const togglePlayback = () => {
+const selectTrack = async (track, playlist = activeEmotionPlaylist.value) => {
+  currentTrack.value = createMeditationPlayerTrack(track, playlist)
+  progressSeconds.value = 0
+  await playAudioForTrack(currentTrack.value)
+
+  if (guideModalVisible.value && playlist) {
+    fetchMeditationGuide(
+      GUIDE_EMOTION_REQUEST_MAP[normalizeEmotion(playlist.tagName || track.tags?.[0] || track.emotion || '平静')]
+      || playlist.tagName
+      || track.tags?.[0]
+      || track.emotion
+      || '平静',
+    )
+  }
+}
+
+const clearCurrentTrack = () => {
+  currentTrack.value = null
+  stopAudioPlayback()
+}
+
+const selectEmotionPlaylist = async (playlist) => {
+  activeEmotionPlaylistId.value = playlist.id
+  if (!playlist?.tracks?.length) {
+    clearCurrentTrack()
+    if (guideModalVisible.value) {
+      fetchMeditationGuide(
+        GUIDE_EMOTION_REQUEST_MAP[normalizeEmotion(playlist?.tagName || '平静')]
+        || playlist?.tagName
+        || '平静',
+      )
+    }
+    ElMessage.info('当前官方情绪歌单暂无曲目')
+    return
+  }
+  await selectTrack(playlist.tracks[0], playlist)
+}
+
+const togglePlayback = async () => {
   if (!currentTrack.value) return
-  isPlaying.value = !isPlaying.value
+
+  if (!audioPlayer.src) {
+    await playAudioForTrack(currentTrack.value)
+    return
+  }
+
   if (isPlaying.value) {
-    startTimer()
-  } else {
-    stopTimer()
+    audioPlayer.pause()
+    isPlaying.value = false
+    return
+  }
+
+  try {
+    await audioPlayer.play()
+    isPlaying.value = true
+  } catch (error) {
+    isPlaying.value = false
+    console.error('Failed to resume meditation track:', error)
+    ElMessage.error('无法继续播放当前背景音。')
   }
 }
 
-const playNext = () => {
-  if (!currentTrack.value) return
-  const idx = emotions.findIndex(t => t.id === currentTrack.value.id)
-  const nextIdx = (idx + 1) % emotions.length
-  selectTrack(emotions[nextIdx])
+const playNext = async () => {
+  const tracks = currentPlaylistTracks.value
+  if (!currentTrack.value || !tracks.length) return
+  const idx = tracks.findIndex((track) => String(track.id) === String(currentTrack.value.id))
+  const nextIdx = idx >= 0 ? (idx + 1) % tracks.length : 0
+  await selectTrack(tracks[nextIdx], activeEmotionPlaylist.value)
 }
 
-const playPrevious = () => {
-  if (!currentTrack.value) return
-  const idx = emotions.findIndex(t => t.id === currentTrack.value.id)
-  const prevIdx = idx > 0 ? idx - 1 : emotions.length - 1
-  selectTrack(emotions[prevIdx])
+const playPrevious = async () => {
+  const tracks = currentPlaylistTracks.value
+  if (!currentTrack.value || !tracks.length) return
+  const idx = tracks.findIndex((track) => String(track.id) === String(currentTrack.value.id))
+  const prevIdx = idx > 0 ? idx - 1 : tracks.length - 1
+  await selectTrack(tracks[prevIdx], activeEmotionPlaylist.value)
 }
-
-const normalizeMeditationTrack = (track) => ({
-  id: track.id,
-  title: track.title,
-  artist: track.artist?.trim() || 'Emotion Healing',
-  duration: track.duration || 0,
-  cover: `/images/feature-img-${(emotions.findIndex(item => item.id === track.id) % 4 + 1)}.jpg`,
-  tags: [track.name, '冥想', '背景音'],
-  type: '冥想背景音'
-})
 
 const openPlayerPage = () => {
-  if (!currentTrack.value) return
+  const playlist = activeEmotionPlaylist.value
+  const queueTracks = Array.isArray(playlist?.tracks) ? playlist.tracks : []
+  if (!currentTrack.value || !playlist || !queueTracks.length) return
 
   window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
     source: 'meditation',
     returnTo: '/meditation-room',
-    categoryName: '冥想背景音',
-    track: normalizeMeditationTrack(currentTrack.value),
-    queue: emotions.map(item => normalizeMeditationTrack(item))
+    categoryId: playlist.id,
+    categoryName: playlist.name,
+    track: currentTrack.value,
+    queue: queueTracks.map((item) => createMeditationPlayerTrack(item, playlist)),
   }))
 
   router.push({ name: 'music-player' })
@@ -549,9 +999,59 @@ onMounted(() => {
   // selectTrack(activeCategory.value.tracks[0])
 })
 
+audioPlayer.onloadedmetadata = () => {
+  const measuredDuration = Number.isFinite(audioPlayer.duration) ? Math.floor(audioPlayer.duration) : 0
+  if (currentTrack.value && measuredDuration > 0) {
+    currentTrack.value = {
+      ...currentTrack.value,
+      duration: measuredDuration,
+    }
+  }
+}
+
+audioPlayer.ontimeupdate = () => {
+  progressSeconds.value = audioPlayer.currentTime || 0
+}
+
+audioPlayer.onpause = () => {
+  if (!audioPlayer.ended) {
+    isPlaying.value = false
+  }
+}
+
+audioPlayer.onplay = () => {
+  isPlaying.value = true
+}
+
+audioPlayer.onended = () => {
+  playNext()
+}
+
 onBeforeUnmount(() => {
-  stopTimer()
+  stopGuidePlayback(false)
+  clearGuideSpeechWaiter()
+  guideSpeechPlayer.pause()
+  guideSpeechPlayer.src = ''
+  audioPlayer.pause()
+  audioPlayer.src = ''
 })
+
+watch(guideLines, () => {
+  guideLineRefs.value = []
+  if (guideLinesContainerRef.value) {
+    guideLinesContainerRef.value.scrollTop = 0
+  }
+})
+
+watch(currentGuideLineIndex, async (index) => {
+  if (index < 0) return
+  await nextTick()
+  scrollGuideLineIntoView(index, index <= 1 ? 'auto' : 'smooth')
+})
+
+watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
+  syncMeditationAudioMix()
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -625,9 +1125,21 @@ onBeforeUnmount(() => {
 .main-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1.1fr 1.1fr 0.8fr;
+  grid-template-columns: 1.05fr 1.95fr;
   gap: 30px;
   overflow: hidden;
+}
+
+.right-panels-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.right-panels-grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1.1fr 0.8fr;
+  gap: 30px;
 }
 
 .glass-panel {
@@ -765,8 +1277,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 10px;
   margin-bottom: 16px;
-  flex: 1;
 }
 
 .guide-btn {
@@ -801,33 +1313,12 @@ onBeforeUnmount(() => {
   font-size: 1.1rem;
 }
 
-.guide-text-box {
-  margin-top: 12px;
-  padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(10px);
-  text-align: justify;
+.guide-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
   line-height: 1.6;
-  color: var(--color-text-primary);
-  font-size: 0.9rem;
-  width: 100%;
-  max-width: 100%;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 
 /* Playlist Panel */
@@ -1111,6 +1602,220 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
+.guide-overlay-fade-enter-active,
+.guide-overlay-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.guide-overlay-fade-enter-from,
+.guide-overlay-fade-leave-to {
+  opacity: 0;
+}
+
+.guide-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  padding: 18px;
+  border-radius: var(--radius-xl);
+  background: rgba(33, 38, 36, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.guide-modal-card {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: calc(var(--radius-xl) - 2px);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(24px);
+  padding: 30px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.guide-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.guide-modal-kicker {
+  margin: 0 0 10px;
+  font-size: 0.84rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent-terracotta);
+  font-weight: 700;
+}
+
+.guide-modal-title {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: 1.8rem;
+  color: var(--color-text-primary);
+}
+
+.guide-modal-desc {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.guide-modal-close {
+  position: static;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(44, 48, 46, 0.1);
+  flex-shrink: 0;
+}
+
+.guide-modal-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.guide-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.guide-status-pill.loading {
+  background: rgba(140, 165, 149, 0.18);
+  color: #587466;
+}
+
+.guide-status-pill.speaking {
+  background: rgba(217, 122, 108, 0.18);
+  color: #b06054;
+}
+
+.guide-status-pill.error {
+  background: rgba(210, 71, 87, 0.12);
+  color: #b24150;
+}
+
+.guide-status-pill.idle {
+  background: rgba(44, 48, 46, 0.08);
+  color: var(--color-text-secondary);
+}
+
+.guide-progress-text {
+  font-size: 0.92rem;
+  color: var(--color-text-secondary);
+}
+
+.guide-lyrics-area {
+  flex: 1;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.38));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  padding: 18px 22px;
+}
+
+.guide-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+.guide-lines {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 14px;
+  padding: 8px 8px 24px;
+  scroll-behavior: smooth;
+}
+
+.guide-line {
+  margin: 0;
+  padding: 10px 16px;
+  text-align: center;
+  line-height: 1.9;
+  font-size: 1.06rem;
+  color: rgba(44, 48, 46, 0.68);
+  border-radius: var(--radius-lg);
+  transition: all 0.24s ease;
+}
+
+.guide-line.passed {
+  color: rgba(44, 48, 46, 0.4);
+}
+
+.guide-line.upcoming {
+  color: rgba(44, 48, 46, 0.82);
+}
+
+.guide-line.active {
+  background: rgba(217, 122, 108, 0.14);
+  box-shadow: 0 12px 28px rgba(217, 122, 108, 0.12);
+  color: var(--color-accent-terracotta);
+  font-size: 1.34rem;
+  font-weight: 700;
+  transform: scale(1.01);
+}
+
+.guide-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.guide-modal-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(44, 48, 46, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.guide-modal-btn.primary {
+  background: linear-gradient(135deg, var(--color-accent-terracotta), #c88a75);
+  border-color: transparent;
+  color: #fff;
+}
+
+.guide-modal-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(44, 48, 46, 0.08);
+}
+
+.guide-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -1235,6 +1940,10 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
     overflow-y: auto;
   }
+
+  .right-panels-grid {
+    grid-template-columns: 1fr;
+  }
   
   .page-shell {
     height: auto;
@@ -1244,6 +1953,19 @@ onBeforeUnmount(() => {
   .meditation-page {
     height: auto;
     overflow: auto;
+  }
+
+  .guide-overlay {
+    position: static;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    margin-top: 20px;
+  }
+
+  .guide-modal-card {
+    min-height: 640px;
+    padding: 24px 20px;
   }
 }
 </style>

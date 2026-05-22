@@ -9,6 +9,9 @@
         </div>
         <div class="admin-header-actions">
           <span class="admin-badge">{{ currentAdminName }}</span>
+          <button class="header-action-btn" type="button" :disabled="isLoggingOut" @click="handleLogout">
+            {{ isLoggingOut ? '退出中...' : '退出登录' }}
+          </button>
           <RouterLink class="header-link" to="/service">返回服务页</RouterLink>
         </div>
       </header>
@@ -36,13 +39,33 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { computed, ref } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { getCurrentUserFromStorage } from '@/api/user'
+import { logoutSession } from '@/api/session'
 
+const router = useRouter()
 const route = useRoute()
 const currentUser = computed(() => getCurrentUserFromStorage())
 const currentAdminName = computed(() => currentUser.value?.nickname || currentUser.value?.username || '管理员')
+const isLoggingOut = ref(false)
+
+const handleLogout = async () => {
+  if (isLoggingOut.value) return
+
+  try {
+    isLoggingOut.value = true
+    await logoutSession()
+    ElMessage.success('已退出登录')
+    router.push({ name: 'login' })
+  } catch (error) {
+    console.error('Logout failed:', error)
+    ElMessage.error('退出登录失败，请稍后重试')
+  } finally {
+    isLoggingOut.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -104,7 +127,8 @@ const currentAdminName = computed(() => currentUser.value?.nickname || currentUs
 }
 
 .admin-badge,
-.header-link {
+.header-link,
+.header-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -113,6 +137,17 @@ const currentAdminName = computed(() => currentUser.value?.nickname || currentUs
   background: rgba(125, 159, 143, 0.14);
   color: #37564a;
   text-decoration: none;
+}
+
+.header-action-btn {
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.header-action-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .admin-nav {

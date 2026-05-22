@@ -74,13 +74,14 @@ public class ChatService {
 		message.setConversationId(conversation.getId());
 		message.setSenderId(userId);
 		message.setContent(text);
-		ChatMessage saved = messageRepository.save(message);
+		ChatMessage saved = messageRepository.saveAndFlush(message);
+		ChatMessage persistedMessage = messageRepository.findById(saved.getId()).orElse(saved);
 
-		conversation.setLastMessageAt(saved.getCreatedAt() != null ? saved.getCreatedAt() : LocalDateTime.now());
+		conversation.setLastMessageAt(persistedMessage.getCreatedAt() != null ? persistedMessage.getCreatedAt() : LocalDateTime.now());
 		conversation.setLastMessagePreview(truncatePreview(text));
 		conversationRepository.save(conversation);
 
-		return ChatMessageResponse.from(saved);
+		return ChatMessageResponse.from(persistedMessage);
 	}
 
 	@Transactional
@@ -113,14 +114,8 @@ public class ChatService {
 	}
 
 	private ChatConversationResponse toConversationResponse(ChatConversation conv, Long userId) {
-		long peerUserId = conv.peerUserId(userId);
 		long unread = messageRepository.countByConversationIdAndSenderIdNotAndReadAtIsNull(conv.getId(), userId);
-		return new ChatConversationResponse(
-				conv.getId(),
-				peerUserId,
-				conv.getLastMessagePreview(),
-				conv.getLastMessageAt(),
-				unread);
+		return ChatConversationResponse.from(conv, userId, unread);
 	}
 
 	private static String normalizeContent(String content) {

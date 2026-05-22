@@ -20,6 +20,15 @@ call :stop_port 8084 Data Service
 call :stop_port 8085 Meditation Service
 
 echo.
+echo Cleaning stale build output...
+call :clean_dir "%ROOT%\music-service\target" Music Service target
+
+echo.
+echo Generating a fresh JWT secret for this startup...
+set "JWT_SECRET=emotion-healing-dev-jwt-secret-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%"
+echo JWT secret prepared.
+
+echo.
 echo Starting Python Backend...
 start "Python Backend" cmd /k "cd /d ""%ROOT%\backend"" && call pip install -r requirements.txt && python app.py"
 
@@ -30,10 +39,10 @@ echo Starting Emotion Recognition Service...
 start "Emotion Recognition" cmd /k "cd /d ""%ROOT%\AI-service\emotion_recog"" && call pip install -r requirements.txt && set PORT=5003 && python app.py"
 
 echo Starting API Gateway...
-start "API Gateway" cmd /k "cd /d ""%ROOT%\api-gateway"" && call mvnw.cmd spring-boot:run"
+start "API Gateway" cmd /k "cd /d ""%ROOT%\api-gateway"" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
 
 echo Starting User Service...
-start "User Service" cmd /k "cd /d ""%ROOT%\user-service"" && call mvnw.cmd spring-boot:run"
+start "User Service" cmd /k "cd /d ""%ROOT%\user-service"" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
 
 echo Starting Music Service...
 start "Music Service" cmd /k "cd /d ""%ROOT%\music-service"" && call mvnw.cmd spring-boot:run"
@@ -59,5 +68,14 @@ set "SERVICE_NAME=%~2"
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:":%PORT% .*LISTENING"') do (
   echo Stopping %SERVICE_NAME% on port %PORT% ^(PID %%P^)...
   taskkill /PID %%P /F >nul 2>&1
+)
+goto :eof
+
+:clean_dir
+set "TARGET_DIR=%~1"
+set "TARGET_NAME=%~2"
+if exist "%TARGET_DIR%" (
+  echo Removing %TARGET_NAME%...
+  rmdir /s /q "%TARGET_DIR%"
 )
 goto :eof
