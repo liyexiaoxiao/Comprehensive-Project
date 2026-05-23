@@ -233,7 +233,11 @@ public class SocialApiController {
 		diary.setDate(request.date());
 		diary.setDominantEmotion(request.dominantEmotion());
 		diary.setContext(request.context());
-		return ResponseEntity.ok(moodDiaryRepository.save(diary));
+		try {
+			return ResponseEntity.ok(moodDiaryRepository.save(diary));
+		} catch (org.springframework.dao.DataIntegrityViolationException e) {
+			return ResponseEntity.<MoodDiary>status(409).build();
+		}
 	}
 
 	/** 更新当前用户已有的一条情绪日记。 */

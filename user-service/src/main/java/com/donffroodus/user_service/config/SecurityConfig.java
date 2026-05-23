@@ -20,6 +20,9 @@ public class SecurityConfig {
     @Autowired
     private GatewayHeaderFilter gatewayHeaderFilter; 
 
+    @Autowired
+    private LoginRateLimitFilter loginRateLimitFilter;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -35,6 +38,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             );
 
+        http.addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(gatewayHeaderFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
