@@ -7,5 +7,6 @@ deep-translator>=1.11.4
 numpy
 requests>=2.31.0
 python-dotenv>=1.0.0
+PyJWT>=2.8.0
 
 

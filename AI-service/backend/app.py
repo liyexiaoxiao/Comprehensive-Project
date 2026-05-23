@@ -7,6 +7,7 @@ import requests
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
+from auth import current_user_id, install_jwt_auth
 from kimi_service import generate_meditation_guide
 from music_tools import MUSIC_DIR, list_music_files
 from qwen_service import query_qwen_companion_with_tools, stream_qwen_companion
@@ -14,6 +15,13 @@ from tts_service import synthesize_speech
 
 app = Flask(__name__)
 CORS(app)
+install_jwt_auth(
+    app,
+    public_paths=[
+        ("GET", "/api/audio"),
+        ("GET", "/api/music"),
+    ],
+)
 
 # Emotion recognition service
 EMOTION_SERVICE_URL = os.getenv("EMOTION_SERVICE_URL", "http://localhost:5003/predict")
@@ -62,10 +70,23 @@ def parse_history_items(logs):
     return history
 
 
-def fetch_history(session_id: str, limit: int = 20):
+def parse_int_user_id(raw_value):
+    if raw_value in (None, ''):
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_history(session_id: str, limit: int = 20, user_id: int = None):
+    query = {"sessionId": session_id}
+    if user_id is not None:
+        query["userId"] = user_id
+
     cursor = (
         ai_chat_log_collection
-        .find({"sessionId": session_id})
+        .find(query)
         .sort("createdAt", 1)
     )
     logs = list(cursor)
@@ -151,7 +172,7 @@ def companion_chat():
         payload = request.get_json(silent=True) if request.is_json else {}
         payload = payload or {}
 
-        user_id_raw = payload.get('userId') or request.form.get('userId')
+        user_id_raw = current_user_id() or payload.get('userId') or request.form.get('userId')
         session_id = (payload.get('sessionId') or request.form.get('sessionId') or '').strip()
         tts_voice = (payload.get('tts_voice') or request.form.get('tts_voice') or '').strip()
 
@@ -210,7 +231,7 @@ def companion_chat():
             if not transcript:
                 return jsonify({'error': 'No text or audio provided'}), 400
 
-        logs = fetch_history(session_id, limit=20)
+        logs = fetch_history(session_id, limit=20, user_id=user_id)
         history = parse_history_items(logs)
 
         save_chat_log(
@@ -264,7 +285,7 @@ def companion_chat_stream():
 
     try:
         payload = request.get_json(silent=True) or {}
-        user_id_raw = payload.get('userId')
+        user_id_raw = current_user_id() or payload.get('userId')
         session_id = (payload.get('sessionId') or '').strip()
         transcript = (payload.get('text') or '').strip()
         detected_emotion = (payload.get('detected_emotion') or '').strip() or None
@@ -282,7 +303,7 @@ def companion_chat_stream():
         except (TypeError, ValueError):
             return jsonify({'error': 'userId must be integer'}), 400
 
-        logs = fetch_history(session_id, limit=20)
+        logs = fetch_history(session_id, limit=20, user_id=user_id)
         history = parse_history_items(logs)
 
         save_chat_log(
@@ -418,7 +439,8 @@ def companion_history():
     if not session_id:
         return jsonify({'error': 'sessionId is required'}), 400
 
-    logs = fetch_history(session_id, limit=200)
+    user_id = parse_int_user_id(current_user_id())
+    logs = fetch_history(session_id, limit=200, user_id=user_id)
     result = []
     for log in logs:
         result.append({

@@ -86,6 +86,8 @@ Edit these values first:
 - `DASHSCOPE_API_KEY`
 - `SILICONFLOW_API_KEY`
 
+`JWT_SECRET` is also passed into the Flask services. Keep it exactly the same as the Java services so `/py-api` and `/ai-api` can validate the same login token issued by `user-service`.
+
 Start the application stack:
 
 ```bash

@@ -119,6 +119,8 @@ services:
   python-backend:
     build: ../../../backend
     container_name: emohealing-python-backend
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - python_uploaded_music:/app/uploaded_music
     restart: unless-stopped
@@ -128,6 +130,7 @@ services:
     container_name: emohealing-ai-service
     environment:
       AI_SERVICE_PORT: 5001
+      JWT_SECRET: ${JWT_SECRET}
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
       SILICONFLOW_TTS_MODEL: ${SILICONFLOW_TTS_MODEL:-FunAudioLLM/CosyVoice2-0.5B}

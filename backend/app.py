@@ -2,6 +2,7 @@ import json
 
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from auth import current_user_id, install_jwt_auth
 from music_service import (
     delete_uploaded_music,
     get_music_file,
@@ -15,6 +16,13 @@ from music_service import (
 
 app = Flask(__name__)
 CORS(app)  
+install_jwt_auth(
+    app,
+    public_paths=[
+        ("GET", "/api/music/list"),
+        ("GET", "/api/music/file"),
+    ],
+)
 
 
 def load_emotion_analyzer():
@@ -108,7 +116,7 @@ def get_music_by_filename(filename):
 @app.route('/api/music/uploads', methods=['GET'])
 def list_uploaded_tracks():
     try:
-        user_id = parse_user_id(request.headers.get('X-User-Id'))
+        user_id = parse_user_id(current_user_id())
         tracks = list_uploaded_music(user_id)
         return jsonify({"tracks": tracks})
     except Exception as e:
@@ -133,7 +141,7 @@ def upload_music_file():
 
         saved_track, error = save_uploaded_music(
             file_storage=file,
-            user_id=parse_user_id(request.headers.get('X-User-Id')),
+            user_id=parse_user_id(current_user_id()),
             title=title,
             artist=artist,
             duration=duration,
@@ -151,7 +159,7 @@ def delete_uploaded_track(track_id):
     try:
         deleted, error, status_code = delete_uploaded_music(
             track_id,
-            parse_user_id(request.headers.get('X-User-Id'))
+            parse_user_id(current_user_id())
         )
         if not deleted:
             return jsonify({"error": error}), status_code
