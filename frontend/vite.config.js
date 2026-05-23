@@ -11,19 +11,18 @@ export default defineConfig({
     vueDevTools(),
   ],
   server: {
-    host: '172.17.112.1',
     proxy: {
       '/api': {
-        target: 'http://172.17.112.1:8080',
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
       '/py-api': {
-        target: 'http://172.17.112.1:5000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/py-api/, ''),
       },
       '/ai-api': {
-        target: 'http://172.17.112.1:5001',
+        target: 'http://localhost:5001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ai-api/, ''),
       },
