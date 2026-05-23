@@ -14,7 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,18 +60,9 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * 优先从 X-Forwarded-For 头获取真实客户端 IP（取第一个），
-     * 回退到 request.getRemoteAddr()。
+     * 使用 TCP 连接的源 IP，不信任可被伪造的 X-Forwarded-For 头。
      */
     private String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            // X-Forwarded-For 可能包含多个 IP（client, proxy1, proxy2），取第一个
-            String firstIp = xff.split(",")[0].trim();
-            if (!firstIp.isEmpty()) {
-                return firstIp;
-            }
-        }
         return request.getRemoteAddr();
     }
 
