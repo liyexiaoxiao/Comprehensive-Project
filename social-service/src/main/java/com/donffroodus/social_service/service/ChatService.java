@@ -74,14 +74,14 @@ public class ChatService {
 		message.setConversationId(conversation.getId());
 		message.setSenderId(userId);
 		message.setContent(text);
+		message.setCreatedAt(LocalDateTime.now());
 		ChatMessage saved = messageRepository.saveAndFlush(message);
-		ChatMessage persistedMessage = messageRepository.findById(saved.getId()).orElse(saved);
 
-		conversation.setLastMessageAt(persistedMessage.getCreatedAt() != null ? persistedMessage.getCreatedAt() : LocalDateTime.now());
+		conversation.setLastMessageAt(saved.getCreatedAt());
 		conversation.setLastMessagePreview(truncatePreview(text));
 		conversationRepository.save(conversation);
 
-		return ChatMessageResponse.from(persistedMessage);
+		return ChatMessageResponse.from(saved);
 	}
 
 	@Transactional

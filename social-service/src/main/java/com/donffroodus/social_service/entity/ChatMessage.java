@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
@@ -27,7 +28,7 @@ public class ChatMessage {
 	@Column(nullable = false, columnDefinition = "text")
 	private String content;
 
-	@Column(name = "created_at", insertable = false, updatable = false)
+	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	@Column(name = "read_at")
@@ -67,6 +68,17 @@ public class ChatMessage {
 
 	public LocalDateTime getCreatedAt() {
 		return createdAt;
+	}
+
+	public void setCreatedAt(LocalDateTime createdAt) {
+		this.createdAt = createdAt;
+	}
+
+	@PrePersist
+	void assignCreatedAt() {
+		if (createdAt == null) {
+			createdAt = LocalDateTime.now();
+		}
 	}
 
 	public LocalDateTime getReadAt() {
