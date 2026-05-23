@@ -1,9 +1,9 @@
 import os
 import requests
-from urllib.parse import quote
 
-MUSIC_SERVICE_BASE_URL = os.getenv("MUSIC_SERVICE_URL", "http://localhost:8081/api/v1")
-MUSIC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "backend", "music"))
+# 通过网关调用 music-service（推荐）
+# 网关会验证 JWT 并设置 X-User-Id
+MUSIC_SERVICE_BASE_URL = os.getenv("MUSIC_SERVICE_URL", "http://api-gateway:8080/api/music/v1")
 
 EMOTION_TAG_NAME_MAP = {
     "joy": "高兴",
@@ -60,15 +60,6 @@ EMOTION_LABELS = {
 }
 
 
-def list_music_files():
-    if not os.path.isdir(MUSIC_DIR):
-        return []
-    return sorted(
-        filename for filename in os.listdir(MUSIC_DIR)
-        if filename.lower().endswith(".mp3")
-    )
-
-
 def resolve_music_emotion(query: str = "", emotion: str = None):
     normalized_emotion = EMOTION_ALIASES.get(str(emotion or "").strip().lower())
     if normalized_emotion:
@@ -82,10 +73,19 @@ def resolve_music_emotion(query: str = "", emotion: str = None):
     return "neutral"
 
 
-def _get_emotion_tag_id(emotion_key: str):
+def _get_emotion_tag_id(emotion_key: str, jwt_token: str = None):
     tag_name = EMOTION_TAG_NAME_MAP.get(emotion_key, "平静")
     try:
-        resp = requests.get(f"{MUSIC_SERVICE_BASE_URL}/emotion-tags/by-name", params={"name": tag_name}, timeout=5)
+        headers = {}
+        if jwt_token:
+            headers["Authorization"] = f"Bearer {jwt_token}"
+
+        resp = requests.get(
+            f"{MUSIC_SERVICE_BASE_URL}/emotion-tags/by-name",
+            params={"name": tag_name},
+            headers=headers,
+            timeout=5
+        )
         if resp.status_code == 200:
             return resp.json().get("id")
     except Exception as e:
@@ -93,73 +93,75 @@ def _get_emotion_tag_id(emotion_key: str):
     return None
 
 
-def recommend_music(query: str = "", emotion: str = None, limit: int = 3, user_id: int = 10001):
+def recommend_music(query: str = "", emotion: str = None, limit: int = 3, user_id: int = 10001, jwt_token: str = None):
     selected_emotion = resolve_music_emotion(query, emotion)
-    tag_id = _get_emotion_tag_id(selected_emotion)
-    
+    tag_id = _get_emotion_tag_id(selected_emotion, jwt_token)
+
     items = []
     label = EMOTION_LABELS.get(selected_emotion, "平静")
-    
-    if tag_id:
-        try:
-            payload = {"emotionTagId": tag_id, "limit": limit}
-            headers = {"X-User-Id": str(user_id)}
-            resp = requests.post(f"{MUSIC_SERVICE_BASE_URL}/me/music-recommendations/by-emotion", 
-                                 json=payload, headers=headers, timeout=5)
-            if resp.status_code == 200:
-                resources = resp.json()
-                for index, res in enumerate(resources, start=1):
-                    filename = os.path.basename(res.get("fileUrl", ""))
-                    if not filename:
-                        source = res.get("source", "")
-                        if source.startswith("python-public:"):
-                            filename = source[len("python-public:"):]
-                    
-                    items.append({
-                        "id": str(res.get("id")),
-                        "title": res.get("title"),
-                        "artist": res.get("artist") or label,
-                        "duration": res.get("duration", 0),
-                        "emotion": selected_emotion,
-                        "filename": filename,
-                        "cover": res.get("coverUrl") or f"/images/feature-img-{((index - 1) % 4) + 1}.jpg",
-                        "tags": [label, selected_emotion],
-                        "reason": f"根据你的情绪，为你推荐这首{label}的音乐。",
-                        "url": res.get("fileUrl") or (f"/api/music/file/{quote(filename)}" if filename else None),
-                    })
-        except Exception as e:
-            print(f"Failed to call music-service recommendation: {e}")
 
-    # Fallback to local file scanning if API fails or returns nothing
-    if not items:
-        all_files = list_music_files()
-        candidates = [
-            filename for filename in all_files
-            if filename.lower().startswith(f"{selected_emotion}_")
-        ]
-        if not candidates:
-            candidates = [
-                filename for filename in all_files
-                if filename.lower().startswith("neutral_")
-            ]
-        if not candidates:
-            candidates = all_files
+    if not tag_id:
+        print(f"No emotion tag found for {selected_emotion}")
+        return {
+            "type": "music_recommendation",
+            "emotion": selected_emotion,
+            "items": [],
+            "error": f"未找到对应的情绪标签：{label}",
+        }
 
-        safe_limit = max(1, min(int(limit or 3), 5))
-        for index, filename in enumerate(candidates[:safe_limit], start=1):
-            title = os.path.splitext(filename)[0]
-            items.append({
-                "id": f"tool-{title}",
-                "title": title,
-                "artist": label,
-                "duration": 0,
+    try:
+        payload = {"emotionTagId": tag_id, "limit": limit}
+        headers = {}
+        if jwt_token:
+            headers["Authorization"] = f"Bearer {jwt_token}"
+
+        resp = requests.post(
+            f"{MUSIC_SERVICE_BASE_URL}/me/music-recommendations/by-emotion",
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+
+        if resp.status_code != 200:
+            print(f"Music service returned status {resp.status_code}: {resp.text}")
+            return {
+                "type": "music_recommendation",
                 "emotion": selected_emotion,
-                "filename": filename,
-                "cover": f"/images/feature-img-{((index - 1) % 4) + 1}.jpg",
+                "items": [],
+                "error": f"音乐服务暂时不可用（状态码：{resp.status_code}）",
+            }
+
+        resources = resp.json()
+        for index, res in enumerate(resources, start=1):
+            file_url = res.get("fileUrl", "")
+
+            items.append({
+                "id": str(res.get("id")),
+                "title": res.get("title") or "未命名音乐",
+                "artist": res.get("artist") or label,
+                "duration": res.get("duration", 0),
+                "emotion": selected_emotion,
+                "cover": res.get("coverUrl") or f"/images/feature-img-{((index - 1) % 4) + 1}.jpg",
                 "tags": [label, selected_emotion],
-                "reason": f"这首更贴近你现在想要的{label}氛围。",
-                "url": f"/api/music/file/{quote(filename)}",
+                "reason": f"根据你的情绪，为你推荐这首{label}的音乐。",
+                "url": file_url,
             })
+    except requests.exceptions.Timeout:
+        print(f"Music service request timeout")
+        return {
+            "type": "music_recommendation",
+            "emotion": selected_emotion,
+            "items": [],
+            "error": "音乐服务响应超时，请稍后再试。",
+        }
+    except Exception as e:
+        print(f"Failed to call music-service recommendation: {e}")
+        return {
+            "type": "music_recommendation",
+            "emotion": selected_emotion,
+            "items": [],
+            "error": f"获取音乐推荐时出错：{str(e)}",
+        }
 
     return {
         "type": "music_recommendation",

@@ -9,7 +9,6 @@ from flask_cors import CORS
 from pymongo import MongoClient
 from auth import current_user_id, install_jwt_auth
 from kimi_service import generate_meditation_guide
-from music_tools import MUSIC_DIR, list_music_files
 from qwen_service import query_qwen_companion_with_tools, stream_qwen_companion
 from tts_service import synthesize_speech
 
@@ -19,7 +18,6 @@ install_jwt_auth(
     app,
     public_paths=[
         ("GET", "/api/audio"),
-        ("GET", "/api/music"),
     ],
 )
 
@@ -110,32 +108,6 @@ def save_chat_log(user_id: int, session_id: str, role: str, content: str, emotio
 @app.route('/api/audio/<path:filename>', methods=['GET'])
 def generated_audio(filename):
     return send_from_directory(AUDIO_OUTPUT_DIR, filename, mimetype='audio/mpeg')
-
-
-@app.route('/api/music/list', methods=['GET'])
-def music_list():
-    return jsonify({'music_files': list_music_files()})
-
-
-@app.route('/api/music/file/<path:filename>', methods=['GET'])
-def music_file(filename):
-    return send_from_directory(MUSIC_DIR, filename, mimetype='audio/mpeg')
-
-
-@app.route('/api/music/<emotion>', methods=['GET'])
-def emotion_music(emotion):
-    files = [
-        filename for filename in list_music_files()
-        if filename.lower().startswith(f"{emotion.lower()}_")
-    ]
-    if not files:
-        files = [
-            filename for filename in list_music_files()
-            if filename.lower().startswith("neutral_")
-        ]
-    if not files:
-        return jsonify({'error': 'No music file found'}), 404
-    return send_from_directory(MUSIC_DIR, files[0], mimetype='audio/mpeg')
 
 
 @app.route('/api/meditation/guide', methods=['POST', 'OPTIONS'])
@@ -242,7 +214,16 @@ def companion_chat():
             emotion_label=detected_emotion,
         )
 
-        model_result = query_qwen_companion_with_tools(transcript, detected_emotion, history, user_id=user_id)
+        # 获取 JWT token 用于调用 music-service
+        jwt_token = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+
+        model_result = query_qwen_companion_with_tools(
+            transcript,
+            detected_emotion,
+            history,
+            user_id=user_id,
+            jwt_token=jwt_token
+        )
         model_raw = model_result.get('raw', '')
         emotion = model_result.get('emotion') or '平静'
         reply = model_result.get('reply') or model_raw

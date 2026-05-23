@@ -136,13 +136,14 @@ services:
       SILICONFLOW_TTS_MODEL: ${SILICONFLOW_TTS_MODEL:-FunAudioLLM/CosyVoice2-0.5B}
       SILICONFLOW_TTS_VOICE: ${SILICONFLOW_TTS_VOICE:-FunAudioLLM/CosyVoice2-0.5B:alex}
       EMOTION_SERVICE_URL: ${EMOTION_SERVICE_URL:-http://emotion-recog:5003/predict}
-      MUSIC_SERVICE_URL: http://music-service:8081/api/v1
+      MUSIC_SERVICE_URL: http://api-gateway:8080/api/music/v1
       MONGO_URI: ${AI_MONGO_URI}
       MONGO_DB: ${AI_MONGO_DB:-comprehensive_project}
       MONGO_COLLECTION: ${AI_MONGO_COLLECTION:-ai_chat_log}
     volumes:
       - ai_generated_audio:/app/generated_audio
     depends_on:
+      - api-gateway
       - music-service
     restart: unless-stopped
 

@@ -50,13 +50,14 @@ def _has_music_intent(text: str):
     return any(keyword in lowered for keyword in MUSIC_INTENT_KEYWORDS)
 
 
-def _run_companion_tool(name: str, arguments: dict, user_id: int = 10001):
+def _run_companion_tool(name: str, arguments: dict, user_id: int = 10001, jwt_token: str = None):
     if name == "recommend_music":
         return recommend_music(
             query=arguments.get("query", ""),
             emotion=arguments.get("emotion"),
             limit=arguments.get("limit", 3),
             user_id=user_id,
+            jwt_token=jwt_token,
         )
     raise ValueError(f"Unsupported tool: {name}")
 
@@ -133,7 +134,7 @@ def analyze_emotion_by_qwen(user_text: str):
     )
 
     completion = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen3.5-plus-2026-04-20",
         messages=[
             {
                 "role": "system",
@@ -157,7 +158,7 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None, history: 
     client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     completion = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen3.5-plus-2026-04-20",
         messages=build_companion_prompt(user_text, detected_emotion, history),
         extra_body={"enable_thinking": True},
     )
@@ -168,7 +169,7 @@ def query_qwen_companion(user_text: str, detected_emotion: str = None, history: 
     return content
 
 
-def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None, history: list = None, user_id: int = 10001):
+def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None, history: list = None, user_id: int = 10001, jwt_token: str = None):
     """Call Qwen with native tool calling and return parsed reply plus tool results."""
     qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
     if not qwen_api_key:
@@ -192,7 +193,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
     })
 
     first_completion = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen3.5-plus-2026-04-20",
         messages=messages,
         tools=COMPANION_TOOLS,
         tool_choice="auto",
@@ -212,7 +213,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
             arguments = json.loads(function.arguments or "{}")
             if not arguments.get("emotion") and detected_emotion:
                 arguments["emotion"] = detected_emotion
-            result = _run_companion_tool(function.name, arguments, user_id=user_id)
+            result = _run_companion_tool(function.name, arguments, user_id=user_id, jwt_token=jwt_token)
             tool_results.append(result)
             messages.append({
                 "role": "tool",
@@ -221,7 +222,7 @@ def query_qwen_companion_with_tools(user_text: str, detected_emotion: str = None
             })
 
         final_completion = client.chat.completions.create(
-            model="qwen3.5-plus",
+            model="qwen3.5-plus-2026-04-20",
             messages=messages,
             extra_body={"enable_thinking": False},
         )
@@ -259,7 +260,7 @@ def stream_qwen_companion(user_text: str, detected_emotion: str = None, history:
     client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     stream = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen3.5-plus-2026-04-20",
         messages=build_companion_prompt(user_text, detected_emotion, history),
         stream=True,
         extra_body={"enable_thinking": True},
