@@ -22,9 +22,46 @@ ALLOWED_EMOTIONS = [
     "充满希望",
 ]
 
+EMOTION_ALIAS_MAP = {
+    "calm": "平静",
+    "neutral": "平静",
+    "relax": "放松",
+    "focus": "专注",
+    "tired": "疲惫",
+    "fear": "焦虑",
+    "anxiety": "焦虑",
+    "sad": "悲伤",
+    "sadness": "悲伤",
+    "lonely": "孤独",
+    "joy": "喜悦",
+    "happy": "喜悦",
+    "hopeful": "充满希望",
+    "anger": "愤怒",
+    "angry": "愤怒",
+    "disgust": "愤怒",
+    "surprise": "充满希望",
+    "中性": "平静",
+    "高兴": "喜悦",
+    "快乐": "喜悦",
+    "开心": "喜悦",
+    "恐惧": "焦虑",
+    "厌恶": "愤怒",
+    "惊讶": "充满希望",
+    "惊喜": "充满希望",
+    "希望": "充满希望",
+}
+
+
+def normalize_meditation_emotion(emotion_name: str) -> str:
+    normalized = (emotion_name or "").strip()
+    if not normalized:
+        return ""
+    return EMOTION_ALIAS_MAP.get(normalized.lower(), EMOTION_ALIAS_MAP.get(normalized, normalized))
+
 
 def generate_meditation_guide(emotion_name: str) -> str:
     """根据情绪标签生成冥想引导词。"""
+    emotion_name = normalize_meditation_emotion(emotion_name)
     if emotion_name not in ALLOWED_EMOTIONS:
         raise RuntimeError("不支持的情绪类型")
     kimi_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()

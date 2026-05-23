@@ -1,17 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
+  createEmotionTagApi,
   createMusicResourceApi,
   deleteMusicResourceApi,
   getEmotionTagsApi,
+  getMusicPreferenceByMusicApi,
   getMyMusicPreferencesApi,
   getMyMusicResourcesApi,
   getMusicResourceTagsApi,
   getMusicResourcesApi,
+  previewAiTagMusicFileApi,
   deleteMusicPreferenceApi,
   createPlaylistApi,
   addTrackToPlaylistApi,
   deletePlaylistApi,
+  replaceMusicTagsApi,
   getMyPlaylistsApi,
   recommendMusicByEmotionApi,
   recommendNextMusicApi,
@@ -38,6 +42,10 @@ const DEFAULT_PLAYLIST_COVER = '/images/feature-img-2.jpg'
 const PYTHON_UPLOAD_SOURCE_PREFIX = 'python-upload:'
 const PYTHON_PUBLIC_SOURCE_PREFIX = 'python-public:'
 const ENABLE_PYTHON_PUBLIC_FALLBACK = import.meta.env.VITE_ENABLE_PYTHON_PUBLIC_FALLBACK === 'true'
+const PREFERENCE_TYPE_LIKE = 1
+const PREFERENCE_TYPE_COLLECT = 2
+const PREFERENCE_TYPE_BLOCK = -1
+const SUPPORTED_PREFERENCE_TYPES = [PREFERENCE_TYPE_LIKE, PREFERENCE_TYPE_COLLECT, PREFERENCE_TYPE_BLOCK]
 
 const normalizeId = (value) => String(value ?? '')
 
@@ -56,6 +64,13 @@ const parsePythonTrackId = (source = '') =>
   String(source || '').startsWith(PYTHON_UPLOAD_SOURCE_PREFIX)
     ? String(source).slice(PYTHON_UPLOAD_SOURCE_PREFIX.length)
     : ''
+
+const mergeTagNames = (...groups) => Array.from(new Set(
+  groups
+    .flat()
+    .map(item => String(item || '').trim())
+    .filter(Boolean),
+))
 
 const createTrack = (track) => ({
   ...track,
@@ -116,7 +131,86 @@ export const useMusicStore = defineStore('music', () => {
   const emotionTags = ref([])
   const likedTrackIds = ref([])
   const collectedTrackIds = ref([])
+  const blockedTrackIds = ref([])
   const customPlaylists = ref([])
+  const trackPreferenceMap = ref({})
+
+  const setExclusivePreferenceState = (trackId, preferenceType = null) => {
+    const normalizedTrackId = normalizeId(trackId)
+    if (!normalizedTrackId) return
+
+    likedTrackIds.value = likedTrackIds.value.filter(id => id !== normalizedTrackId)
+    collectedTrackIds.value = collectedTrackIds.value.filter(id => id !== normalizedTrackId)
+    blockedTrackIds.value = blockedTrackIds.value.filter(id => id !== normalizedTrackId)
+
+    if (preferenceType === PREFERENCE_TYPE_LIKE) {
+      likedTrackIds.value.push(normalizedTrackId)
+    } else if (preferenceType === PREFERENCE_TYPE_COLLECT) {
+      collectedTrackIds.value.push(normalizedTrackId)
+    } else if (preferenceType === PREFERENCE_TYPE_BLOCK) {
+      blockedTrackIds.value.push(normalizedTrackId)
+    }
+
+    if (preferenceType == null) {
+      const nextMap = { ...trackPreferenceMap.value }
+      delete nextMap[normalizedTrackId]
+      trackPreferenceMap.value = nextMap
+      return
+    }
+
+    trackPreferenceMap.value = {
+      ...trackPreferenceMap.value,
+      [normalizedTrackId]: preferenceType,
+    }
+  }
+
+  const buildEffectivePreferenceMap = (preferences = []) => {
+    const grouped = new Map()
+    for (const item of Array.isArray(preferences) ? preferences : []) {
+      const musicId = normalizeId(item?.musicId)
+      if (!musicId) continue
+      const current = grouped.get(musicId)
+      const nextType = Number(item?.preferenceType)
+
+      if (nextType === PREFERENCE_TYPE_BLOCK) {
+        grouped.set(musicId, PREFERENCE_TYPE_BLOCK)
+        continue
+      }
+      if (nextType === PREFERENCE_TYPE_LIKE) {
+        grouped.set(musicId, PREFERENCE_TYPE_LIKE)
+        continue
+      }
+      if (nextType === PREFERENCE_TYPE_COLLECT && current == null) {
+        grouped.set(musicId, PREFERENCE_TYPE_COLLECT)
+      }
+    }
+    return Object.fromEntries(grouped.entries())
+  }
+
+  const applyPreferenceMap = (nextPreferenceMap = {}) => {
+    trackPreferenceMap.value = { ...nextPreferenceMap }
+    likedTrackIds.value = Object.keys(nextPreferenceMap).filter(id => nextPreferenceMap[id] === PREFERENCE_TYPE_LIKE)
+    collectedTrackIds.value = Object.keys(nextPreferenceMap).filter(id => nextPreferenceMap[id] === PREFERENCE_TYPE_COLLECT)
+    blockedTrackIds.value = Object.keys(nextPreferenceMap).filter(id => nextPreferenceMap[id] === PREFERENCE_TYPE_BLOCK)
+  }
+
+  const getTrackPreferenceType = (trackId) => {
+    const normalizedTrackId = normalizeId(trackId)
+    return trackPreferenceMap.value[normalizedTrackId] ?? null
+  }
+
+  const removePreferenceTypesFromServer = async (trackId, preferenceTypes = SUPPORTED_PREFERENCE_TYPES) => {
+    const normalizedTrackId = normalizeId(trackId)
+    await Promise.all(preferenceTypes.map(async (preferenceType) => {
+      try {
+        await deleteMusicPreferenceApi(normalizedTrackId, preferenceType)
+      } catch (error) {
+        if (error?.response?.status !== 404) {
+          throw error
+        }
+      }
+    }))
+  }
 
   const findUploadedTrack = (trackId) => {
     const normalizedTrackId = normalizeId(trackId)
@@ -178,6 +272,40 @@ export const useMusicStore = defineStore('music', () => {
     return matchedTag?.id || null
   }
 
+  const ensureEmotionTagIds = async (tagNames) => {
+    const uniqueNames = Array.from(new Set(
+      (Array.isArray(tagNames) ? tagNames : [])
+        .map(item => String(item || '').trim())
+        .filter(Boolean),
+    ))
+    if (!uniqueNames.length) {
+      return []
+    }
+
+    if (!emotionTags.value.length) {
+      await fetchEmotionTags()
+    }
+
+    const ids = []
+    let shouldRefreshTags = false
+    for (const tagName of uniqueNames) {
+      let existing = emotionTags.value.find((tag) => String(tag?.tagName || '').trim() === tagName)
+      if (!existing) {
+        const response = await createEmotionTagApi({ tagName })
+        existing = response.data
+        shouldRefreshTags = true
+      }
+      if (existing?.id != null) {
+        ids.push(Number(existing.id))
+      }
+    }
+
+    if (shouldRefreshTags) {
+      await fetchEmotionTags()
+    }
+    return ids
+  }
+
   const fetchPythonFallbackPublicTracks = async () => {
     if (!ENABLE_PYTHON_PUBLIC_FALLBACK) {
       return []
@@ -224,6 +352,7 @@ export const useMusicStore = defineStore('music', () => {
         const normalizedEmotion = normalizeEmotion(emotion || 'neutral')
         recommendedTracks.value = publicTracks.value
           .filter(track => normalizeEmotion(track?.emotion || track?.tags?.[0]) === normalizedEmotion)
+          .filter(track => getTrackPreferenceType(track.id) !== PREFERENCE_TYPE_BLOCK)
           .slice(0, limit)
         return recommendedTracks.value
       }
@@ -236,12 +365,14 @@ export const useMusicStore = defineStore('music', () => {
         const normalizedEmotion = normalizeEmotion(emotion || 'neutral')
         recommendedTracks.value = publicTracks.value
           .filter(track => normalizeEmotion(track?.emotion || track?.tags?.[0]) === normalizedEmotion)
+          .filter(track => getTrackPreferenceType(track.id) !== PREFERENCE_TYPE_BLOCK)
           .slice(0, limit)
       }
     } catch (error) {
       const normalizedEmotion = normalizeEmotion(emotion || 'neutral')
       recommendedTracks.value = publicTracks.value
         .filter(track => normalizeEmotion(track?.emotion || track?.tags?.[0]) === normalizedEmotion)
+        .filter(track => getTrackPreferenceType(track.id) !== PREFERENCE_TYPE_BLOCK)
         .slice(0, limit)
       console.error('Failed to fetch recommended tracks:', error)
     }
@@ -273,7 +404,9 @@ export const useMusicStore = defineStore('music', () => {
     const normalizedEmotion = normalizeEmotion(emotion || 'neutral')
     const candidates = publicTracks.value.filter((track) => {
       const trackEmotion = normalizeEmotion(track?.emotion || track?.tags?.[0])
-      return trackEmotion === normalizedEmotion && normalizeId(track.id) !== normalizeId(currentMusicId)
+      return trackEmotion === normalizedEmotion
+        && normalizeId(track.id) !== normalizeId(currentMusicId)
+        && getTrackPreferenceType(track.id) !== PREFERENCE_TYPE_BLOCK
     })
     return candidates[0] || null
   }
@@ -299,6 +432,18 @@ export const useMusicStore = defineStore('music', () => {
         ? resourceResponse.data.filter(resource => String(resource?.source || '').startsWith(PYTHON_UPLOAD_SOURCE_PREFIX))
         : []
       const pythonTracks = Array.isArray(pythonResponse.data?.tracks) ? pythonResponse.data.tracks : []
+      const resourceTagPairs = await Promise.all(uploadedResources.map(async (resource) => {
+        try {
+          const response = await getMusicResourceTagsApi(resource.id)
+          const tagNames = Array.isArray(response.data)
+            ? response.data.map(item => item?.tagName).filter(Boolean)
+            : []
+          return [resource.id, tagNames]
+        } catch (error) {
+          return [resource.id, []]
+        }
+      }))
+      const resourceTagMap = Object.fromEntries(resourceTagPairs)
 
       uploadedTracks.value = pythonTracks.map((pythonTrack) => {
         const matched = findMatchingUploadedResource(uploadedResources, pythonTrack)
@@ -317,8 +462,7 @@ export const useMusicStore = defineStore('music', () => {
         return normalizeMusicResourceTrack(matched, {
           ...pythonTrack,
           pythonTrackId: pythonTrack.id,
-          filename: pythonTrack.filename,
-          tags: pythonTrack.tags,
+          tags: mergeTagNames(pythonTrack.tags, resourceTagMap[matched.id]),
           type: '本地上传',
         })
       })
@@ -338,58 +482,110 @@ export const useMusicStore = defineStore('music', () => {
       ])
 
       const preferences = prefRes.data || []
-      likedTrackIds.value = preferences.filter(p => p.preferenceType === 1).map(p => normalizeId(p.musicId))
-      collectedTrackIds.value = preferences.filter(p => p.preferenceType === 2).map(p => normalizeId(p.musicId))
+      applyPreferenceMap(buildEffectivePreferenceMap(preferences))
 
       const playlists = Array.isArray(playlistsRes.data) ? playlistsRes.data : []
       customPlaylists.value = playlists.map(normalizePlaylist)
     } catch (error) {
       console.error('Failed to fetch user music data:', error)
       customPlaylists.value = []
-      likedTrackIds.value = []
-      collectedTrackIds.value = []
+      applyPreferenceMap({})
+    }
+  }
+
+  const fetchTrackPreference = async (trackId) => {
+    const normalizedTrackId = normalizeId(trackId)
+    if (!normalizedTrackId) return null
+
+    try {
+      const response = await getMusicPreferenceByMusicApi(normalizedTrackId)
+      const preferenceType = Number(response.data?.preferenceType)
+      if (!SUPPORTED_PREFERENCE_TYPES.includes(preferenceType)) {
+        setExclusivePreferenceState(normalizedTrackId, null)
+        return null
+      }
+      setExclusivePreferenceState(normalizedTrackId, preferenceType)
+      return preferenceType
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        setExclusivePreferenceState(normalizedTrackId, null)
+        return null
+      }
+      console.error('Failed to fetch track preference:', error)
+      return getTrackPreferenceType(normalizedTrackId)
+    }
+  }
+
+  const setTrackPreference = async (trackId, preferenceType) => {
+    const normalizedTrackId = normalizeId(trackId)
+    if (!normalizedTrackId) return null
+
+    const nextPreferenceType = getTrackPreferenceType(normalizedTrackId) === preferenceType
+      ? null
+      : preferenceType
+
+    try {
+      await removePreferenceTypesFromServer(
+        normalizedTrackId,
+        nextPreferenceType == null
+          ? SUPPORTED_PREFERENCE_TYPES
+          : SUPPORTED_PREFERENCE_TYPES.filter(type => type !== nextPreferenceType),
+      )
+
+      if (nextPreferenceType != null) {
+        await upsertMusicPreferenceApi({ musicId: normalizedTrackId, preferenceType: nextPreferenceType })
+      }
+
+      setExclusivePreferenceState(normalizedTrackId, nextPreferenceType)
+      return nextPreferenceType
+    } catch (error) {
+      console.error('Failed to set track preference:', error)
+      ElMessage.error('偏好操作失败')
+      await fetchTrackPreference(normalizedTrackId)
+      return getTrackPreferenceType(normalizedTrackId)
     }
   }
 
   const toggleLike = async (trackId) => {
-    const normalizedTrackId = normalizeId(trackId)
-    const idx = likedTrackIds.value.indexOf(normalizedTrackId)
-    try {
-      if (idx > -1) {
-        await deleteMusicPreferenceApi(normalizedTrackId, 1)
-        likedTrackIds.value.splice(idx, 1)
-      } else {
-        await upsertMusicPreferenceApi({ musicId: normalizedTrackId, preferenceType: 1 })
-        likedTrackIds.value.push(normalizedTrackId)
-      }
-    } catch (e) {
-      ElMessage.error('操作失败')
-    }
+    return setTrackPreference(trackId, PREFERENCE_TYPE_LIKE)
   }
 
   const toggleCollect = async (trackId) => {
-    const normalizedTrackId = normalizeId(trackId)
-    const idx = collectedTrackIds.value.indexOf(normalizedTrackId)
-    try {
-      if (idx > -1) {
-        await deleteMusicPreferenceApi(normalizedTrackId, 2)
-        collectedTrackIds.value.splice(idx, 1)
-      } else {
-        await upsertMusicPreferenceApi({ musicId: normalizedTrackId, preferenceType: 2 })
-        collectedTrackIds.value.push(normalizedTrackId)
-      }
-    } catch (e) {
-      ElMessage.error('操作失败')
+    return setTrackPreference(trackId, PREFERENCE_TYPE_COLLECT)
+  }
+
+  const toggleBlock = async (trackId) => {
+    return setTrackPreference(trackId, PREFERENCE_TYPE_BLOCK)
+  }
+
+  const previewTrackEmotionTags = async (file, options = {}) => {
+    if (!file) {
+      throw new Error('请选择要识别的音频文件')
+    }
+    const maxTags = Number(options.maxTags) > 0 ? Number(options.maxTags) : 3
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('maxTags', String(maxTags))
+    formData.append('title', String(options.title || '').trim())
+    formData.append('artist', String(options.artist || '').trim())
+
+    const response = await previewAiTagMusicFileApi(formData)
+    return {
+      caption: response.data?.caption || '',
+      inferredEmotionKeys: Array.isArray(response.data?.inferredEmotionKeys) ? response.data.inferredEmotionKeys : [],
+      tagNames: Array.isArray(response.data?.tagNames) ? response.data.tagNames.filter(Boolean) : [],
     }
   }
 
   const uploadTrack = async (payload) => {
+    const confirmedTagNames = mergeTagNames(payload.tags)
     const formData = new FormData()
     formData.append('file', payload.file)
     formData.append('title', payload.title?.trim() || '')
     formData.append('artist', payload.artist?.trim() || '')
     formData.append('duration', String(payload.duration || 0))
-    formData.append('tags', JSON.stringify(Array.isArray(payload.tags) ? payload.tags : []))
+    formData.append('tags', JSON.stringify(confirmedTagNames))
 
     const uploadResponse = await uploadMusicFileApi(formData)
     const uploadedTrack = uploadResponse.data || {}
@@ -405,8 +601,20 @@ export const useMusicStore = defineStore('music', () => {
         source: buildUploadSource(uploadedTrack.id),
       })
       musicResource = resourceResponse.data
+      if (musicResource?.id != null) {
+        const tagIds = await ensureEmotionTagIds(confirmedTagNames)
+        if (tagIds.length) {
+          await replaceMusicTagsApi(musicResource.id, {
+            tagIds,
+            source: 'manual',
+          })
+        }
+      }
     } catch (error) {
       console.error('Sync uploaded track to music-service failed:', error)
+      if (musicResource?.id != null) {
+        ElMessage.warning('音乐已上传，但同步情绪标签到曲库失败，请稍后重试')
+      }
     }
 
     const nextTrack = musicResource
@@ -414,7 +622,7 @@ export const useMusicStore = defineStore('music', () => {
           ...uploadedTrack,
           pythonTrackId: uploadedTrack.id,
           filename: uploadedTrack.filename,
-          tags: uploadedTrack.tags,
+          tags: mergeTagNames(uploadedTrack.tags, confirmedTagNames),
           type: '本地上传',
         })
       : createTrack({
@@ -446,8 +654,7 @@ export const useMusicStore = defineStore('music', () => {
     }
 
     uploadedTracks.value = uploadedTracks.value.filter(t => t.id !== normalizedTrackId)
-    likedTrackIds.value = likedTrackIds.value.filter(id => id !== normalizedTrackId)
-    collectedTrackIds.value = collectedTrackIds.value.filter(id => id !== normalizedTrackId)
+    setExclusivePreferenceState(normalizedTrackId, null)
     customPlaylists.value = customPlaylists.value.map((playlist) => ({
       ...playlist,
       trackIds: playlist.trackIds.filter(id => id !== normalizedTrackId),
@@ -514,7 +721,9 @@ export const useMusicStore = defineStore('music', () => {
     emotionTags,
     likedTrackIds,
     collectedTrackIds,
+    blockedTrackIds,
     customPlaylists,
+    trackPreferenceMap,
     fetchPublicTracks,
     fetchUploadedTracks,
     fetchEmotionTags,
@@ -523,8 +732,12 @@ export const useMusicStore = defineStore('music', () => {
     resolveEmotionTagId,
     resolveTrackById,
     fetchUserData,
+    fetchTrackPreference,
+    getTrackPreferenceType,
     toggleLike,
     toggleCollect,
+    toggleBlock,
+    previewTrackEmotionTags,
     uploadTrack,
     removeUploadedTrack,
     createPlaylist,

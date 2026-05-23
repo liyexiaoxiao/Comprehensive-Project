@@ -24,6 +24,10 @@ export const saveCurrentUserToStorage = (user) => {
   window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user))
 }
 
+export const clearCurrentUserFromStorage = () => {
+  window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+}
+
 export const getCurrentUserFromStorage = () => {
   try {
     const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY)

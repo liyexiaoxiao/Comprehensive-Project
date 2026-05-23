@@ -1,5 +1,5 @@
 server:
-  port: 8080 # 网关占据 8080 端口，直面用户
+  port: 8080 # 网关占据 8080 端口
 
 spring:
   application:
@@ -7,6 +7,9 @@ spring:
 
   profiles:
     active: dev
+
+  codec:
+    max-in-memory-size: 20MB
 
   cloud:
     gateway:

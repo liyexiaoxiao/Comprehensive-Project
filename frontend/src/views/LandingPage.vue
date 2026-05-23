@@ -17,7 +17,7 @@
       <nav class="site-nav">
         <a href="#garden-path" class="nav-link">情绪路径</a>
         <a href="#companions" class="nav-link">陪伴方式</a>
-        <RouterLink class="btn-premium" to="/login">进入花园</RouterLink>
+        <RouterLink class="btn-premium" :to="entryRoute">进入花园</RouterLink>
       </nav>
     </header>
 
@@ -31,7 +31,7 @@
             通过音乐、倾诉、冥想与个人空间，找到最适合当下状态的那条小径。
           </p>
           <div class="hero-actions">
-            <RouterLink class="btn-premium" to="/login">开始沉浸体验</RouterLink>
+            <RouterLink class="btn-premium" :to="entryRoute">开始沉浸体验</RouterLink>
             <a class="btn-outline-premium" href="#companions">探索陪伴模块</a>
           </div>
         </div>
@@ -89,15 +89,27 @@
           <h2 class="cta-title">准备好开始了吗？</h2>
           <p class="cta-desc">登录后即可进入您的专属音乐舱、对话舱与情绪花园。</p>
         </div>
-        <RouterLink class="btn-premium" to="/login">前往登录</RouterLink>
+        <RouterLink class="btn-premium" :to="entryRoute">前往登录</RouterLink>
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { homeFeatures, homeScenes } from '@/data/mockContent'
+import { getStoredAuthToken } from '@/api/http'
+import { getCurrentUserFromStorage } from '@/api/user'
+import { resolveAuthenticatedRoute } from '@/api/session'
+
+const entryRoute = computed(() => {
+  const currentUser = getCurrentUserFromStorage()
+  if (getStoredAuthToken() && currentUser) {
+    return resolveAuthenticatedRoute(currentUser)
+  }
+  return '/login'
+})
 </script>
 
 <style scoped>

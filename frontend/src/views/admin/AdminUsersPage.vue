@@ -185,6 +185,7 @@ import {
   getAdminMeditationLogsApi,
   saveAdminMeditationLogApi,
 } from '@/api/meditation'
+import { formatApiDateTime } from '@/utils/dateTime'
 
 const pageSize = 20
 const pageIndex = ref(0)
@@ -242,9 +243,7 @@ const normalizeStatus = (status) => String(status || 'ACTIVE').toUpperCase()
 const resolveAvatar = (avatarUrl) => resolveUserAvatarUrl(avatarUrl) || '/images/feature-img-2.jpg'
 const formatDateTime = (value) => {
   if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleString('zh-CN', { hour12: false })
+  return formatApiDateTime(value, {}, String(value))
 }
 
 const applyUserForm = (user) => {

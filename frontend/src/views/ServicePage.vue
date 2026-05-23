@@ -21,7 +21,12 @@
               <span>管理员端</span>
             </button>
           </div>
-          <RouterLink class="back-link" to="/">回首页</RouterLink>
+          <div class="top-bar-actions">
+            <button class="secondary-link-btn" type="button" :disabled="isLoggingOut" @click="handleLogout">
+              {{ isLoggingOut ? '退出中...' : '退出登录' }}
+            </button>
+            <RouterLink class="back-link" to="/">回首页</RouterLink>
+          </div>
         </div>
 
         <div class="panel-head">
@@ -221,21 +226,26 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { analyzeCompanionAudioApi, askCompanionApi, getAiAssetUrl } from '@/api/ai'
 import { initialMessages } from '@/data/mockContent'
 import { getMusicFileByNameApi } from '@/api/python'
 import { useMusicStore } from '@/stores/musicStore'
+import { usePlayerStore } from '@/stores/playerStore'
 import { useSpeechStore } from '@/stores/speech'
 import { buildMusicCategories, getRealMusicCover } from '@/utils/realMusic'
 import { getCurrentUserFromStorage, isAdminUser } from '@/api/user'
+import { logoutSession } from '@/api/session'
 
 const router = useRouter()
 const route = useRoute()
 const musicStore = useMusicStore()
+const playerStore = usePlayerStore()
 const speechStore = useSpeechStore()
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 const isAdmin = computed(() => isAdminUser(getCurrentUserFromStorage()))
+const { currentTrack, isLoadingAudio, isPlaying, progressSeconds, volume } = storeToRefs(playerStore)
 
 const emptyTrack = {
   id: '',
@@ -258,9 +268,6 @@ const defaultCategoryMoodMap = {
 
 const activeCategoryId = ref('recommend')
 const searchText = ref('')
-const volume = ref(68)
-const isPlaying = ref(false)
-const progressSeconds = ref(0)
 const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
@@ -272,8 +279,11 @@ const recognition = ref(null)
 const interimTranscript = ref('')
 const finalTranscript = ref('')
 const categoryScrollRef = ref(null)
-const currentTrack = ref({ ...emptyTrack })
-const isLoadingAudio = ref(false)
+const isLoggingOut = ref(false)
+
+if (!currentTrack.value) {
+  playerStore.setCurrentTrack({ ...emptyTrack })
+}
 
 const ttsVoiceOptions = [
   { value: 'claire', label: 'Claire 温柔女声' },
@@ -286,10 +296,7 @@ const ttsVoiceOptions = [
   { value: 'david', label: 'David 男声' },
 ]
 
-const audioPlayer = new Audio()
 const assistantSpeechPlayer = new Audio()
-let currentObjectUrl = null
-let lastLoadedTrackId = ''
 
 const voiceSupported = typeof window !== 'undefined'
   ? Boolean(navigator.mediaDevices?.getUserMedia)
@@ -360,35 +367,31 @@ const handleWheel = (event) => {
   }
 }
 
-const cleanupObjectUrl = () => {
-  if (currentObjectUrl) {
-    URL.revokeObjectURL(currentObjectUrl)
-    currentObjectUrl = null
-  }
-}
-
 const resetAudioState = () => {
-  audioPlayer.pause()
-  audioPlayer.src = ''
-  progressSeconds.value = 0
-  isPlaying.value = false
-  lastLoadedTrackId = ''
-  cleanupObjectUrl()
+  playerStore.resetPlayer()
 }
 
 const ensureCurrentTrack = () => {
   const availableTracks = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
   if (!availableTracks.length) {
-    currentTrack.value = { ...emptyTrack }
-    resetAudioState()
+    if (!currentTrack.value?.id) {
+      playerStore.setCurrentTrack({ ...emptyTrack })
+      resetAudioState()
+    }
     return
   }
 
-  const currentExists = availableTracks.some((track) => track.id === currentTrack.value.id)
-  if (!currentExists) {
-    currentTrack.value = { ...availableTracks[0] }
-    progressSeconds.value = 0
-    resetAudioState()
+  if (!currentTrack.value?.id) {
+    playerStore.setCurrentTrack({ ...availableTracks[0] })
+    return
+  }
+
+  const matchedTrack = availableTracks.find((track) => track.id === currentTrack.value.id)
+  if (matchedTrack) {
+    playerStore.setCurrentTrack({
+      ...matchedTrack,
+      duration: currentTrack.value.duration || matchedTrack.duration || 0,
+    })
   }
 }
 
@@ -427,61 +430,42 @@ const loadAudioForTrack = async (track, autoplay = true) => {
   if (!track?.id || isLoadingAudio.value) return
 
   try {
-    isLoadingAudio.value = true
-    let sourceBlob = null
-
     if (track.file) {
-      sourceBlob = track.file
+      await playerStore.loadSourceFromBlob(track, track.file, {
+        startAt: progressSeconds.value || 0,
+        autoplay,
+      })
+      return
     } else if (track.fileUrl) {
-      cleanupObjectUrl()
-      audioPlayer.src = track.fileUrl
-      audioPlayer.currentTime = progressSeconds.value || 0
-      audioPlayer.volume = volume.value / 100
-      lastLoadedTrackId = track.id
-
-      if (autoplay) {
-        await audioPlayer.play()
-        isPlaying.value = true
-      }
+      await playerStore.loadSourceFromUrl(track, track.fileUrl, {
+        startAt: progressSeconds.value || 0,
+        autoplay,
+      })
       return
     } else if (track.filename) {
       const response = await getMusicFileByNameApi(track.filename)
-      sourceBlob = response.data
+      await playerStore.loadSourceFromBlob(track, response.data, {
+        startAt: progressSeconds.value || 0,
+        autoplay,
+      })
+      return
     }
-
-    if (!sourceBlob) {
-      throw new Error('missing audio source')
-    }
-
-    cleanupObjectUrl()
-    currentObjectUrl = URL.createObjectURL(sourceBlob)
-    audioPlayer.src = currentObjectUrl
-    audioPlayer.currentTime = progressSeconds.value || 0
-    audioPlayer.volume = volume.value / 100
-    lastLoadedTrackId = track.id
-
-    if (autoplay) {
-      await audioPlayer.play()
-      isPlaying.value = true
-    }
+    throw new Error('missing audio source')
   } catch (error) {
-    isPlaying.value = false
     ElMessage.error('音乐播放失败，请确认 Python backend 已启动。')
     console.error('Service audio playback failed:', error)
-  } finally {
-    isLoadingAudio.value = false
   }
 }
 
 const selectTrack = async (track) => {
   if (!track?.id) return
 
-  if (currentTrack.value.id === track.id && audioPlayer.src) {
+  if (currentTrack.value.id === track.id && playerStore.isTrackLoaded(track.id)) {
     await togglePlayback()
     return
   }
 
-  currentTrack.value = { ...track }
+  playerStore.setCurrentTrack({ ...track })
   progressSeconds.value = 0
   await loadAudioForTrack(currentTrack.value, true)
 }
@@ -498,21 +482,19 @@ const selectRecommendedTrack = async (track) => {
 const togglePlayback = async () => {
   if (!currentTrack.value?.id) return
 
-  if (!audioPlayer.src || lastLoadedTrackId !== currentTrack.value.id) {
+  if (!playerStore.isTrackLoaded(currentTrack.value.id)) {
     progressSeconds.value = 0
     await loadAudioForTrack(currentTrack.value, true)
     return
   }
 
   if (isPlaying.value) {
-    audioPlayer.pause()
-    isPlaying.value = false
+    playerStore.pause()
     return
   }
 
   try {
-    await audioPlayer.play()
-    isPlaying.value = true
+    await playerStore.play()
   } catch (error) {
     ElMessage.error('无法继续播放当前音频。')
     console.error('Resume service playback failed:', error)
@@ -565,14 +547,27 @@ const openPlayerPage = () => {
   if (!currentTrack.value?.id) return
 
   const trackPool = filteredTracks.value.length ? filteredTracks.value : activeCategory.value.tracks || []
+  const normalizedCurrentTrack = normalizePlayerTrack(currentTrack.value)
   const queuePayload = trackPool.map((item) => normalizePlayerTrack(item))
+  if (!queuePayload.some((item) => item.id === normalizedCurrentTrack.id)) {
+    queuePayload.unshift(normalizedCurrentTrack)
+  }
+
+  playerStore.setCurrentTrack(normalizedCurrentTrack)
+  playerStore.setQueue(queuePayload)
+  playerStore.setPlaybackContext({
+    source: 'service',
+    returnTo: '/service',
+    categoryId: activeCategory.value?.id || 'recommend',
+    categoryName: activeCategory.value?.name || '音乐空间',
+  })
 
   window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify({
     source: 'service',
     returnTo: '/service',
     categoryId: activeCategory.value?.id || 'recommend',
     categoryName: activeCategory.value?.name || '音乐空间',
-    track: normalizePlayerTrack(currentTrack.value),
+    track: normalizedCurrentTrack,
     queue: queuePayload,
   }))
 
@@ -586,6 +581,22 @@ const openAllPlaylists = () => {
       playlist: activeCategory.value?.id || 'recommend',
     },
   })
+}
+
+const handleLogout = async () => {
+  if (isLoggingOut.value) return
+
+  try {
+    isLoggingOut.value = true
+    await logoutSession()
+    ElMessage.success('已退出登录')
+    router.push({ name: 'login' })
+  } catch (error) {
+    console.error('Logout failed:', error)
+    ElMessage.error('退出登录失败，请稍后重试')
+  } finally {
+    isLoggingOut.value = false
+  }
 }
 
 const timeStamp = () =>
@@ -1101,20 +1112,17 @@ watch(
 )
 
 watch(volume, (newVol) => {
-  audioPlayer.volume = newVol / 100
+  playerStore.setVolumeValue(newVol)
 })
 
 watch(progressSeconds, (value) => {
-  if (!audioPlayer.src) return
-  const safeMax = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : currentTrack.value.duration
+  if (!playerStore.hasActiveSource()) return
+  const safeMax = currentTrack.value.duration || 0
   if (value > safeMax) {
     progressSeconds.value = safeMax
     return
   }
-
-  if (Math.abs(audioPlayer.currentTime - value) > 1) {
-    audioPlayer.currentTime = value
-  }
+  playerStore.seekTo(value)
 })
 
 watch(
@@ -1130,37 +1138,18 @@ watch(
   { immediate: true },
 )
 
-audioPlayer.onloadedmetadata = () => {
-  const measuredDuration = Number.isFinite(audioPlayer.duration) ? Math.floor(audioPlayer.duration) : 0
-  if (measuredDuration > 0) {
-    currentTrack.value = {
-      ...currentTrack.value,
-      duration: measuredDuration,
-    }
-  }
-}
-
-audioPlayer.ontimeupdate = () => {
-  progressSeconds.value = audioPlayer.currentTime
-}
-
-audioPlayer.onended = () => {
-  playNext()
-}
-
 onMounted(async () => {
   setupSpeechRecognition()
+  playerStore.setEndedHandler(playNext)
   await musicStore.fetchUserData()
   await loadMusicLibrary()
 })
 
 onBeforeUnmount(() => {
+  playerStore.setEndedHandler(null)
   stopVoiceRecognition()
   assistantSpeechPlayer.pause()
   assistantSpeechPlayer.src = ''
-  audioPlayer.pause()
-  audioPlayer.src = ''
-  cleanupObjectUrl()
 })
 </script>
 
@@ -1249,6 +1238,12 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-bottom: 24px;
   flex-shrink: 0;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .portal-actions {
@@ -1344,6 +1339,7 @@ onBeforeUnmount(() => {
 }
 
 .back-link,
+.secondary-link-btn,
 .catalog-link-btn,
 .mood-chip,
 .count-pill,
@@ -1365,6 +1361,24 @@ onBeforeUnmount(() => {
 }
 .back-link:hover {
   background: var(--color-text-secondary);
+}
+
+.secondary-link-btn {
+  border: 1px solid rgba(44, 48, 46, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.secondary-link-btn:hover:not(:disabled) {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.secondary-link-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .catalog-link-btn {

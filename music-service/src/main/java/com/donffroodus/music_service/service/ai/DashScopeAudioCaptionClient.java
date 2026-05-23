@@ -70,6 +70,10 @@ public class DashScopeAudioCaptionClient {
 		}
 	}
 
+	public boolean isConfigured() {
+		return properties.isConfigured();
+	}
+
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	static class ChatCompletionResponse {
 		@JsonProperty("choices")

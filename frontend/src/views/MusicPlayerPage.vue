@@ -32,6 +32,9 @@
             <button class="action-icon-btn" :class="{ active: isCollected }" @click="handleCollect" title="收藏">
               <font-awesome-icon icon="star" />
             </button>
+            <button class="action-icon-btn" :class="{ active: isBlocked, blocked: isBlocked }" @click="handleBlock" title="黑名单">
+              <span>⛔</span>
+            </button>
             
             <el-dropdown trigger="click" @command="handleAddToPlaylist" placement="top">
               <button class="action-icon-btn" title="添加到歌单">
@@ -68,6 +71,9 @@
 
           <div class="tag-row">
             <span class="type-chip">{{ currentTrack.type }}</span>
+            <span v-if="isBlocked" class="preference-chip blocked-chip">已加入黑名单，不再参与推荐</span>
+            <span v-else-if="isLiked" class="preference-chip liked-chip">已标记为喜欢</span>
+            <span v-else-if="isCollected" class="preference-chip collected-chip">已加入收藏</span>
             <span v-for="tag in displayTags" :key="tag" class="mood-chip">
               #{{ tag }}
             </span>
@@ -135,9 +141,11 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useMusicStore } from '@/stores/musicStore'
+import { usePlayerStore } from '@/stores/playerStore'
 import {
   getEmotionMusicApi,
   getMusicFileByNameApi,
@@ -148,20 +156,17 @@ import { appendUserBehaviorLogApi } from '@/api/data'
 
 const router = useRouter()
 const musicStore = useMusicStore()
+const playerStore = usePlayerStore()
+const { currentTrack, isLoadingAudio, isPlaying, playbackContext, progressSeconds, queue, volume } = storeToRefs(playerStore)
 
 const PLAYER_SESSION_KEY = 'emotion-system-active-player'
 
 const payload = ref(null)
-const queue = ref([])
-const currentTrack = ref(null)
-const isPlaying = ref(false)
-const progressSeconds = ref(0)
-const volume = ref(72)
 const currentEmotion = ref('neutral')
-const isLoadingAudio = ref(false)
 
 const isLiked = computed(() => currentTrack.value && musicStore.likedTrackIds.includes(currentTrack.value.id))
 const isCollected = computed(() => currentTrack.value && musicStore.collectedTrackIds.includes(currentTrack.value.id))
+const isBlocked = computed(() => currentTrack.value && musicStore.blockedTrackIds.includes(currentTrack.value.id))
 
 const handleLike = async () => {
   if (currentTrack.value) {
@@ -175,15 +180,25 @@ const handleCollect = async () => {
   }
 }
 
+const handleBlock = async () => {
+  if (!currentTrack.value) return
+
+  const toggledType = await musicStore.toggleBlock(currentTrack.value.id)
+  if (toggledType === -1) {
+    ElMessage.warning('已加入黑名单，这首歌后续不会再进入推荐结果。')
+    if ((queue.value.length > 1 || preferRecommendedNext.value) && isPlaying.value) {
+      await playNext()
+    }
+  } else {
+    ElMessage.success('已从黑名单移除。')
+  }
+}
+
 const handleAddToPlaylist = async (playlistId) => {
   if (currentTrack.value) {
     await musicStore.addTrackToPlaylist(playlistId, currentTrack.value)
   }
 }
-
-let playTimer = null
-const audioPlayer = new Audio()
-let currentObjectUrl = null
 
 const emotionAliasMap = {
   joy: 'joy',
@@ -232,27 +247,16 @@ const displayTags = computed(() => {
 })
 
 const primaryMood = computed(() => displayTags.value[0] || '平静')
-const preferRecommendedNext = computed(() => ['recommend', 'guess'].includes(payload.value?.categoryId))
+const preferRecommendedNext = computed(() => {
+  const categoryId = payload.value?.categoryId || playbackContext.value?.categoryId
+  return ['recommend', 'guess'].includes(categoryId)
+})
 
 const formatTime = (seconds) => {
   const safeValue = Number.isFinite(seconds) ? seconds : 0
   const minutes = Math.floor(safeValue / 60)
   const remain = Math.floor(safeValue % 60)
   return `${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`
-}
-
-const stopTimer = () => {
-  if (playTimer) {
-    clearInterval(playTimer)
-    playTimer = null
-  }
-}
-
-const cleanupObjectUrl = () => {
-  if (currentObjectUrl) {
-    URL.revokeObjectURL(currentObjectUrl)
-    currentObjectUrl = null
-  }
 }
 
 const normalizeEmotionValue = (value) => String(value || '').trim().toLowerCase()
@@ -312,16 +316,11 @@ const loadAudioBlob = async (requestFactory) => {
   if (isLoadingAudio.value) return
 
   try {
-    isLoadingAudio.value = true
     const response = await requestFactory()
-    cleanupObjectUrl()
-    currentObjectUrl = URL.createObjectURL(response.data)
-    audioPlayer.src = currentObjectUrl
-    audioPlayer.currentTime = 0
-    progressSeconds.value = 0
-    audioPlayer.volume = volume.value / 100
-    await audioPlayer.play()
-    isPlaying.value = true
+    await playerStore.loadSourceFromBlob(currentTrack.value, response.data, {
+      startAt: 0,
+      autoplay: true,
+    })
     
     // User Behavior Log
     appendUserBehaviorLogApi({
@@ -335,11 +334,8 @@ const loadAudioBlob = async (requestFactory) => {
     }).catch(e => console.warn('Log user behavior failed', e))
     
   } catch (error) {
-    isPlaying.value = false
     ElMessage.error('音乐播放失败，请确认 Python 音乐服务已启动。')
     console.error('Audio playback failed:', error)
-  } finally {
-    isLoadingAudio.value = false
   }
 }
 
@@ -347,14 +343,10 @@ const loadAudioUrl = async (sourceUrl) => {
   if (!sourceUrl || isLoadingAudio.value) return
 
   try {
-    isLoadingAudio.value = true
-    cleanupObjectUrl()
-    audioPlayer.src = sourceUrl
-    audioPlayer.currentTime = 0
-    progressSeconds.value = 0
-    audioPlayer.volume = volume.value / 100
-    await audioPlayer.play()
-    isPlaying.value = true
+    await playerStore.loadSourceFromUrl(currentTrack.value, sourceUrl, {
+      startAt: 0,
+      autoplay: true,
+    })
 
     appendUserBehaviorLogApi({
       actionType: 'play_music',
@@ -366,21 +358,9 @@ const loadAudioUrl = async (sourceUrl) => {
       }
     }).catch(e => console.warn('Log user behavior failed', e))
   } catch (error) {
-    isPlaying.value = false
     ElMessage.error('音乐播放失败，请确认音乐服务已启动。')
     console.error('Audio playback failed:', error)
-  } finally {
-    isLoadingAudio.value = false
   }
-}
-
-const startTimer = () => {
-  stopTimer()
-  playTimer = setInterval(() => {
-    if (!isPlaying.value || !currentTrack.value) return
-
-    progressSeconds.value = audioPlayer.currentTime || progressSeconds.value
-  }, 1000)
 }
 
 const playCurrentTrack = async () => {
@@ -400,7 +380,7 @@ const playCurrentTrack = async () => {
 }
 
 const selectTrack = async (track) => {
-  currentTrack.value = track
+  playerStore.setCurrentTrack(track)
   progressSeconds.value = 0
   await playCurrentTrack()
 }
@@ -408,20 +388,18 @@ const selectTrack = async (track) => {
 const togglePlayback = async () => {
   if (!currentTrack.value) return
 
-  if (!audioPlayer.src) {
+  if (!playerStore.isTrackLoaded(currentTrack.value.id)) {
     await playCurrentTrack()
     return
   }
 
   if (isPlaying.value) {
-    audioPlayer.pause()
-    isPlaying.value = false
+    playerStore.pause()
     return
   }
 
   try {
-    await audioPlayer.play()
-    isPlaying.value = true
+    await playerStore.play()
   } catch (error) {
     ElMessage.error('无法继续播放当前音频。')
     console.error('Resume playback failed:', error)
@@ -463,18 +441,31 @@ const playPrevious = async () => {
 }
 
 const goBack = () => {
-  router.push(payload.value?.returnTo || '/service')
+  router.push(playbackContext.value?.returnTo || payload.value?.returnTo || '/service')
 }
 
 const loadPayload = () => {
+  if (currentTrack.value?.id && queue.value.length) {
+    if (currentTrack.value) {
+      persistEmotion(resolveEmotionForTrack(currentTrack.value))
+    }
+    return
+  }
+
   const raw = window.sessionStorage.getItem(PLAYER_SESSION_KEY)
   if (!raw) return
 
   try {
     const parsed = JSON.parse(raw)
     payload.value = parsed
-    queue.value = Array.isArray(parsed.queue) ? parsed.queue : []
-    currentTrack.value = parsed.track || parsed.queue?.[0] || null
+    playerStore.setPlaybackContext({
+      source: parsed.source || '',
+      returnTo: parsed.returnTo || '/service',
+      categoryId: parsed.categoryId || 'recommend',
+      categoryName: parsed.categoryName || '音乐空间',
+    })
+    playerStore.setQueue(Array.isArray(parsed.queue) ? parsed.queue : [])
+    playerStore.setCurrentTrack(parsed.track || parsed.queue?.[0] || null)
     progressSeconds.value = 0
     if (currentTrack.value) {
       persistEmotion(resolveEmotionForTrack(currentTrack.value))
@@ -484,55 +475,33 @@ const loadPayload = () => {
   }
 }
 
-watch(isPlaying, (playing) => {
-  if (playing) {
-    startTimer()
-  } else {
-    stopTimer()
-  }
-})
-
 watch(progressSeconds, (value) => {
-  if (!currentTrack.value || !audioPlayer.src) return
-  if (Math.abs(audioPlayer.currentTime - value) > 1) {
-    audioPlayer.currentTime = value
+  if (!currentTrack.value || !playerStore.hasActiveSource()) return
+  const safeMax = currentTrack.value.duration || 0
+  if (value > safeMax) {
+    progressSeconds.value = safeMax
+    return
   }
+  playerStore.seekTo(value)
 })
 
 watch(volume, (value) => {
-  audioPlayer.volume = value / 100
+  playerStore.setVolumeValue(value)
 })
 
-audioPlayer.onloadedmetadata = () => {
-  const measuredDuration = Number.isFinite(audioPlayer.duration) ? Math.floor(audioPlayer.duration) : 0
-  if (currentTrack.value && measuredDuration > 0) {
-    currentTrack.value = {
-      ...currentTrack.value,
-      duration: measuredDuration,
-    }
-  }
-}
-
-audioPlayer.ontimeupdate = () => {
-  progressSeconds.value = audioPlayer.currentTime
-}
-
-audioPlayer.onended = () => {
-  playNext()
-}
-
-onMounted(() => {
+onMounted(async () => {
   loadPayload()
+  playerStore.setEndedHandler(playNext)
+  await musicStore.fetchUserData()
   if (currentTrack.value) {
-    playCurrentTrack()
+    if (!playerStore.isTrackLoaded(currentTrack.value.id)) {
+      await playCurrentTrack()
+    }
   }
 })
 
 onBeforeUnmount(() => {
-  stopTimer()
-  audioPlayer.pause()
-  audioPlayer.src = ''
-  cleanupObjectUrl()
+  playerStore.setEndedHandler(null)
 })
 </script>
 
@@ -788,6 +757,12 @@ onBeforeUnmount(() => {
   border-color: rgba(245, 166, 35, 0.3);
 }
 
+.action-icon-btn.blocked.active,
+.action-icon-btn.active[title="黑名单"] {
+  color: #e25d5d;
+  border-color: rgba(226, 93, 93, 0.3);
+}
+
 .meta-zone {
   display: flex;
   flex-direction: column;
@@ -825,7 +800,8 @@ onBeforeUnmount(() => {
 
 .type-chip,
 .mood-chip,
-.queue-count {
+.queue-count,
+.preference-chip {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -841,6 +817,25 @@ onBeforeUnmount(() => {
 .mood-chip {
   background: rgba(255, 255, 255, 0.62);
   color: #495673;
+}
+
+.preference-chip {
+  font-weight: 600;
+}
+
+.liked-chip {
+  background: rgba(255, 91, 119, 0.12);
+  color: #d94f6f;
+}
+
+.collected-chip {
+  background: rgba(245, 166, 35, 0.14);
+  color: #ba7a07;
+}
+
+.blocked-chip {
+  background: rgba(226, 93, 93, 0.14);
+  color: #c14d4d;
 }
 
 .queue-head {

@@ -2,6 +2,7 @@ package com.donffroodus.social_service.web;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -57,6 +58,7 @@ public class SocialApiController {
 	private static final int MAX_FRIENDSHIP_FLOWERS = 3;
 	private static final int POST_LIKE_FRIENDSHIP_POINTS = 3;
 	private static final int POST_COMMENT_FRIENDSHIP_POINTS = 5;
+	private static final DateTimeFormatter ISO_LOCAL_DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
 	private final MoodDiaryRepository moodDiaryRepository;
 	private final SocialPostRepository socialPostRepository;
@@ -101,8 +103,33 @@ public class SocialApiController {
 		return friendshipRepository.existsByUserIdAndFriendUserId(userId, otherUserId);
 	}
 
+	private boolean canViewPost(Long viewerId, SocialPost post) {
+		if (viewerId == null || post == null || post.getUserId() == null) {
+			return false;
+		}
+		return viewerId.equals(post.getUserId()) || areFriends(viewerId, post.getUserId());
+	}
+
+	private List<Long> resolveVisibleAuthorIds(Long viewerId) {
+		if (viewerId == null) {
+			return List.of();
+		}
+		List<Long> friendIds = friendshipRepository.findByUserIdOrderByCreatedAtDesc(viewerId)
+				.stream()
+				.map(Friendship::getFriendUserId)
+					.filter(java.util.Objects::nonNull)
+				.toList();
+		LinkedHashSet<Long> visibleIds = new LinkedHashSet<>();
+		visibleIds.add(viewerId);
+		visibleIds.addAll(friendIds);
+		return List.copyOf(visibleIds);
+	}
+
 	private boolean canInteractWithComment(Long userId, SocialPost post, SocialInteraction targetComment) {
 		if (userId == null || post == null || targetComment == null) {
+			return false;
+		}
+		if (!canViewPost(userId, post)) {
 			return false;
 		}
 		if (userId.equals(post.getUserId()) || userId.equals(targetComment.getUserId())) {
@@ -124,6 +151,13 @@ public class SocialApiController {
 
 	private static int resolveFriendshipFlowers(Integer score) {
 		return Math.min(sanitizeFriendshipScore(score) / FRIENDSHIP_FLOWER_STEP, MAX_FRIENDSHIP_FLOWERS);
+	}
+
+	private static String serializeDateTime(LocalDateTime value) {
+		if (value == null) {
+			return null;
+		}
+		return value.format(ISO_LOCAL_DATE_TIME_FORMATTER);
 	}
 
 	private void increaseFriendshipScore(Long userId, Long friendUserId, int delta) {
@@ -199,7 +233,11 @@ public class SocialApiController {
 		diary.setDate(request.date());
 		diary.setDominantEmotion(request.dominantEmotion());
 		diary.setContext(request.context());
-		return ResponseEntity.ok(moodDiaryRepository.save(diary));
+		try {
+			return ResponseEntity.ok(moodDiaryRepository.save(diary));
+		} catch (org.springframework.dao.DataIntegrityViolationException e) {
+			return ResponseEntity.<MoodDiary>status(409).build();
+		}
 	}
 
 	/** 更新当前用户已有的一条情绪日记。 */
@@ -259,10 +297,11 @@ public class SocialApiController {
 			@Parameter(name = "X-User-Id", description = "可选，用于判断匿名帖是否对当前用户展示作者", in = ParameterIn.HEADER) @RequestHeader(value = "X-User-Id", required = false) String xUserId,
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
-		Long viewerId = GatewayAuthSupport.optionalUserId(xUserId);
+		Long viewerId = GatewayAuthSupport.requireUserId(xUserId);
 		Pageable p = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
 				Sort.by(Sort.Direction.DESC, "createdAt"));
-		return socialPostRepository.findAllByOrderByCreatedAtDesc(p)
+		List<Long> visibleAuthorIds = resolveVisibleAuthorIds(viewerId);
+		return socialPostRepository.findByUserIdInOrderByCreatedAtDesc(visibleAuthorIds, p)
 				.map(post -> SocialPostResponse.of(post, viewerId));
 	}
 
@@ -272,9 +311,14 @@ public class SocialApiController {
 	public ResponseEntity<SocialPostResponse> getPost(
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER) @RequestHeader(value = "X-User-Id", required = false) String xUserId,
 			@PathVariable("postId") Long postId) {
-		Long viewerId = GatewayAuthSupport.optionalUserId(xUserId);
+		Long viewerId = GatewayAuthSupport.requireUserId(xUserId);
 		return socialPostRepository.findById(postId)
-				.map(post -> ResponseEntity.ok(SocialPostResponse.of(post, viewerId)))
+				.map(post -> {
+					if (!canViewPost(viewerId, post)) {
+						return ResponseEntity.status(HttpStatus.FORBIDDEN).<SocialPostResponse>build();
+					}
+					return ResponseEntity.ok(SocialPostResponse.of(post, viewerId));
+				})
 				.orElse(ResponseEntity.notFound().build());
 	}
 
@@ -357,15 +401,22 @@ public class SocialApiController {
 	/** 某条动态下的全部互动（点赞行 + 评论行），按时间正序。 */
 	@Operation(summary = "某条动态的互动列表", description = "含点赞行与评论行，按创建时间正序")
 	@GetMapping("/posts/{postId}/interactions")
-	public ResponseEntity<List<SocialInteractionResponse>> listInteractions(@PathVariable("postId") Long postId) {
-		if (!socialPostRepository.existsById(postId)) {
-			return ResponseEntity.notFound().build();
-		}
-		List<SocialInteractionResponse> list = socialInteractionRepository.findByPostIdOrderByCreatedAtAsc(postId)
-				.stream()
-				.map(SocialInteractionResponse::from)
-				.toList();
-		return ResponseEntity.ok(list);
+	public ResponseEntity<List<SocialInteractionResponse>> listInteractions(
+			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
+			@PathVariable("postId") Long postId) {
+		Long userId = GatewayAuthSupport.requireUserId(xUserId);
+		return socialPostRepository.findById(postId)
+				.map(post -> {
+					if (!canViewPost(userId, post)) {
+						return ResponseEntity.status(HttpStatus.FORBIDDEN).<List<SocialInteractionResponse>>build();
+					}
+					List<SocialInteractionResponse> list = socialInteractionRepository.findByPostIdOrderByCreatedAtAsc(postId)
+							.stream()
+							.map(SocialInteractionResponse::from)
+							.toList();
+					return ResponseEntity.ok(list);
+				})
+				.orElse(ResponseEntity.notFound().build());
 	}
 
 	/** 切换点赞：已点赞则取消，未点赞则点赞（每人至多一条点赞记录，comment 为空）。 */
@@ -376,27 +427,29 @@ public class SocialApiController {
 			@Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true) @RequestHeader("X-User-Id") String xUserId,
 			@PathVariable("postId") Long postId) {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
-		if (!socialPostRepository.existsById(postId)) {
-			return ResponseEntity.notFound().build();
-		}
 		return socialPostRepository.findById(postId)
-				.map(post -> socialInteractionRepository.findByPostIdAndUserIdAndLikedTrueAndCommentIsNullAndTargetInteractionIdIsNull(postId, userId)
-				.map(likeRow -> {
-					socialInteractionRepository.delete(likeRow);
-					return ResponseEntity.ok(new LikeToggleResponse(false));
+				.map(post -> {
+					if (!canViewPost(userId, post)) {
+						return ResponseEntity.status(HttpStatus.FORBIDDEN).<LikeToggleResponse>build();
+					}
+					return socialInteractionRepository.findByPostIdAndUserIdAndLikedTrueAndCommentIsNullAndTargetInteractionIdIsNull(postId, userId)
+							.map(likeRow -> {
+								socialInteractionRepository.delete(likeRow);
+								return ResponseEntity.ok(new LikeToggleResponse(false));
+							})
+							.orElseGet(() -> {
+								SocialInteraction row = new SocialInteraction();
+								row.setPostId(postId);
+								row.setUserId(userId);
+								row.setLiked(true);
+								row.setComment(null);
+								row.setTargetInteractionId(null);
+								row.setTargetUserId(post.getUserId());
+								socialInteractionRepository.save(row);
+								increaseFriendshipScore(userId, post.getUserId(), POST_LIKE_FRIENDSHIP_POINTS);
+								return ResponseEntity.ok(new LikeToggleResponse(true));
+							});
 				})
-				.orElseGet(() -> {
-					SocialInteraction row = new SocialInteraction();
-					row.setPostId(postId);
-					row.setUserId(userId);
-					row.setLiked(true);
-					row.setComment(null);
-					row.setTargetInteractionId(null);
-					row.setTargetUserId(post.getUserId());
-					socialInteractionRepository.save(row);
-					increaseFriendshipScore(userId, post.getUserId(), POST_LIKE_FRIENDSHIP_POINTS);
-					return ResponseEntity.ok(new LikeToggleResponse(true));
-				}))
 				.orElse(ResponseEntity.notFound().build());
 	}
 
@@ -414,6 +467,9 @@ public class SocialApiController {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return socialPostRepository.findById(postId)
 				.map(post -> {
+					if (!canViewPost(userId, post)) {
+						return ResponseEntity.status(HttpStatus.FORBIDDEN).<SocialInteractionResponse>build();
+					}
 					SocialInteraction row = new SocialInteraction();
 					row.setPostId(postId);
 					row.setUserId(userId);
@@ -685,7 +741,7 @@ public class SocialApiController {
 			String moodTag,
 			List<String> highlightTags,
 			boolean anonymous,
-			LocalDateTime createdAt) {
+			String createdAt) {
 
 		static SocialPostResponse of(SocialPost post, Long viewerUserId) {
 			return new SocialPostResponse(
@@ -695,7 +751,7 @@ public class SocialApiController {
 					post.getMoodTag(),
 					parseMoodTags(post.getMoodTag()),
 					post.isAnonymous(),
-					post.getCreatedAt());
+					serializeDateTime(post.getCreatedAt()));
 		}
 	}
 
@@ -707,7 +763,7 @@ public class SocialApiController {
 			String comment,
 			Long targetInteractionId,
 			Long targetUserId,
-			LocalDateTime createdAt) {
+			String createdAt) {
 
 		static SocialInteractionResponse from(SocialInteraction i) {
 			return new SocialInteractionResponse(
@@ -718,7 +774,7 @@ public class SocialApiController {
 					i.getComment(),
 					i.getTargetInteractionId(),
 					i.getTargetUserId(),
-					i.getCreatedAt());
+					serializeDateTime(i.getCreatedAt()));
 		}
 	}
 
@@ -730,7 +786,7 @@ public class SocialApiController {
 			Long targetInteractionId,
 			String type,
 			String content,
-			LocalDateTime createdAt) {
+			String createdAt) {
 
 		static SocialNotificationResponse from(SocialInteraction i) {
 			return new SocialNotificationResponse(
@@ -741,7 +797,7 @@ public class SocialApiController {
 					i.getTargetInteractionId(),
 					resolveNotificationType(i),
 					i.getComment(),
-					i.getCreatedAt());
+					serializeDateTime(i.getCreatedAt()));
 		}
 	}
 
@@ -766,8 +822,8 @@ public class SocialApiController {
 			Long friendUserId,
 			Integer intimacyLevel,
 			Integer friendshipScore,
-			LocalDateTime createdAt,
-			LocalDateTime updatedAt) {
+			String createdAt,
+			String updatedAt) {
 
 		static FriendshipResponse from(Friendship f, Integer friendshipScore, Integer intimacyLevel) {
 			return new FriendshipResponse(
@@ -776,8 +832,8 @@ public class SocialApiController {
 					f.getFriendUserId(),
 					intimacyLevel,
 					friendshipScore,
-					f.getCreatedAt(),
-					f.getUpdatedAt());
+					serializeDateTime(f.getCreatedAt()),
+					serializeDateTime(f.getUpdatedAt()));
 		}
 	}
 
@@ -788,14 +844,14 @@ public class SocialApiController {
 			Long senderId,
 			Long receiverId,
 			String status,
-			LocalDateTime createdAt) {
+			String createdAt) {
 		static FriendRequestResponse from(FriendRequest r) {
 			return new FriendRequestResponse(
 					r.getId(),
 					r.getSenderId(),
 					r.getReceiverId(),
 					r.getStatus(),
-					r.getCreatedAt()
+					serializeDateTime(r.getCreatedAt())
 			);
 		}
 	}

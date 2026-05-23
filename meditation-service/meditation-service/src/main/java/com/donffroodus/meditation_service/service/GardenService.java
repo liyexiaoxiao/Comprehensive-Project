@@ -6,6 +6,7 @@ import com.donffroodus.meditation_service.entity.GardenInventory;
 import com.donffroodus.meditation_service.entity.UnlockedPlant;
 import com.donffroodus.meditation_service.repository.GardenInventoryRepository;
 import com.donffroodus.meditation_service.repository.UnlockedPlantRepository;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,23 +27,28 @@ public class GardenService {
     }
 
     public GardenDataResponse getUserGardenData(Long userId) {
-        List<GardenInventory> inventory = inventoryRepository.findByUserId(userId);
-        
-        List<GardenItemDTO> seeds = inventory.stream()
-                .filter(i -> "SEED".equals(i.getItemType()))
-                .map(i -> new GardenItemDTO(i.getItemId(), i.getCount()))
-                .collect(Collectors.toList());
-                
-        List<GardenItemDTO> fruits = inventory.stream()
-                .filter(i -> "FRUIT".equals(i.getItemType()))
-                .map(i -> new GardenItemDTO(i.getItemId(), i.getCount()))
-                .collect(Collectors.toList());
-                
-        List<Integer> unlockedPlantIds = plantRepository.findByUserId(userId).stream()
-                .map(UnlockedPlant::getPlantId)
-                .collect(Collectors.toList());
-                
-        return new GardenDataResponse(seeds, fruits, unlockedPlantIds);
+        try {
+            List<GardenInventory> inventory = inventoryRepository.findByUserId(userId);
+
+            List<GardenItemDTO> seeds = inventory.stream()
+                    .filter(i -> "SEED".equals(i.getItemType()))
+                    .map(i -> new GardenItemDTO(i.getItemId(), i.getCount()))
+                    .collect(Collectors.toList());
+
+            List<GardenItemDTO> fruits = inventory.stream()
+                    .filter(i -> "FRUIT".equals(i.getItemType()))
+                    .map(i -> new GardenItemDTO(i.getItemId(), i.getCount()))
+                    .collect(Collectors.toList());
+
+            List<Integer> unlockedPlantIds = plantRepository.findByUserId(userId).stream()
+                    .map(UnlockedPlant::getPlantId)
+                    .collect(Collectors.toList());
+
+            return new GardenDataResponse(seeds, fruits, unlockedPlantIds);
+        } catch (DataAccessException ex) {
+            // 兼容旧环境尚未建表的情况，避免个人空间直接报 500。
+            return new GardenDataResponse(List.of(), List.of(), List.of());
+        }
     }
 
     @Transactional

@@ -110,9 +110,10 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { AUTH_TOKEN_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/api/http'
 import { getMeApi, loginApi, registerApi } from '@/api/auth'
-import { isAdminUser } from '@/api/user'
+import { saveAuthToken } from '@/api/http'
+import { clearSession, resolveAuthenticatedRoute } from '@/api/session'
+import { saveCurrentUserToStorage } from '@/api/user'
 
 const router = useRouter()
 const route = useRoute()
@@ -155,6 +156,14 @@ const switchMode = (nextMode) => {
   resetMessages()
 }
 
+const resolvePostLoginRoute = (currentUser) => {
+  const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+  if (!redirectPath || redirectPath === '/' || redirectPath.startsWith('/login')) {
+    return resolveAuthenticatedRoute(currentUser)
+  }
+  return redirectPath
+}
+
 const handleSubmit = async () => {
   resetMessages()
 
@@ -176,21 +185,15 @@ const handleSubmit = async () => {
         throw new Error('登录返回的 token 无效')
       }
 
-      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+      saveAuthToken(token)
 
       const currentUserResponse = await getMeApi()
       const currentUser = currentUserResponse.data
-      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(currentUser))
+      saveCurrentUserToStorage(currentUser)
 
-      const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : ''
-      if (redirectPath) {
-        router.push(redirectPath)
-      } else {
-        router.push(isAdminUser(currentUser) ? '/admin' : '/service')
-      }
+      router.push(resolvePostLoginRoute(currentUser))
     } catch (error) {
-      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
-      window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+      clearSession()
       errorMessage.value = getErrorMessage(error, '登录失败，请稍后再试。')
     } finally {
       isSubmitting.value = false

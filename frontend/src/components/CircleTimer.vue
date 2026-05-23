@@ -36,7 +36,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['complete'])
+const emit = defineEmits(['complete', 'tick'])
 
 const timeLeft = ref(props.totalTime)
 const dashArray = ref('0, 1130')  // 初始值
@@ -53,6 +53,7 @@ const formatTime = (sec) => {
 const updateProgress = () => {
     const percent = (props.totalTime - timeLeft.value) / props.totalTime;
     dashArray.value = `${circumference * percent}, ${circumference}`;
+    emit('tick', timeLeft.value)
 };
 
 let interval = null

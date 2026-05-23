@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { AUTH_TOKEN_STORAGE_KEY } from '@/api/http'
 import { getCurrentUserFromStorage, isAdminUser } from '@/api/user'
+import { getStoredAuthToken } from '@/api/http'
+import { resolveAuthenticatedRoute, restoreSession } from '@/api/session'
 
 import LandingPage from '@/views/LandingPage.vue'
 import LoginPage from '@/views/LoginPage.vue'
@@ -10,25 +11,27 @@ import AllPlaylistsPage from '@/views/AllPlaylistsPage.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingPage },
-  { path: '/login', name: 'login', component: LoginPage },
-  { path: '/service', name: 'service', component: ServicePage },
-  { path: '/playlists', name: 'all-playlists', component: AllPlaylistsPage },
-  { path: '/music-player', name: 'music-player', component: MusicPlayerPage },
+  { path: '/login', name: 'login', component: LoginPage, meta: { guestOnly: true } },
+  { path: '/service', name: 'service', component: ServicePage, meta: { requiresAuth: true } },
+  { path: '/playlists', name: 'all-playlists', component: AllPlaylistsPage, meta: { requiresAuth: true } },
+  { path: '/music-player', name: 'music-player', component: MusicPlayerPage, meta: { requiresAuth: true } },
   {
     path: '/meditation-room',
     name: 'meditation-room',
     component: () => import('@/views/Meditation.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/personal-space',
     name: 'personal-space',
     component: () => import('@/views/PersonalSpace.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/admin',
     name: 'admin',
     component: () => import('@/views/AdminDashboard.vue'),
-    meta: { requiresAdmin: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
     redirect: { name: 'admin-users' },
     children: [
       {
@@ -53,19 +56,34 @@ const router = createRouter({
   },
 })
 
-router.beforeEach((to) => {
-  if (!to.meta?.requiresAdmin) {
+router.beforeEach(async (to) => {
+  const requiresAuth = to.matched.some((record) => record.meta?.requiresAuth || record.meta?.requiresAdmin)
+  const requiresAdmin = to.matched.some((record) => record.meta?.requiresAdmin)
+  const guestOnly = to.matched.some((record) => record.meta?.guestOnly)
+
+  const token = getStoredAuthToken()
+  if (!token) {
+    if (requiresAuth) {
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
     return true
   }
 
-  const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
-  const currentUser = getCurrentUserFromStorage()
-
-  if (!token) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+  let currentUser = getCurrentUserFromStorage()
+  try {
+    currentUser = await restoreSession()
+  } catch {
+    if (requiresAuth) {
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+    return true
   }
 
-  if (!isAdminUser(currentUser)) {
+  if (guestOnly) {
+    return resolveAuthenticatedRoute(currentUser)
+  }
+
+  if (requiresAdmin && !isAdminUser(currentUser)) {
     return { name: 'service' }
   }
 

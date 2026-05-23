@@ -9,9 +9,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "mood_diary")
+@Table(name = "mood_diary", uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "date"}))
 public class MoodDiary {
 
 	@Id

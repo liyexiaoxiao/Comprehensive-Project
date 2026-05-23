@@ -109,6 +109,13 @@ public class MeditationService {
         });
     }
 
+    @Transactional
+    public void completeCountDownSession(Long userId) {
+        meditationSessionRepository.findByUserId(userId).ifPresent(session -> {
+            archiveSession(session, "COMPLETED");
+        });
+    }
+
     private void archiveSession(MeditationSession session, String status) {
         LocalDateTime endTime = LocalDateTime.now();
         long duration = ChronoUnit.SECONDS.between(session.getStartTime(), endTime);
