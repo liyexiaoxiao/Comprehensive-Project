@@ -30,6 +30,9 @@ public class MiniMissionService {
             response.setDescription(mission.getDescription());
             response.setRewardValue(mission.getRewardValue());
         });
+        if (response.getTitle() == null) {
+            throw new IllegalArgumentException("Mini mission not found");
+        }
         return response;
     }
 
@@ -44,6 +47,26 @@ public class MiniMissionService {
             response.setCreatedAt(mission.getCreatedAt());
             response.setUpdatedAt(mission.getUpdatedAt());
         });
+        if (response.getTitle() == null) {
+            throw new IllegalArgumentException("Mini mission not found");
+        }
+        return response;
+    }
+
+    public MiniMissionAdminResponse getMiniMissionByTitleAdmin(String title) {
+        MiniMissionAdminResponse response = new MiniMissionAdminResponse();
+        miniMissionRepository.findByTitle(title).ifPresent(mission -> {
+            response.setId(mission.getId());
+            response.setTitle(mission.getTitle());
+            response.setDescription(mission.getDescription());
+            response.setRewardValue(mission.getRewardValue());
+            response.setActive(mission.isActive());
+            response.setCreatedAt(mission.getCreatedAt());
+            response.setUpdatedAt(mission.getUpdatedAt());
+        });
+        if (response.getTitle() == null) {
+            throw new IllegalArgumentException("Mini mission not found");
+        }
         return response;
     }
 

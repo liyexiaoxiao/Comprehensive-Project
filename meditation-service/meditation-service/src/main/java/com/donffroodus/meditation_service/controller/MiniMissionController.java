@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.donffroodus.meditation_service.dto.MiniMissionAdminResponse;
 import com.donffroodus.meditation_service.dto.MiniMissionIdRequest;
 import com.donffroodus.meditation_service.dto.MiniMissionRequest;
 import com.donffroodus.meditation_service.dto.MiniMissionResponse;
@@ -95,9 +96,9 @@ public class MiniMissionController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("")
-    public ResponseEntity<MiniMissionResponse> addNewMiniMission(@RequestBody MiniMissionRequest request) {
+    public ResponseEntity<MiniMissionAdminResponse> addNewMiniMission(@RequestBody MiniMissionRequest request) {
         miniMissionService.addNewMiniMission(request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(miniMissionService.getMiniMissionByTitleAdmin(request.getTitle()));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
