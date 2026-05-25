@@ -8,4 +8,6 @@ import com.donffroodus.meditation_service.entity.MiniMissionLog;
 
 public interface MiniMissionLogRepository extends JpaRepository<MiniMissionLog, Long> {
     List<MiniMissionLog> findByUserIdOrderByCreatedAtDesc(Long userId);
+    List<MiniMissionLog> findByUserIdAndStatus(Long userId, MiniMissionLog.MiniMissionStatus status);
+    boolean existsByStatusAndUserId(MiniMissionLog.MiniMissionStatus status, Long userId);
 }
