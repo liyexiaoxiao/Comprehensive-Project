@@ -47,9 +47,12 @@ public class CensorService {
         censorWordRepository.save(newWord);
     }
 
-    public void setWordActivity(String word, boolean active) {
+    public void setWordActivity(String word, Boolean active) {
         if (word == null || word.trim().isEmpty()) {
             throw new RuntimeException("Word cannot be empty");
+        }
+        if (active == null) {
+            active = true;
         }
         CensorWord censorWord = censorWordRepository.findByWord(word)
                 .orElseThrow(() -> new RuntimeException("Censor word not found"));
