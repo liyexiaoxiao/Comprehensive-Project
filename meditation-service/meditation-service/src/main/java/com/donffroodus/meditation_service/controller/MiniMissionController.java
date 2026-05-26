@@ -93,6 +93,21 @@ public class MiniMissionController {
         return ResponseEntity.ok(miniMissionService.getMiniMissionById(missionId));
     }
 
+    @GetMapping("/my-logs")
+    public ResponseEntity<?> getMyLogs() {
+        Long userId = getUserIdFromSecurityContext();
+        if (userId == null) {
+            throw new IllegalStateException("User not authenticated");
+        }
+        return ResponseEntity.ok(miniMissionService.getMyLogs(userId));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/user-logs/{user_id}")
+    public ResponseEntity<?> getUserLogs(@PathVariable Long user_id) {
+        return ResponseEntity.ok(miniMissionService.getMyLogs(user_id));
+    }
+
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("")
     public ResponseEntity<MiniMissionAdminResponse> addNewMiniMission(@RequestBody MiniMissionRequest request) {

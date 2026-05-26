@@ -84,6 +84,10 @@ public class MiniMissionService {
         }).toList();
     }
 
+    public List<MiniMissionLog> getMyLogs(Long userId) {
+        return miniMissionLogRepository.findByUserId(userId);
+    }
+
     public void addNewMiniMission(MiniMissionRequest request) {
         MiniMission mission = new MiniMission();
         if (miniMissionRepository.existsByTitle(request.getTitle())) {
@@ -109,6 +113,7 @@ public class MiniMissionService {
         log.setUserId(userId);
         log.setMiniMissionId(missionId);
         log.setStatus(MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
+        log.setCreatedAt(java.time.LocalDateTime.now());
         miniMissionLogRepository.save(log);
     }
 
@@ -124,6 +129,7 @@ public class MiniMissionService {
             .findFirst()
             .ifPresent(log -> {
                 log.setStatus(MiniMissionLog.MiniMissionStatus.FAILED);
+                log.setUpdatedAt(java.time.LocalDateTime.now());
                 miniMissionLogRepository.save(log);
             });
         
@@ -143,6 +149,7 @@ public class MiniMissionService {
             .findFirst()
             .ifPresent(log -> {
                 log.setStatus(MiniMissionLog.MiniMissionStatus.COMPLETED);
+                log.setUpdatedAt(java.time.LocalDateTime.now());
                 miniMissionLogRepository.save(log);
             });
 
