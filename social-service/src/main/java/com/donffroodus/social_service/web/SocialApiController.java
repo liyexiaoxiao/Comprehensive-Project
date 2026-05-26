@@ -8,7 +8,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -353,7 +352,7 @@ public class SocialApiController {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		SocialPost post = new SocialPost();
 		post.setUserId(userId);
-		post.setContent(request.content().strip());
+		post.setContent(censorService.CensorContent(request.content().strip()));
 		post.setMoodTag(normalizeMoodTag(request.moodTag()));
 		post.setAnonymous(request.isAnonymous() != null && request.isAnonymous());
 		SocialPost saved = socialPostRepository.save(post);
@@ -373,7 +372,7 @@ public class SocialApiController {
 		Long userId = GatewayAuthSupport.requireUserId(xUserId);
 		return socialPostRepository.findByIdAndUserId(postId, userId)
 				.map(existing -> {
-					existing.setContent(request.content().strip());
+					existing.setContent(censorService.CensorContent(request.content().strip()));
 					existing.setMoodTag(normalizeMoodTag(request.moodTag()));
 					if (request.isAnonymous() != null) {
 						existing.setAnonymous(request.isAnonymous());
@@ -479,7 +478,7 @@ public class SocialApiController {
 					row.setPostId(postId);
 					row.setUserId(userId);
 					row.setLiked(false);
-					row.setComment(request.comment().strip());
+					row.setComment(censorService.CensorContent(request.comment().strip()));
 					row.setTargetInteractionId(null);
 					row.setTargetUserId(post.getUserId());
 					SocialInteraction saved = socialInteractionRepository.save(row);
@@ -546,7 +545,7 @@ public class SocialApiController {
 		row.setPostId(postId);
 		row.setUserId(userId);
 		row.setLiked(false);
-		row.setComment(request.comment().strip());
+		row.setComment(censorService.CensorContent(request.comment().strip()));
 		row.setTargetInteractionId(commentId);
 		row.setTargetUserId(targetComment.getUserId());
 		SocialInteraction saved = socialInteractionRepository.save(row);
