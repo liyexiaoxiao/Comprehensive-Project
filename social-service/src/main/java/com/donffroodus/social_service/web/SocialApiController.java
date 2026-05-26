@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -43,6 +45,7 @@ import com.donffroodus.social_service.repository.FriendRequestRepository;
 import com.donffroodus.social_service.repository.MoodDiaryRepository;
 import com.donffroodus.social_service.repository.SocialInteractionRepository;
 import com.donffroodus.social_service.repository.SocialPostRepository;
+import com.donffroodus.social_service.service.CensorService;
 
 /**
  * 社交服务 HTTP API：情绪日记、动态、点赞与评论。
@@ -52,6 +55,8 @@ import com.donffroodus.social_service.repository.SocialPostRepository;
 @RequestMapping("/api/v1")
 @CrossOrigin(origins = "*")
 public class SocialApiController {
+	@Autowired
+	private CensorService censorService;
 
 	private static final int MAX_PAGE_SIZE = 100;
 	private static final int FRIENDSHIP_FLOWER_STEP = 50;
