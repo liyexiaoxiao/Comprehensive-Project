@@ -3,6 +3,7 @@ package com.donffroodus.social_service.service;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import com.donffroodus.social_service.repository.FriendshipRepository;
 
 @Service
 public class ChatService {
+	@Autowired
+	private CensorService censorService;
 
 	private static final int MAX_CONTENT_LENGTH = 2000;
 	private static final int MAX_PAGE_SIZE = 100;
@@ -67,7 +70,7 @@ public class ChatService {
 	@Transactional
 	public ChatMessageResponse sendMessage(Long userId, Long peerUserId, String content) {
 		requireFriend(userId, peerUserId);
-		String text = normalizeContent(content);
+		String text = censorService.CensorContent(normalizeContent(content));
 		ChatConversation conversation = getOrCreateConversation(userId, peerUserId);
 
 		ChatMessage message = new ChatMessage();
