@@ -67,8 +67,7 @@ public class MiniMissionController {
         if (userId == null) {
             throw new IllegalStateException("User not authenticated");
         }
-        miniMissionService.startMiniMission(missionId, userId);
-        return ResponseEntity.ok(miniMissionService.getMiniMissionById(missionId));
+        return ResponseEntity.ok(miniMissionService.startMiniMission(missionId, userId));
     }
 
     @PostMapping("/abort")
@@ -78,8 +77,7 @@ public class MiniMissionController {
         if (userId == null) {
             throw new IllegalStateException("User not authenticated");
         }
-        miniMissionService.AbortMiniMission(missionId, userId);
-        return ResponseEntity.ok(miniMissionService.getMiniMissionById(missionId));
+        return ResponseEntity.ok(miniMissionService.abortMiniMission(missionId, userId));
     }
 
     @PostMapping("/complete")
@@ -89,8 +87,7 @@ public class MiniMissionController {
         if (userId == null) {
             throw new IllegalStateException("User not authenticated");
         }
-        miniMissionService.completeMiniMission(missionId, userId);
-        return ResponseEntity.ok(miniMissionService.getMiniMissionById(missionId));
+        return ResponseEntity.ok(miniMissionService.completeMiniMission(missionId, userId));
     }
 
     @GetMapping("/my-logs")
@@ -100,6 +97,15 @@ public class MiniMissionController {
             throw new IllegalStateException("User not authenticated");
         }
         return ResponseEntity.ok(miniMissionService.getMyLogs(userId));
+    }
+
+    @GetMapping("/catalog")
+    public ResponseEntity<?> getCatalog() {
+        Long userId = getUserIdFromSecurityContext();
+        if (userId == null) {
+            throw new IllegalStateException("User not authenticated");
+        }
+        return ResponseEntity.ok(miniMissionService.getActiveMiniMissions());
     }
 
     @PreAuthorize("hasRole('ADMIN')")

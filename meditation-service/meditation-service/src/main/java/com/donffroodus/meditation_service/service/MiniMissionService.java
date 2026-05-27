@@ -23,17 +23,29 @@ public class MiniMissionService {
     @Autowired
     private MiniMissionLogRepository miniMissionLogRepository;
 
-    public MiniMissionResponse getMiniMissionById(Long missionId) {
+    private MiniMission getRequiredMission(Long missionId) {
+        return miniMissionRepository.findById(missionId)
+            .orElseThrow(() -> new IllegalArgumentException("Mini mission not found"));
+    }
+
+    private MiniMissionResponse toResponse(MiniMission mission) {
         MiniMissionResponse response = new MiniMissionResponse();
-        miniMissionRepository.findById(missionId).ifPresent(mission -> {
-            response.setTitle(mission.getTitle());
-            response.setDescription(mission.getDescription());
-            response.setRewardValue(mission.getRewardValue());
-        });
-        if (response.getTitle() == null) {
-            throw new IllegalArgumentException("Mini mission not found");
-        }
+        response.setTitle(mission.getTitle());
+        response.setDescription(mission.getDescription());
+        response.setRewardValue(mission.getRewardValue());
         return response;
+    }
+
+    private MiniMissionResponse fallbackResponse(Long missionId, String statusHint, Integer rewardValue) {
+        MiniMissionResponse response = new MiniMissionResponse();
+        response.setTitle("任务 #" + missionId);
+        response.setDescription("该微任务记录仍然存在，原任务配置已不存在。" + statusHint);
+        response.setRewardValue(rewardValue != null && rewardValue > 0 ? rewardValue : 1);
+        return response;
+    }
+
+    public MiniMissionResponse getMiniMissionById(Long missionId) {
+        return toResponse(getRequiredMission(missionId));
     }
 
     public MiniMissionAdminResponse getMiniMissionByIdAdmin(Long missionId) {
@@ -84,6 +96,20 @@ public class MiniMissionService {
         }).toList();
     }
 
+    public List<MiniMissionAdminResponse> getActiveMiniMissions() {
+        return miniMissionRepository.findByIsActiveTrueOrderByIdAsc().stream().map(mission -> {
+            MiniMissionAdminResponse response = new MiniMissionAdminResponse();
+            response.setId(mission.getId());
+            response.setTitle(mission.getTitle());
+            response.setDescription(mission.getDescription());
+            response.setRewardValue(mission.getRewardValue());
+            response.setActive(mission.isActive());
+            response.setCreatedAt(mission.getCreatedAt());
+            response.setUpdatedAt(mission.getUpdatedAt());
+            return response;
+        }).toList();
+    }
+
     public List<MiniMissionLog> getMyLogs(Long userId) {
         return miniMissionLogRepository.findByUserId(userId);
     }
@@ -105,56 +131,62 @@ public class MiniMissionService {
         miniMissionRepository.deleteById(missionId);
     }
 
-    public void startMiniMission(Long missionId, Long userId) {
+    public MiniMissionResponse startMiniMission(Long missionId, Long userId) {
         if (miniMissionLogRepository.existsByStatusAndUserId(MiniMissionLog.MiniMissionStatus.IN_PROGRESS, userId)) {
             throw new IllegalStateException("User already has an active mini mission");
         }
+        MiniMission mission = getRequiredMission(missionId);
         MiniMissionLog log = new MiniMissionLog();
         log.setUserId(userId);
         log.setMiniMissionId(missionId);
         log.setStatus(MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
         log.setCreatedAt(java.time.LocalDateTime.now());
         miniMissionLogRepository.save(log);
+        return toResponse(mission);
     }
 
-    public void AbortMiniMission(Long missionId, Long userId) {
-        boolean hasActiveMission = miniMissionLogRepository.existsByStatusAndUserId(MiniMissionLog.MiniMissionStatus.IN_PROGRESS, userId);
-        if (!hasActiveMission) {
+    public MiniMissionResponse abortMiniMission(Long missionId, Long userId) {
+        List<MiniMissionLog> activeMissions = miniMissionLogRepository.findByUserIdAndStatus(userId, MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
+        if (activeMissions.isEmpty()) {
             throw new IllegalStateException("User does not have an active mini mission to abort");
         }
 
-        List<MiniMissionLog> activeMissions = miniMissionLogRepository.findByUserIdAndStatus(userId, MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
-        activeMissions.stream()
+        MiniMissionLog targetLog = activeMissions.stream()
             .filter(log -> log.getMiniMissionId().equals(missionId))
             .findFirst()
-            .ifPresent(log -> {
-                log.setStatus(MiniMissionLog.MiniMissionStatus.FAILED);
-                log.setUpdatedAt(java.time.LocalDateTime.now());
-                miniMissionLogRepository.save(log);
-            });
-        
-        if (activeMissions.isEmpty()) {
-            throw new IllegalStateException("No active mini mission found for the user");
-        }
+            .orElseThrow(() -> new IllegalStateException("Active mini mission does not match the requested mission"));
+
+        targetLog.setStatus(MiniMissionLog.MiniMissionStatus.FAILED);
+        targetLog.setUpdatedAt(java.time.LocalDateTime.now());
+        miniMissionLogRepository.save(targetLog);
+
+        return miniMissionRepository.findById(missionId)
+            .map(this::toResponse)
+            .orElseGet(() -> fallbackResponse(missionId, "当前日志已标记为放弃。", targetLog.getEarnedValue()));
     }
 
-    public void completeMiniMission(Long missionId, Long userId) {
-        boolean hasActiveMission = miniMissionLogRepository.existsByStatusAndUserId(MiniMissionLog.MiniMissionStatus.IN_PROGRESS, userId);
-        if (!hasActiveMission) {
+    public MiniMissionResponse completeMiniMission(Long missionId, Long userId) {
+        List<MiniMissionLog> activeMissions = miniMissionLogRepository.findByUserIdAndStatus(userId, MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
+        if (activeMissions.isEmpty()) {
             throw new IllegalStateException("User does not have an active mini mission to complete");
         }
-        List<MiniMissionLog> activeMissions = miniMissionLogRepository.findByUserIdAndStatus(userId, MiniMissionLog.MiniMissionStatus.IN_PROGRESS);
-        activeMissions.stream()
+
+        MiniMissionLog targetLog = activeMissions.stream()
             .filter(log -> log.getMiniMissionId().equals(missionId))
             .findFirst()
-            .ifPresent(log -> {
-                log.setStatus(MiniMissionLog.MiniMissionStatus.COMPLETED);
-                log.setUpdatedAt(java.time.LocalDateTime.now());
-                miniMissionLogRepository.save(log);
-            });
+            .orElseThrow(() -> new IllegalStateException("Active mini mission does not match the requested mission"));
 
-        if (activeMissions.isEmpty()) {
-            throw new IllegalStateException("No active mini mission found for the user");
+        MiniMission mission = miniMissionRepository.findById(missionId).orElse(null);
+        int rewardValue = mission != null ? mission.getRewardValue() : (targetLog.getEarnedValue() > 0 ? targetLog.getEarnedValue() : 1);
+
+        targetLog.setStatus(MiniMissionLog.MiniMissionStatus.COMPLETED);
+        targetLog.setEarnedValue(rewardValue);
+        targetLog.setUpdatedAt(java.time.LocalDateTime.now());
+        miniMissionLogRepository.save(targetLog);
+
+        if (mission != null) {
+            return toResponse(mission);
         }
+        return fallbackResponse(missionId, "当前日志已标记为完成。", rewardValue);
     }
 }

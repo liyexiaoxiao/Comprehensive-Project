@@ -974,13 +974,19 @@
                 <div class="chat-composer">
                   <textarea
                     v-model="chatDraft"
+                    ref="chatTextareaRef"
                     class="chat-textarea"
                     placeholder="输入你想发送的内容，按 Enter 发送，Shift + Enter 换行"
                     maxlength="2000"
                     @keydown.enter.exact.prevent="sendCurrentChatMessage"
                   ></textarea>
                   <div class="chat-composer-footer">
-                    <span class="chat-status-text">按 Enter 发送，Shift + Enter 换行</span>
+                    <div class="chat-composer-left">
+                      <button class="chat-suggestion-btn" type="button" @click="openSupportiveReplyModal">
+                        支持型回复建议
+                      </button>
+                      <span class="chat-status-text">按 Enter 发送，Shift + Enter 换行</span>
+                    </div>
                     <button
                       class="action-btn friend-chat-send-btn"
                       :disabled="isSendingChat || !chatDraft.trim()"
@@ -988,6 +994,43 @@
                     >
                       {{ isSendingChat ? '发送中...' : '发送' }}
                     </button>
+                  </div>
+                </div>
+
+                <div
+                  v-if="supportiveReplyModalVisible"
+                  class="modal-overlay"
+                  @click.self="closeSupportiveReplyModal"
+                >
+                  <div class="modal-content glass-panel supportive-replies-modal-card">
+                    <div class="modal-header">
+                      <h3>支持型回复建议</h3>
+                      <button class="close-btn" type="button" @click="closeSupportiveReplyModal">&times;</button>
+                    </div>
+                    <div class="supportive-modal-body">
+                      <div class="supportive-categories">
+                        <button
+                          v-for="category in supportiveReplyCategories"
+                          :key="category.key"
+                          type="button"
+                          :class="['supportive-category', { active: activeSupportiveReplyCategory === category.key }]"
+                          @click="activeSupportiveReplyCategory = category.key"
+                        >
+                          {{ category.label }}
+                        </button>
+                      </div>
+                      <div class="supportive-suggestions">
+                        <button
+                          v-for="text in activeSupportiveReplies"
+                          :key="text"
+                          type="button"
+                          class="supportive-chip"
+                          @click="applySupportiveReply(text)"
+                        >
+                          {{ text }}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -3131,6 +3174,77 @@ const isChatListLoading = ref(false)
 const isChatLoading = ref(false)
 const isSendingChat = ref(false)
 const chatMessageListRef = ref(null)
+const chatTextareaRef = ref(null)
+const supportiveReplyModalVisible = ref(false)
+const activeSupportiveReplyCategory = ref('empathy')
+
+const supportiveReplyCategories = [
+  { key: 'empathy', label: '共情' },
+  { key: 'ask', label: '提问' },
+  { key: 'encourage', label: '鼓励' },
+  { key: 'boundary', label: '边界' },
+  { key: 'practical', label: '小步' },
+]
+
+const supportiveRepliesByCategory = {
+  empathy: [
+    '听起来你真的很不容易。',
+    '谢谢你愿意跟我说这些。',
+    '我能理解你会这样感受。',
+    '你现在的感受很重要。',
+    '我在听，你可以慢慢说。',
+  ],
+  ask: [
+    '你希望我更多是倾听，还是给一点建议？',
+    '发生了什么，让你现在这么难受？',
+    '此刻最让你卡住的是哪一部分？',
+    '你觉得你最需要的支持是什么？',
+    '如果把这件事缩小一点，现在最紧急的是哪一步？',
+  ],
+  encourage: [
+    '你已经很努力了，真的。',
+    '能坚持到现在说明你很有力量。',
+    '我们先把今天过好就行，不用一次解决全部。',
+    '我在这里，陪你一起扛着。',
+    '如果你愿意，我们可以一起找一个更轻一点的做法。',
+  ],
+  boundary: [
+    '如果你不想展开讲也没关系。',
+    '我尊重你的节奏，你想停就停。',
+    '你不用立刻回复我，照顾好自己最重要。',
+    '你想先休息一下也可以，我会在。',
+    '如果这话题让你压力很大，我们可以换个方向聊。',
+  ],
+  practical: [
+    '要不要先做一个很小的动作：喝口水/深呼吸三次？',
+    '我们可以先把目标缩到 5 分钟：先做一个最小步骤。',
+    '你愿意的话，我陪你把事情拆成 3 个小点，一次只看一个。',
+    '要不要先把想法写下来一行：我担心的是____，接下来能做的是____。',
+    '先把情绪安顿一下：你现在更像是焦虑、难过，还是生气？',
+  ],
+}
+
+const activeSupportiveReplies = computed(() => supportiveRepliesByCategory[activeSupportiveReplyCategory.value] || [])
+
+const openSupportiveReplyModal = () => {
+  supportiveReplyModalVisible.value = true
+}
+
+const closeSupportiveReplyModal = () => {
+  supportiveReplyModalVisible.value = false
+}
+
+const applySupportiveReply = (text) => {
+  const suggestion = String(text || '').trim()
+  if (!suggestion) return
+
+  const existing = String(chatDraft.value || '').trim()
+  chatDraft.value = existing ? `${existing}\n${suggestion}` : suggestion
+  supportiveReplyModalVisible.value = false
+  nextTick(() => {
+    chatTextareaRef.value?.focus?.()
+  })
+}
 const FRIENDSHIP_FLOWER_STEP = 50
 const MAX_FRIENDSHIP_FLOWERS = 3
 const MAX_FRIENDSHIP_SCORE = FRIENDSHIP_FLOWER_STEP * MAX_FRIENDSHIP_FLOWERS
@@ -5969,9 +6083,82 @@ window.addEventListener('resize', () => {
   border-top: 1px solid rgba(118, 150, 157, 0.14);
 }
 
+.chat-composer-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chat-suggestion-btn {
+  border: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(54, 95, 77, 0.10);
+  color: #365f4d;
+  font: inherit;
+  font-weight: 600;
+}
+
+.supportive-replies-modal-card {
+  max-width: 760px;
+}
+
+.supportive-modal-body {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.supportive-categories {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.supportive-category {
+  border: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(54, 95, 77, 0.08);
+  color: #365f4d;
+  font: inherit;
+}
+
+.supportive-category.active {
+  background: #365f4d;
+  color: #fff;
+}
+
+.supportive-suggestions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.supportive-chip {
+  border: 1px solid rgba(118, 150, 157, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font: inherit;
+  color: #28444c;
+  text-align: left;
+}
+
+.supportive-chip:hover {
+  background: rgba(222, 241, 234, 0.96);
+}
+
 .chat-textarea {
   width: 100%;
-  min-height: 110px;
+  min-height: 74px;
   resize: none;
   border-radius: 18px;
   border: 1px solid rgba(118, 150, 157, 0.18);

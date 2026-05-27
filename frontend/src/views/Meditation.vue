@@ -150,7 +150,7 @@
                 
                 <div class="plant-stats">
                   <div class="stat-item">
-                    <span class="stat-label">总冥想时间</span>
+                    <span class="stat-label">总成长时间</span>
                     <span class="stat-value"><strong>{{ totalMeditationTime }}</strong> 分钟</span>
                   </div>
                   <div class="stat-item">
@@ -333,13 +333,19 @@ const goBack = () => {
 
 // Plant Growth Logic Mock
 const totalMeditationTime = ref(0) 
+const FOREST_BONUS_MINUTES_STORAGE_KEY = 'forest_bonus_minutes'
+
+const readForestBonusMinutes = () => {
+  const value = Number.parseInt(window.localStorage.getItem(FOREST_BONUS_MINUTES_STORAGE_KEY) || '0', 10)
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
 
 const fetchLogs = async () => {
   try {
     const res = await getMyMeditationLogsApi()
     if (res.data) {
       const total = res.data.reduce((sum, log) => sum + (log.duration || 0), 0)
-      totalMeditationTime.value = total
+      totalMeditationTime.value = total + readForestBonusMinutes()
     }
   } catch (e) {
     console.error('Failed to fetch meditation logs:', e)

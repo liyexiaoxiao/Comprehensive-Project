@@ -16,6 +16,10 @@
               <span class="portal-icon">🌿</span>
               <span>个人空间</span>
             </button>
+            <button class="portal-btn" type="button" @click="$router.push({ name: 'mini-missions' })">
+              <span class="portal-icon">🌱</span>
+              <span>微任务</span>
+            </button>
             <button v-if="isAdmin" class="portal-btn" type="button" @click="$router.push({ name: 'admin' })">
               <span class="portal-icon">🛠</span>
               <span>管理员端</span>
