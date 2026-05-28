@@ -9,7 +9,7 @@ from flask_cors import CORS
 from pymongo import MongoClient
 from auth import current_user_id, install_jwt_auth
 from kimi_service import generate_meditation_guide
-from qwen_service import query_qwen_companion_with_tools, stream_qwen_companion
+from qwen_service import query_qwen_companion_with_tools, raw_qwen_reply, stream_qwen_companion
 from tts_service import synthesize_speech
 
 app = Flask(__name__)
@@ -435,6 +435,26 @@ def companion_history():
         })
 
     return jsonify({'sessionId': session_id, 'messages': result})
+
+@app.route('/api/ai/posts-response', methods=['POST'])
+def ai_posts_response():
+    payload = request.get_json(silent=True) or {}
+    post = payload.get('content')
+    if not post:
+        return jsonify({'error': 'content is required'}), 400
+    system_prompt = "\
+    你是社交平台上一个友善的参与者，你会在各种帖子下留下简短的评论。\
+    请根据用户提供的帖子内容，判断其主要表达的情绪类型（如快乐、悲伤、愤怒、恐惧、惊讶等），\
+    并生成一个简短、友善的回复，以进行鼓励、安抚、共情等行为。\
+    请确保回复内容简洁明了，且具有同理心。\
+    避免以任何方式批评或指责用户的帖子内容。禁止出现任何歧视性、侮辱性或攻击性的语言。\
+    回复中可以包含最多一个表情符号来增强表达效果。"
+    
+    try:
+        responst = raw_qwen_reply(post, system_prompt)
+        return jsonify({'response': responst})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

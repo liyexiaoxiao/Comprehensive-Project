@@ -49,6 +49,23 @@ def _has_music_intent(text: str):
     lowered = str(text or "").lower()
     return any(keyword in lowered for keyword in MUSIC_INTENT_KEYWORDS)
 
+def raw_qwen_reply(user_text: str, system_promt: str = None):
+    qwen_api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not qwen_api_key:
+        raise RuntimeError("未配置 DASHSCOPE_API_KEY")
+    client = OpenAI(api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    messages = []
+    if system_promt:
+        messages.append({"role": "system", "content": system_promt})
+    messages.append({"role": "user", "content": user_text})
+    completion = client.chat.completions.create(
+        model="qwen3.5-plus-2026-04-20",
+        messages=messages,
+        extra_body={"enable_thinking": False},
+    )
+    content = completion.choices[0].message.content if completion.choices else ""
+    return content.strip() if content else ""
+
 
 def _run_companion_tool(name: str, arguments: dict, user_id: int = 10001, jwt_token: str = None):
     if name == "recommend_music":
