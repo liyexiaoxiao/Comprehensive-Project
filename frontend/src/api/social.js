@@ -44,3 +44,18 @@ export const sendChatMessageApi = (peerUserId, payload) =>
   http.post(`/api/social/v1/me/chat/with/${peerUserId}/messages`, payload)
 export const markChatAsReadApi = (peerUserId) =>
   http.put(`/api/social/v1/me/chat/with/${peerUserId}/read`)
+
+// --- Censor Words (Admin) ---
+export const getAdminCensorWordsApi = (active) => {
+  const params = {}
+  if (active !== undefined && active !== null) {
+    params.active = active
+  }
+  return http.get('/api/social/censor/all-words', { params })
+}
+export const addAdminCensorWordApi = (word) =>
+  http.post('/api/social/censor/add-word', { word })
+export const setAdminCensorWordActivityApi = (word, active) =>
+  http.post('/api/social/censor/set-word-activity', { word }, { params: { active } })
+export const deleteAdminCensorWordApi = (word) =>
+  http.delete('/api/social/censor/delete-word', { data: { word } })

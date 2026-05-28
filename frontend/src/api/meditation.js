@@ -15,3 +15,11 @@ export const deleteAdminMeditationLogApi = (logId) => http.post('/api/meditation
 export const getMyGardenApi = () => http.get('/api/meditation/garden/me')
 export const rewardGardenItemApi = () => http.post('/api/meditation/garden/me/reward')
 export const unlockGardenPlantApi = (plantId) => http.post(`/api/meditation/garden/me/unlock-plant/${plantId}`)
+
+// --- Mini Missions (Behavior Activation) ---
+export const getMiniMissionByIdApi = (missionId) => http.get(`/api/meditation/mini-missions/${missionId}`)
+export const getMiniMissionCatalogApi = () => http.get('/api/meditation/mini-missions/catalog')
+export const startMiniMissionApi = (missionId) => http.post('/api/meditation/mini-missions/start', { missionId })
+export const abortMiniMissionApi = (missionId) => http.post('/api/meditation/mini-missions/abort', { missionId })
+export const completeMiniMissionApi = (missionId) => http.post('/api/meditation/mini-missions/complete', { missionId })
+export const getMyMiniMissionLogsApi = () => http.get('/api/meditation/mini-missions/my-logs')

@@ -31,6 +31,13 @@
         >
           官方情绪歌单
         </RouterLink>
+        <RouterLink
+          class="admin-nav-link"
+          :class="{ active: route.path.startsWith('/admin/censor-words') }"
+          to="/admin/censor-words"
+        >
+          敏感词审查
+        </RouterLink>
       </nav>
 
       <RouterView />

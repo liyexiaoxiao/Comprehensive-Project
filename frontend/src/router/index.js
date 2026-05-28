@@ -28,6 +28,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/mini-missions',
+    name: 'mini-missions',
+    component: () => import('@/views/MiniMissions.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: () => import('@/views/AdminDashboard.vue'),
@@ -43,6 +49,11 @@ const routes = [
         path: 'official-playlists',
         name: 'admin-official-playlists',
         component: () => import('@/views/admin/AdminOfficialPlaylistsPage.vue'),
+      },
+      {
+        path: 'censor-words',
+        name: 'admin-censor-words',
+        component: () => import('@/views/admin/AdminCensorWordsPage.vue'),
       },
     ],
   },
