@@ -10,6 +10,7 @@ import com.donffroodus.user_service.dto.UserFeedbackResponse;
 import com.donffroodus.user_service.entity.UserFeedback;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -21,8 +22,9 @@ public class UserFeedbackService {
     @Autowired
     private UserFeedbackRepository userFeedbackRepository;
 
-    private UserFeedbackResponse convertToResponse(UserFeedback feedback) {
+    private UserFeedbackResponse convertToResponse(UserFeedback feedback, Long userId) {
         UserFeedbackResponse response = new UserFeedbackResponse();
+        response.setUserId(userId);
         response.setService(feedback.getService());
         response.setFeedback(feedback.getFeedback());
         response.setRating(feedback.getRating());
@@ -65,24 +67,28 @@ public class UserFeedbackService {
             LocalDateTime end = LocalDateTime.parse(endDate);
             feedbackList = feedbackList.stream().filter(f -> f.getCreatedAt().isBefore(end)).collect(Collectors.toList());
         }
-        return feedbackList.stream().map(this::convertToResponse).collect(Collectors.toList());
+        return feedbackList.stream().map(f -> convertToResponse(f, userId)).collect(Collectors.toList());
     }
 
     public UserFeedbackResponse getFeedbackById(Long id) {
         UserFeedback feedback = userFeedbackRepository.findById(id).orElseThrow(() -> new RuntimeException("Feedback not found"));
-        return convertToResponse(feedback);
+        return convertToResponse(feedback, feedback.getUserId());
     }
 
     public UserPreference getUserPreferences(Long userId) {
         List<UserFeedback> feedbackList = userFeedbackRepository.findByUserId(userId);
         UserPreference preference = new UserPreference();
         preference.setUserId(userId);
-        ServiceScore serviceScore = new ServiceScore();
-        feedbackList.forEach(f -> {
-            serviceScore.setService(f.getService());
-            serviceScore.setScore((float) feedbackList.stream().filter(fb -> fb.getService().equals(f.getService())).mapToDouble(UserFeedback::getRating).average().orElse(0.0));
+        preference.setServiceScores(new ArrayList<>());
+        List<String> services = feedbackList.stream().map(UserFeedback::getService).distinct().collect(Collectors.toList());    
+        for (String service : services) {
+            List<UserFeedback> serviceFeedbacks = feedbackList.stream().filter(f -> f.getService().equalsIgnoreCase(service)).collect(Collectors.toList());
+            double averageRating = serviceFeedbacks.stream().mapToDouble(UserFeedback::getRating).average().orElse(0.0);
+            ServiceScore serviceScore = new ServiceScore();
+            serviceScore.setService(service);
+            serviceScore.setScore((float) averageRating);
             preference.getServiceScores().add(serviceScore);
-        });
+        }
         return preference;
     }
 

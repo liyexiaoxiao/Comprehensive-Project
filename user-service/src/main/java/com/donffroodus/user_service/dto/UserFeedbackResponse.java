@@ -3,11 +3,18 @@ package com.donffroodus.user_service.dto;
 import java.time.LocalDateTime;
 
 public class UserFeedbackResponse {
+    Long userId;
     String service;
     String feedback;
     float rating;
     LocalDateTime createdAt;
 
+    public Long getUserId() {
+        return userId;
+    }
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
     public String getService() {
         return service;
     }
