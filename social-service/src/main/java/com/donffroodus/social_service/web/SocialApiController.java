@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -13,6 +14,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,24 +30,25 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.donffroodus.social_service.entity.FriendRequest;
+import com.donffroodus.social_service.entity.Friendship;
+import com.donffroodus.social_service.entity.MoodDiary;
+import com.donffroodus.social_service.entity.SocialInteraction;
+import com.donffroodus.social_service.entity.SocialPost;
+import com.donffroodus.social_service.repository.FriendRequestRepository;
+import com.donffroodus.social_service.repository.FriendshipRepository;
+import com.donffroodus.social_service.repository.MoodDiaryRepository;
+import com.donffroodus.social_service.repository.SocialInteractionRepository;
+import com.donffroodus.social_service.repository.SocialPostRepository;
+import com.donffroodus.social_service.service.CensorService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
-
-import com.donffroodus.social_service.entity.Friendship;
-import com.donffroodus.social_service.entity.FriendRequest;
-import com.donffroodus.social_service.entity.MoodDiary;
-import com.donffroodus.social_service.entity.SocialInteraction;
-import com.donffroodus.social_service.entity.SocialPost;
-import com.donffroodus.social_service.repository.FriendshipRepository;
-import com.donffroodus.social_service.repository.FriendRequestRepository;
-import com.donffroodus.social_service.repository.MoodDiaryRepository;
-import com.donffroodus.social_service.repository.SocialInteractionRepository;
-import com.donffroodus.social_service.repository.SocialPostRepository;
-import com.donffroodus.social_service.service.CensorService;
 
 /**
  * 社交服务 HTTP API：情绪日记、动态、点赞与评论。
@@ -98,6 +102,14 @@ public class SocialApiController {
 	private static String normalizeMoodTag(String moodTag) {
 		List<String> tags = parseMoodTags(moodTag);
 		return tags.isEmpty() ? null : String.join(",", tags);
+	}
+
+	private HttpHeaders buildAuthorizationHeaders(String authorization) {
+		HttpHeaders headers = new HttpHeaders();
+		if (authorization != null && !authorization.isBlank()) {
+			headers.set(HttpHeaders.AUTHORIZATION, authorization);
+		}
+		return headers;
 	}
 
 	private boolean areFriends(Long userId, Long otherUserId) {
@@ -487,6 +499,25 @@ public class SocialApiController {
 				})
 				.orElse(ResponseEntity.notFound().build());
 	}
+
+	@GetMapping("/posts/ai-response/{postId}")
+	public ResponseEntity<?> getAiResponseForPost(@PathVariable("postId") Long postId, @RequestHeader(value = "Authorization", required = false) String authorization) {
+		String post_content = socialPostRepository.findById(postId)
+				.map(SocialPost::getContent)
+				.orElse(null);
+		if (post_content == null) {
+			return ResponseEntity.notFound().build();
+		}
+		RestTemplate restTemplate = new RestTemplate();
+		Map<String, String> requestBody = Map.of("content", post_content);
+		HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, buildAuthorizationHeaders(authorization));
+		ResponseEntity<Object> aiResponse = restTemplate.postForEntity(
+				"http://host.docker.internal:5001/api/ai/posts-response",
+				requestEntity,
+				Object.class);
+		return ResponseEntity.status(aiResponse.getStatusCode()).body(aiResponse.getBody());
+	}
+	
 
 	@Operation(summary = "切换评论点赞", description = "对指定评论点赞或取消点赞")
 	@PostMapping("/posts/{postId}/comments/{commentId}/like")
