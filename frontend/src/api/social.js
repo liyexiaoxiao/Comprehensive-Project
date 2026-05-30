@@ -13,6 +13,10 @@ export const deleteMoodDiaryApi = (diaryId) => http.delete(`/api/social/v1/me/mo
 export const getPostsApi = (page = 0, size = 20) => http.get('/api/social/v1/posts', { params: { page, size } })
 export const getMyPostsApi = (page = 0, size = 20) => http.get('/api/social/v1/me/posts', { params: { page, size } })
 export const getPostInteractionsApi = (postId) => http.get(`/api/social/v1/posts/${postId}/interactions`)
+export const getPostAiReplySuggestionApi = (postId) => http.get(
+  `/api/social/v1/posts/ai-response/${postId}`,
+  { suppressAuthRedirect: true }
+)
 export const createPostApi = (payload) => http.post('/api/social/v1/me/posts', payload)
 export const updatePostApi = (postId, payload) => http.put(`/api/social/v1/me/posts/${postId}`, payload)
 export const deletePostApi = (postId) => http.delete(`/api/social/v1/me/posts/${postId}`)

@@ -31,9 +31,10 @@ http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
+      const shouldSuppressAuthRedirect = Boolean(error?.config?.suppressAuthRedirect)
       const requestToken = error?.config?.__authToken || null
       const currentToken = getStoredAuthToken()
-      const shouldClearActiveSession = requestToken && requestToken === currentToken
+      const shouldClearActiveSession = !shouldSuppressAuthRedirect && requestToken && requestToken === currentToken
 
       if (shouldClearActiveSession) {
         clearAuthToken()

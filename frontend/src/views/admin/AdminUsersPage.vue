@@ -425,7 +425,7 @@ onMounted(async () => {
 <style scoped>
 .admin-grid {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -481,8 +481,8 @@ onMounted(async () => {
 }
 
 .toolbar-input {
-  min-width: 220px;
-  max-width: 380px;
+  min-width: min(220px, 100%);
+  max-width: min(380px, 100%);
 }
 
 .toolbar-input,
@@ -531,7 +531,7 @@ onMounted(async () => {
 
 .reset-box {
   display: grid;
-  grid-template-columns: minmax(360px, 720px) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   column-gap: 16px;
   row-gap: 12px;
   justify-content: start;
@@ -565,8 +565,8 @@ onMounted(async () => {
 .pager {
   align-items: center;
   flex-shrink: 0;
-  white-space: nowrap;
-  flex-wrap: nowrap;
+  white-space: normal;
+  flex-wrap: wrap;
 }
 
 .pager span,
@@ -595,6 +595,7 @@ onMounted(async () => {
   border-radius: 18px;
   padding: 14px;
   align-items: center;
+  min-width: 0;
 }
 
 .user-row {
@@ -618,6 +619,7 @@ onMounted(async () => {
 .user-row-main {
   flex: 1;
   flex-direction: column;
+  min-width: 0;
 }
 
 .user-row-main span,
@@ -629,6 +631,7 @@ onMounted(async () => {
 .user-row-tags {
   flex-direction: column;
   align-items: flex-end;
+  flex-shrink: 0;
 }
 
 .tag.muted {
@@ -679,15 +682,15 @@ onMounted(async () => {
   .admin-grid {
     grid-template-columns: 1fr;
   }
+
+  .detail-panel {
+    min-width: 0;
+  }
 }
 
-@media (max-width: 720px) {
-  .panel-head,
-  .toolbar,
-  .action-row,
-  .log-row {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 900px) {
+  .toolbar-input {
+    max-width: 100%;
   }
 
   .reset-box {
@@ -696,8 +699,28 @@ onMounted(async () => {
     justify-content: stretch;
   }
 
+  .reset-box .ghost-btn {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .panel-head,
+  .toolbar,
+  .action-row,
+  .log-row,
+  .user-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .user-row-tags {
+    align-items: flex-start;
   }
 }
 </style>

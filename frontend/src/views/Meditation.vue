@@ -1100,6 +1100,8 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .back-btn {
@@ -1134,6 +1136,7 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   grid-template-columns: 1.05fr 1.95fr;
   gap: 30px;
   overflow: hidden;
+  min-width: 0;
 }
 
 .right-panels-shell {
@@ -1433,6 +1436,8 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   align-items: center;
   color: #fff;
   flex-shrink: 0;
+  gap: 16px;
+  flex-wrap: wrap;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1461,6 +1466,7 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .ctrl-btn {
@@ -1941,7 +1947,7 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   100% { transform: translate(30px, -30px) scale(1.05); }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1040px) {
   .main-content {
     grid-template-columns: 1fr;
     overflow-y: auto;
@@ -1955,6 +1961,9 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
     height: auto;
     min-height: 100vh;
   }
+}
+
+@media (max-width: 1024px) {
   
   .meditation-page {
     height: auto;
@@ -1972,6 +1981,25 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   .guide-modal-card {
     min-height: 640px;
     padding: 24px 20px;
+  }
+}
+
+@media (max-width: 760px) {
+  .top-bar,
+  .plant-header,
+  .guide-modal-header,
+  .guide-modal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-controls {
+    padding: 16px 18px;
+  }
+
+  .now-playing-info,
+  .control-buttons {
+    width: 100%;
   }
 }
 </style>

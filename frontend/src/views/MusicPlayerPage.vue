@@ -550,6 +550,8 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-bottom: 20px;
   flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .back-btn {
@@ -950,6 +952,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 20px;
+  flex-wrap: wrap;
 }
 
 .progress-block {
@@ -957,6 +960,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 220px;
+  flex-wrap: wrap;
 }
 
 .progress-block span,
@@ -969,6 +974,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .secondary-btn,
@@ -998,6 +1004,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin-left: 10px;
   width: 120px;
+  max-width: 100%;
 }
 
 input[type='range'] {
@@ -1028,6 +1035,7 @@ input[type='range'] {
   .player-stage {
     min-height: auto;
     grid-template-columns: 1fr;
+    padding: 28px;
   }
 
   .cover-shell {
@@ -1054,13 +1062,19 @@ input[type='range'] {
   }
 
   .progress-block {
-    grid-template-columns: 1fr;
+    min-width: 0;
   }
 
   .volume-box {
     width: 100%;
     margin-left: 0;
     justify-content: space-between;
+  }
+
+  .topbar-note,
+  .back-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .queue-item {

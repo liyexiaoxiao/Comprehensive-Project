@@ -1,6 +1,7 @@
 flask==3.0.3
 torch==2.6.0
 torchaudio==2.6.0
+torchvision==0.21.0
 transformers==4.46.3
 requests==2.32.3
 huggingface_hub==0.26.2

@@ -597,7 +597,7 @@ export const useMusicStore = defineStore('music', () => {
         artist: uploadedTrack.artist?.trim() || payload.artist?.trim() || null,
         duration: Number(uploadedTrack.duration) || Number(payload.duration) || 0,
         fileUrl: uploadedTrack.filename ? getMusicFileUrl(uploadedTrack.filename) : '',
-        coverUrl: '',
+        coverUrl: String(payload.coverUrl || '').trim(),
         source: buildUploadSource(uploadedTrack.id),
       })
       musicResource = resourceResponse.data

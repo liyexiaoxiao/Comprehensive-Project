@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +31,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -67,12 +70,19 @@ public class SocialApiController {
 	private static final int POST_LIKE_FRIENDSHIP_POINTS = 3;
 	private static final int POST_COMMENT_FRIENDSHIP_POINTS = 5;
 	private static final DateTimeFormatter ISO_LOCAL_DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+	private static final List<String> DEFAULT_AI_SERVICE_BASE_URLS = List.of(
+			"http://localhost:5001",
+			"http://127.0.0.1:5001",
+			"http://host.docker.internal:5001");
 
 	private final MoodDiaryRepository moodDiaryRepository;
 	private final SocialPostRepository socialPostRepository;
 	private final SocialInteractionRepository socialInteractionRepository;
 	private final FriendshipRepository friendshipRepository;
 	private final FriendRequestRepository friendRequestRepository;
+
+	@Value("${ai.service.base-urls:}")
+	private String aiServiceBaseUrlsConfig;
 
 	public SocialApiController(
 			MoodDiaryRepository moodDiaryRepository,
@@ -110,6 +120,18 @@ public class SocialApiController {
 			headers.set(HttpHeaders.AUTHORIZATION, authorization);
 		}
 		return headers;
+	}
+
+	private List<String> resolveAiServiceBaseUrls() {
+		LinkedHashSet<String> baseUrls = new LinkedHashSet<>();
+		if (aiServiceBaseUrlsConfig != null && !aiServiceBaseUrlsConfig.isBlank()) {
+			Arrays.stream(aiServiceBaseUrlsConfig.split(","))
+					.map(String::trim)
+					.filter(url -> !url.isEmpty())
+					.forEach(baseUrls::add);
+		}
+		baseUrls.addAll(DEFAULT_AI_SERVICE_BASE_URLS);
+		return List.copyOf(baseUrls);
 	}
 
 	private boolean areFriends(Long userId, Long otherUserId) {
@@ -511,11 +533,32 @@ public class SocialApiController {
 		RestTemplate restTemplate = new RestTemplate();
 		Map<String, String> requestBody = Map.of("content", post_content);
 		HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, buildAuthorizationHeaders(authorization));
-		ResponseEntity<Object> aiResponse = restTemplate.postForEntity(
-				"http://host.docker.internal:5001/api/ai/posts-response",
-				requestEntity,
-				Object.class);
-		return ResponseEntity.status(aiResponse.getStatusCode()).body(aiResponse.getBody());
+		HttpStatusCodeException lastHttpError = null;
+		for (String baseUrl : resolveAiServiceBaseUrls()) {
+			String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+			String targetUrl = normalizedBaseUrl + "/api/ai/posts-response";
+			try {
+				ResponseEntity<Object> aiResponse = restTemplate.postForEntity(targetUrl, requestEntity, Object.class);
+				return ResponseEntity.status(aiResponse.getStatusCode()).body(aiResponse.getBody());
+			} catch (ResourceAccessException ex) {
+				continue;
+			} catch (HttpStatusCodeException ex) {
+				lastHttpError = ex;
+				break;
+			}
+		}
+
+		if (lastHttpError != null) {
+			String responseBody = lastHttpError.getResponseBodyAsString();
+			return ResponseEntity.status(lastHttpError.getStatusCode()).body(Map.of(
+					"error", "AI service request failed",
+					"details", responseBody == null || responseBody.isBlank() ? "AI service returned an error" : responseBody));
+		}
+
+		return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+				"error", "AI service unavailable",
+				"details", "No available AI service endpoint",
+				"triedBaseUrls", resolveAiServiceBaseUrls()));
 	}
 	
 

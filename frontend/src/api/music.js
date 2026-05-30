@@ -12,7 +12,7 @@ export const replaceMusicTagsApi = (musicId, payload) => http.post(`/api/music/v
 export const aiTagMusicEmotionsApi = (musicId, payload) => http.post(`/api/music/v1/music-resources/${musicId}/tags/ai`, payload)
 export const previewAiTagMusicFileApi = (formData) =>
   http.post('/api/music/v1/music-resources/tags/ai-preview', formData, {
-    timeout: 60000,
+    timeout: 180000,
   })
 export const getOfficialPlaylistConfigsApi = () => http.get('/api/music/v1/official-playlists')
 export const updateOfficialPlaylistConfigApi = (playlistKey, payload) => http.put(`/api/music/v1/official-playlists/${encodeURIComponent(playlistKey)}`, payload)

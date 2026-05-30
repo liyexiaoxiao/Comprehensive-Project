@@ -5,7 +5,7 @@
         <div>
           <p class="admin-kicker">Admin Console</p>
           <h1>管理员端</h1>
-          <p class="admin-subtitle">将用户管理与官方情绪歌单拆分为独立子页面，方便专注处理不同任务。</p>
+          <p class="admin-subtitle">将用户管理、服务反馈、官方歌单与敏感词审查拆分为独立子页面，方便专注处理不同任务。</p>
         </div>
         <div class="admin-header-actions">
           <span class="admin-badge">{{ currentAdminName }}</span>
@@ -23,6 +23,13 @@
           to="/admin/users"
         >
           用户管理
+        </RouterLink>
+        <RouterLink
+          class="admin-nav-link"
+          :class="{ active: route.path.startsWith('/admin/feedback') }"
+          to="/admin/feedback"
+        >
+          服务反馈
         </RouterLink>
         <RouterLink
           class="admin-nav-link"
@@ -107,6 +114,7 @@ const handleLogout = async () => {
   justify-content: space-between;
   gap: 24px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .admin-kicker {
@@ -131,6 +139,7 @@ const handleLogout = async () => {
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .admin-badge,
@@ -168,7 +177,8 @@ const handleLogout = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 140px;
+  flex: 1 1 140px;
+  min-width: min(140px, 100%);
   padding: 12px 18px;
   border-radius: 16px;
   color: #365f4d;
@@ -181,6 +191,21 @@ const handleLogout = async () => {
   color: #fff;
   background: #365f4d;
   box-shadow: 0 10px 24px rgba(54, 95, 77, 0.2);
+}
+
+@media (max-width: 960px) {
+  .admin-page {
+    padding: 18px;
+  }
+
+  .admin-header {
+    padding: 20px 22px;
+  }
+
+  .admin-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {

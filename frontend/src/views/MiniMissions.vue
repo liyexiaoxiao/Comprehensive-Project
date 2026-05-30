@@ -539,6 +539,7 @@ onMounted(async () => {
   z-index: 2;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .top-bar {
@@ -568,7 +569,7 @@ onMounted(async () => {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.95fr);
   gap: 22px;
   flex: 1;
   min-height: 0;
@@ -595,6 +596,7 @@ onMounted(async () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .panel-header h2 {
@@ -928,6 +930,12 @@ onMounted(async () => {
   cursor: not-allowed;
   opacity: 0.6;
   transform: none;
+}
+
+@media (max-width: 1024px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 980px) {

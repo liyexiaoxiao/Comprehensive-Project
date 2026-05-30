@@ -18,6 +18,7 @@ install_jwt_auth(
     app,
     public_paths=[
         ("GET", "/api/audio"),
+        ("POST", "/api/ai/posts-response"),
     ],
 )
 

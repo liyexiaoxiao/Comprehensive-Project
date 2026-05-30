@@ -21,3 +21,7 @@ spring:
 
 server:
   port: 8083
+
+ai:
+  service:
+    base-urls: ${AI_SERVICE_BASE_URLS:}

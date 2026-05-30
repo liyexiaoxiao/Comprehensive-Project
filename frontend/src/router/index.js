@@ -46,6 +46,11 @@ const routes = [
         component: () => import('@/views/admin/AdminUsersPage.vue'),
       },
       {
+        path: 'feedback',
+        name: 'admin-feedback',
+        component: () => import('@/views/admin/AdminFeedbackPage.vue'),
+      },
+      {
         path: 'official-playlists',
         name: 'admin-official-playlists',
         component: () => import('@/views/admin/AdminOfficialPlaylistsPage.vue'),

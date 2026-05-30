@@ -22,7 +22,11 @@ public class UserFeedbackController {
     private UserFeedbackService userFeedbackService;
 
     @PostMapping("/mine")
-    public ResponseEntity<?> submitFeedback(@RequestHeader("X-User-ID") Long userId, @RequestBody UserFeedbackRequest feedbackRequest) {
+    public ResponseEntity<?> submitFeedback(
+            @RequestHeader(value = "X-User-ID", required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) Long fallbackUserId,
+            @RequestBody UserFeedbackRequest feedbackRequest) {
+        userId = resolveUserId(userId, fallbackUserId);
         if (userId == null) {
             return ResponseEntity.status(401).body("Unauthorized");
         }
@@ -30,7 +34,15 @@ public class UserFeedbackController {
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<?> getFeedbackOfUser(@RequestHeader("X-User-ID") Long userId, @RequestParam(required = false) String service, @RequestParam(required = false) Float minRating, @RequestParam(required = false) Float maxRating, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public ResponseEntity<?> getFeedbackOfUser(
+            @RequestHeader(value = "X-User-ID", required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) Long fallbackUserId,
+            @RequestParam(required = false) String service,
+            @RequestParam(required = false) Float minRating,
+            @RequestParam(required = false) Float maxRating,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        userId = resolveUserId(userId, fallbackUserId);
         if (userId == null) {
             return ResponseEntity.status(401).body("Unauthorized");
         }
@@ -38,7 +50,10 @@ public class UserFeedbackController {
     }
 
     @GetMapping("/preferences")
-    public ResponseEntity<?> getUserPreferences(@RequestHeader("X-User-ID") Long userId) {
+    public ResponseEntity<?> getUserPreferences(
+            @RequestHeader(value = "X-User-ID", required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) Long fallbackUserId) {
+        userId = resolveUserId(userId, fallbackUserId);
         if (userId == null) {
             return ResponseEntity.status(401).body("Unauthorized");
         }
@@ -65,5 +80,9 @@ public class UserFeedbackController {
         } catch (Exception e) {
             return ResponseEntity.status(404).body(e.getMessage());
         }
+    }
+
+    private Long resolveUserId(Long primaryUserId, Long fallbackUserId) {
+        return primaryUserId != null ? primaryUserId : fallbackUserId;
     }
 }

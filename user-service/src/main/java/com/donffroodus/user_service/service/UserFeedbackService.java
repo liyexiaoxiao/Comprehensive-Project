@@ -24,6 +24,7 @@ public class UserFeedbackService {
 
     private UserFeedbackResponse convertToResponse(UserFeedback feedback, Long userId) {
         UserFeedbackResponse response = new UserFeedbackResponse();
+        response.setId(feedback.getId());
         response.setUserId(userId);
         response.setService(feedback.getService());
         response.setFeedback(feedback.getFeedback());

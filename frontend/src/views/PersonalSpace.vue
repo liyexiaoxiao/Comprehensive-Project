@@ -202,9 +202,134 @@
               <div class="chart-container" ref="heatmapChartRef"></div>
             </div>
           </div>
+
         </div>
 
-        <!-- Tab 3: 冥想数据 -->
+        <!-- Tab 3: 服务反馈 -->
+        <div v-else-if="currentTab === 'feedback'" class="tab-content feedback-tab">
+          <div class="feedback-tab-header">
+            <div>
+              <h3 class="section-title">服务反馈</h3>
+              <p class="feedback-header-desc">记录你对疗效数据、社区互动与 AI 能力的主观体验，帮助后端持续优化推荐与服务偏好。</p>
+            </div>
+            <span class="feedback-summary-pill">{{ myFeedbackList.length }} 条反馈</span>
+          </div>
+
+          <div class="feedback-layout">
+            <section class="feedback-card glass-panel-inner">
+              <div class="feedback-card-head">
+                <div>
+                  <h4 class="chart-title">提交反馈</h4>
+                  <p>告诉我们你更认可哪些模块、哪里还需要优化，便于后端持续打磨服务质量。</p>
+                </div>
+              </div>
+
+              <div class="feedback-form-grid">
+                <label class="feedback-field">
+                  <span>反馈服务</span>
+                  <select v-model="feedbackForm.service" class="info-input feedback-select">
+                    <option
+                      v-for="option in feedbackServiceOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+
+                <label class="feedback-field">
+                  <span>满意度评分</span>
+                  <div class="feedback-rating-row">
+                    <button
+                      v-for="score in feedbackRatingOptions"
+                      :key="score"
+                      type="button"
+                      :class="['feedback-rating-btn', { active: Number(feedbackForm.rating) === score }]"
+                      @click="feedbackForm.rating = score"
+                    >
+                      {{ score }}
+                    </button>
+                  </div>
+                </label>
+
+                <label class="feedback-field full-width">
+                  <span>反馈内容</span>
+                  <textarea
+                    v-model="feedbackForm.feedback"
+                    class="info-input info-textarea feedback-textarea"
+                    rows="4"
+                    maxlength="300"
+                    placeholder="例如：情绪趋势图很直观，但我更希望看到疗效数据和服务建议联动。"
+                  />
+                </label>
+              </div>
+
+              <div class="feedback-actions">
+                <button
+                  class="action-btn"
+                  :disabled="isFeedbackSubmitting || !feedbackForm.feedback.trim()"
+                  @click="submitFeedback"
+                >
+                  {{ isFeedbackSubmitting ? '提交中...' : '提交反馈' }}
+                </button>
+                <button class="action-btn outline" type="button" @click="resetFeedbackForm">
+                  重置
+                </button>
+              </div>
+            </section>
+
+            <section class="feedback-card glass-panel-inner">
+              <div class="feedback-card-head">
+                <div>
+                  <h4 class="chart-title">反馈偏好画像</h4>
+                  <p>基于历史反馈自动聚合，帮助你快速回看自己更认可哪些服务模块。</p>
+                </div>
+              </div>
+
+              <div v-if="feedbackPreferenceCards.length" class="feedback-preference-grid">
+                <article
+                  v-for="item in feedbackPreferenceCards"
+                  :key="item.service"
+                  class="feedback-preference-item"
+                >
+                  <div class="feedback-preference-top">
+                    <strong>{{ item.service }}</strong>
+                    <span>{{ item.scoreText }}</span>
+                  </div>
+                  <div class="feedback-progress-track">
+                    <div class="feedback-progress-bar" :style="{ width: `${item.percent}%` }"></div>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="empty-state compact-empty-state feedback-empty-state">
+                暂无偏好画像，提交第一条反馈后会在这里自动生成。
+              </div>
+
+              <div class="feedback-history-head">
+                <h5>最近反馈</h5>
+                <button class="action-btn outline slim-btn feedback-refresh-btn" type="button" :disabled="isFeedbackLoading" @click="fetchFeedbackCenterData">
+                  {{ isFeedbackLoading ? '刷新中...' : '刷新' }}
+                </button>
+              </div>
+              <div v-if="myFeedbackList.length" class="feedback-history-list">
+                <article v-for="item in myFeedbackList" :key="item.id" class="feedback-history-item">
+                  <div class="feedback-history-top">
+                    <strong>{{ item.service }}</strong>
+                    <span>{{ item.ratingLabel }}</span>
+                  </div>
+                  <p>{{ item.feedback }}</p>
+                  <span class="feedback-history-time">{{ item.timeLabel }}</span>
+                </article>
+              </div>
+              <div v-else class="empty-state compact-empty-state feedback-empty-state">
+                还没有反馈记录，欢迎补充你对当前功能体验的看法。
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Tab 4: 冥想数据 -->
         <div v-else-if="currentTab === 'meditation'" class="tab-content meditation-tab">
           <div class="meditation-header">
             <h3 class="section-title">冥想数据与花园</h3>
@@ -571,6 +696,9 @@
                         <button class="social-menu-item" @click="openSocialCommentEditor(post)">
                           评论
                         </button>
+                        <button class="social-menu-item" @click="requestPostAiSuggestion(post)">
+                          AI 回帖建议
+                        </button>
                         <button
                           v-if="Number(post.authorUserId) === currentUserId"
                           class="social-menu-item danger"
@@ -587,6 +715,36 @@
 
                 <div v-if="post.highlights?.length" class="social-highlight-row">
                   <span v-for="item in post.highlights" :key="item" class="social-highlight-chip"># {{ item }}</span>
+                </div>
+
+                <div
+                  v-if="post.isAiSuggestionLoading || post.aiSuggestion || post.aiSuggestionError"
+                  class="social-ai-suggestion-card"
+                >
+                  <div class="social-ai-suggestion-head">
+                    <strong>AI 回帖建议</strong>
+                    <span v-if="post.isAiSuggestionLoading">正在生成...</span>
+                    <div v-else class="social-ai-suggestion-tools">
+                      <button
+                        v-if="post.aiSuggestion"
+                        class="social-text-btn"
+                        type="button"
+                        @click="applyAiSuggestionToComment(post)"
+                      >
+                        带入评论框
+                      </button>
+                      <button
+                        class="social-text-btn"
+                        type="button"
+                        @click="requestPostAiSuggestion(post)"
+                      >
+                        重新生成
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="post.aiSuggestion" class="social-ai-suggestion-text">{{ post.aiSuggestion }}</p>
+                  <p v-else-if="post.aiSuggestionError" class="social-ai-suggestion-error">{{ post.aiSuggestionError }}</p>
+                  <p v-else class="social-ai-suggestion-placeholder">AI 正在分析帖子情绪并生成一条共情回复。</p>
                 </div>
 
                 <div v-if="post.likeUsers.length || post.comments.length" class="social-feedback-card">
@@ -1008,27 +1166,44 @@
                       <button class="close-btn" type="button" @click="closeSupportiveReplyModal">&times;</button>
                     </div>
                     <div class="supportive-modal-body">
-                      <div class="supportive-categories">
-                        <button
-                          v-for="category in supportiveReplyCategories"
-                          :key="category.key"
-                          type="button"
-                          :class="['supportive-category', { active: activeSupportiveReplyCategory === category.key }]"
-                          @click="activeSupportiveReplyCategory = category.key"
-                        >
-                          {{ category.label }}
-                        </button>
+                      <div class="supportive-modal-intro">
+                        <span class="supportive-kicker">建议模板</span>
+                        <p>先选一个回复方向，再点击右侧建议内容即可自动带入输入框。整体会偏温和、克制，适合朋友间日常支持。</p>
                       </div>
-                      <div class="supportive-suggestions">
-                        <button
-                          v-for="text in activeSupportiveReplies"
-                          :key="text"
-                          type="button"
-                          class="supportive-chip"
-                          @click="applySupportiveReply(text)"
-                        >
-                          {{ text }}
-                        </button>
+                      <div class="supportive-modal-layout">
+                        <div class="supportive-categories-panel">
+                          <button
+                            v-for="category in supportiveReplyCategories"
+                            :key="category.key"
+                            type="button"
+                            :class="['supportive-category', { active: activeSupportiveReplyCategory === category.key }]"
+                            @click="activeSupportiveReplyCategory = category.key"
+                          >
+                            <strong>{{ category.label }}</strong>
+                            <span>{{ category.description }}</span>
+                          </button>
+                        </div>
+                        <div class="supportive-suggestions-panel">
+                          <div class="supportive-panel-head">
+                            <div>
+                              <span class="supportive-kicker">当前类型</span>
+                              <h4>{{ activeSupportiveReplyCategoryMeta.label }}</h4>
+                            </div>
+                            <p>{{ activeSupportiveReplyCategoryMeta.description }}</p>
+                          </div>
+                          <div class="supportive-suggestions">
+                            <button
+                              v-for="text in activeSupportiveReplies"
+                              :key="text"
+                              type="button"
+                              class="supportive-chip"
+                              @click="applySupportiveReply(text)"
+                            >
+                              <strong>{{ text }}</strong>
+                              <span>点击带入聊天输入框</span>
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1066,6 +1241,20 @@
             <div class="form-group">
               <label>作者（可选）</label>
               <input type="text" v-model="uploadForm.artist" placeholder="输入作者名称，不填则展示为佚名" class="info-input" />
+            </div>
+            <div class="form-group">
+              <label>自动识别封面</label>
+              <div class="music-upload-cover-preview">
+                <img
+                  v-if="uploadForm.coverUrl"
+                  :src="uploadForm.coverUrl"
+                  alt="识别到的歌曲封面"
+                  class="music-upload-cover-image"
+                />
+                <div v-else class="music-upload-cover-placeholder">
+                  未识别到内嵌封面，上传后将使用默认情绪封面展示
+                </div>
+              </div>
             </div>
             <div class="form-group">
               <label>情绪标签</label>
@@ -1321,8 +1510,11 @@ import {
   getCurrentUserApi,
   getUserSummariesApi,
   getCurrentUserFromStorage,
+  getMyFeedbackApi,
+  getMyFeedbackPreferencesApi,
   resolveUserAvatarUrl,
   saveCurrentUserToStorage,
+  submitUserFeedbackApi,
   uploadMyAvatarApi,
   updateMyProfileApi,
 } from '@/api/user'
@@ -1335,6 +1527,7 @@ import {
   getPostsApi,
   getMyPostsApi,
   getPostInteractionsApi,
+  getPostAiReplySuggestionApi,
   createPostApi,
   deletePostApi,
   likePostApi,
@@ -1360,6 +1553,7 @@ import { getMyEmotionSnapshotsApi } from '@/api/data'
 import { appendUserBehaviorLogApi } from '@/api/data'
 
 import { getMyMeditationLogsApi, getMyGardenApi } from '@/api/meditation'
+import { readAudioTagMetadata } from '@/utils/audioMetadata'
 
 const musicStore = useMusicStore()
 
@@ -1490,6 +1684,7 @@ const tabs = [
   { id: 'profile', name: '我的信息', icon: 'id-card' },
   { id: 'diary', name: '情绪日记', icon: 'book' },
   { id: 'data', name: '情绪数据', icon: 'chart-line' },
+  { id: 'feedback', name: '服务反馈', icon: 'star' },
   { id: 'meditation', name: '冥想数据', icon: 'leaf' },
   { id: 'music', name: '音乐库', icon: 'music' },
   { id: 'social', name: '朋友圈', icon: 'users' },
@@ -2008,6 +2203,131 @@ const weeklyComment = computed(() => {
   return '本周似乎经历了一些困难，情绪较为负面。请记得深呼吸，必要时可以寻求朋友的倾听或专业的帮助。'
 })
 
+const feedbackServiceOptions = [
+  { value: '情绪数据', label: '情绪数据' },
+  { value: '冥想服务', label: '冥想服务' },
+  { value: '音乐服务', label: '音乐服务' },
+  { value: '朋友圈', label: '朋友圈' },
+  { value: '聊天室', label: '聊天室' },
+  { value: 'AI陪伴', label: 'AI陪伴' },
+]
+const feedbackRatingOptions = [1, 2, 3, 4, 5]
+const feedbackForm = ref({
+  service: feedbackServiceOptions[0].value,
+  rating: 4,
+  feedback: '',
+})
+const isFeedbackSubmitting = ref(false)
+const isFeedbackLoading = ref(false)
+const myFeedbackList = ref([])
+const feedbackPreferences = ref([])
+
+const formatFeedbackTime = (value) => {
+  const parsed = parseApiDateTime(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return '刚刚'
+  }
+  return formatApiDateTime(parsed, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }, '刚刚')
+}
+
+const mapFeedbackItem = (item, index) => {
+  const rating = Number(item?.rating) || 0
+  return {
+    id: `${item?.createdAt || 'feedback'}-${index}`,
+    service: item?.service || '未分类',
+    feedback: item?.feedback || '未填写反馈内容',
+    rating,
+    ratingLabel: `${rating.toFixed(1)} / 5`,
+    timeLabel: formatFeedbackTime(item?.createdAt),
+  }
+}
+
+const feedbackPreferenceCards = computed(() => (
+  feedbackPreferences.value
+    .map((item) => {
+      const score = Number(item?.score) || 0
+      return {
+        service: item?.service || '未分类',
+        score,
+        scoreText: `${score.toFixed(1)} / 5`,
+        percent: Math.max(0, Math.min(100, (score / 5) * 100)),
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+))
+
+const resetFeedbackForm = () => {
+  feedbackForm.value = {
+    service: feedbackServiceOptions[0].value,
+    rating: 4,
+    feedback: '',
+  }
+}
+
+const fetchFeedbackCenterData = async () => {
+  isFeedbackLoading.value = true
+  try {
+    const [feedbackRes, preferencesRes] = await Promise.all([
+      getMyFeedbackApi(),
+      getMyFeedbackPreferencesApi(),
+    ])
+    myFeedbackList.value = (feedbackRes.data || [])
+      .map(mapFeedbackItem)
+      .reverse()
+    feedbackPreferences.value = preferencesRes.data?.serviceScores || []
+  } catch (error) {
+    console.error('加载反馈中心失败:', error)
+    myFeedbackList.value = []
+    feedbackPreferences.value = []
+    if (error?.response?.status === 403) {
+      ElMessage.error('当前账号暂时无权读取反馈数据，请重新登录后重试')
+    } else {
+      ElMessage.error('获取反馈数据失败，请确认 user-service 已启动')
+    }
+  } finally {
+    isFeedbackLoading.value = false
+  }
+}
+
+const submitFeedback = async () => {
+  const payload = {
+    service: String(feedbackForm.value.service || '').trim(),
+    rating: Number(feedbackForm.value.rating) || 0,
+    feedback: String(feedbackForm.value.feedback || '').trim(),
+  }
+  if (!payload.service || !payload.feedback) {
+    ElMessage.warning('请完整填写反馈内容')
+    return
+  }
+
+  isFeedbackSubmitting.value = true
+  try {
+    await submitUserFeedbackApi(payload)
+    ElMessage.success('反馈提交成功')
+    resetFeedbackForm()
+    await fetchFeedbackCenterData()
+    appendUserBehaviorLogApi({
+      actionType: 'submit_feedback',
+      targetType: 'service_feedback',
+      targetId: 0,
+      metadata: {
+        service: payload.service,
+        rating: payload.rating,
+      }
+    }).catch((error) => console.warn('Log user behavior failed', error))
+  } catch (error) {
+    console.error('提交反馈失败:', error)
+    ElMessage.error('反馈提交失败，请稍后重试')
+  } finally {
+    isFeedbackSubmitting.value = false
+  }
+}
+
 // --- Meditation Data Logic ---
 const weeklyMeditationData = ref([0, 0, 0, 0, 0, 0, 0])
 const meditationLogs = ref([])
@@ -2280,6 +2600,8 @@ watch(currentTab, (newTab) => {
   } else if (newTab === 'data') {
     initCharts()
     fetchEmotionData()
+  } else if (newTab === 'feedback') {
+    fetchFeedbackCenterData()
   } else if (newTab === 'meditation') {
     fetchMeditationLogs().then(() => {
       initMeditationCharts()
@@ -2317,6 +2639,8 @@ onMounted(() => {
   } else if (currentTab.value === 'data') {
     initCharts()
     fetchEmotionData()
+  } else if (currentTab.value === 'feedback') {
+    fetchFeedbackCenterData()
   } else if (currentTab.value === 'meditation') {
     fetchMeditationLogs().then(() => {
       initMeditationCharts()
@@ -2355,6 +2679,7 @@ const uploadForm = ref({
   title: '',
   artist: '',
   duration: 0,
+  coverUrl: '',
   tagInput: '',
   tags: [],
   aiCaption: '',
@@ -2415,20 +2740,36 @@ const formatPlaylistMeta = (playlist) => {
   return `${tracks.length} 首 · ${totalMinutes} 分钟`
 }
 
-const handleAudioSelect = (event) => {
+const handleAudioSelect = async (event) => {
   const file = event.target.files[0]
   if (file) {
     uploadForm.value.file = file
     uploadForm.value.tags = []
     uploadForm.value.aiCaption = ''
+    uploadForm.value.coverUrl = ''
+    const fallbackTitle = file.name.replace(/\.[^/.]+$/, '')
     if (!uploadForm.value.title) {
-      uploadForm.value.title = file.name.replace(/\.[^/.]+$/, "") // Remove extension
+      uploadForm.value.title = fallbackTitle
     }
     const audio = document.createElement('audio')
-    audio.src = URL.createObjectURL(file)
+    const objectUrl = URL.createObjectURL(file)
+    audio.src = objectUrl
     audio.onloadedmetadata = () => {
       uploadForm.value.duration = audio.duration
+      URL.revokeObjectURL(objectUrl)
     }
+    audio.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    const metadata = await readAudioTagMetadata(file)
+    if (metadata.title && (!uploadForm.value.title || uploadForm.value.title === fallbackTitle)) {
+      uploadForm.value.title = metadata.title
+    }
+    if (metadata.artist && !uploadForm.value.artist) {
+      uploadForm.value.artist = metadata.artist
+    }
+    uploadForm.value.coverUrl = metadata.coverUrl || ''
   }
 }
 
@@ -2482,6 +2823,7 @@ const resetUploadForm = () => {
     title: '',
     artist: '',
     duration: 0,
+    coverUrl: '',
     tagInput: '',
     tags: [],
     aiCaption: '',
@@ -2542,7 +2884,9 @@ const autoDetectTags = async () => {
     } else if (status === 503) {
       ElMessage.error('AI 识别服务暂不可用，当前环境可能未配置 DASHSCOPE_API_KEY')
     } else if (status === 504 || error?.code === 'ECONNABORTED') {
-      ElMessage.error('AI 识别超时，请稍后重试')
+      ElMessage.error('AI 识别超时，请稍后重试。当前音频会先上传到网关和 music-service，再调用 DashScope，处理时间可能超过 60 秒。')
+    } else if (!error?.response) {
+      ElMessage.error('AI 识别请求在返回响应前被中断，请检查 api-gateway、music-service 是否在线，或稍后重试。')
     } else {
       ElMessage.error(error?.response?.data?.message || error?.response?.data?.error || 'AI 识别失败，请稍后重试')
     }
@@ -2565,6 +2909,7 @@ const submitUpload = async () => {
       title: uploadForm.value.title.trim(),
       artist: uploadForm.value.artist.trim(),
       duration: uploadForm.value.duration || 0,
+      coverUrl: uploadForm.value.coverUrl || '',
       tags: [...uploadForm.value.tags],
     })
     closeMusicModal()
@@ -2707,7 +3052,10 @@ const createSocialPost = (post) => ({
     : [],
   commentDraft: '',
   isMenuOpen: false,
-  isCommentEditorOpen: false
+  isCommentEditorOpen: false,
+  aiSuggestion: post.aiSuggestion || '',
+  aiSuggestionError: '',
+  isAiSuggestionLoading: false,
 })
 
 const showSocialComposer = ref(false)
@@ -3039,6 +3387,59 @@ const closeMyPostsSpace = () => {
   showMyPostsModal.value = false
 }
 
+const requestPostAiSuggestion = async (post) => {
+  if (!post?.id || post.isAiSuggestionLoading) return
+
+  post.isMenuOpen = false
+  post.isAiSuggestionLoading = true
+  post.aiSuggestionError = ''
+  if (!post.aiSuggestion) {
+    post.aiSuggestion = ''
+  }
+  try {
+    const response = await getPostAiReplySuggestionApi(post.id)
+    const suggestion = String(response.data?.response || '').trim()
+    if (!suggestion) {
+      throw new Error('empty suggestion')
+    }
+    post.aiSuggestion = suggestion
+    ElMessage.success('已生成 AI 回帖建议')
+  } catch (error) {
+    console.error('获取 AI 回帖建议失败:', error)
+    const status = error?.response?.status
+    const details = error?.response?.data?.details || error?.response?.data?.error || ''
+    post.aiSuggestion = ''
+    if (status === 401) {
+      post.aiSuggestionError = '当前登录状态已失效，请重新登录后再试。'
+      return
+    }
+    if (status === 502) {
+      post.aiSuggestionError = 'AI 服务当前不可用，请确认 AI-service 已启动。'
+      ElMessage.error('AI 服务不可用，请稍后重试')
+      return
+    }
+    if (status === 500) {
+      post.aiSuggestionError = details
+        ? `社交服务调用 AI 失败：${details}`
+        : '社交服务调用 AI 失败，请检查 social-service 与 AI-service 日志。'
+      ElMessage.error('AI 回帖建议生成失败')
+      return
+    }
+    post.aiSuggestionError = '暂时无法生成建议，请稍后重试。'
+    ElMessage.error('AI 回帖建议生成失败')
+  } finally {
+    post.isAiSuggestionLoading = false
+  }
+}
+
+const applyAiSuggestionToComment = (post) => {
+  const suggestion = String(post?.aiSuggestion || '').trim()
+  if (!suggestion) return
+  post.commentDraft = suggestion
+  post.isCommentEditorOpen = true
+  post.isMenuOpen = false
+}
+
 const toggleSocialLike = async (post) => {
   try {
     await likePostApi(post.id)
@@ -3179,11 +3580,11 @@ const supportiveReplyModalVisible = ref(false)
 const activeSupportiveReplyCategory = ref('empathy')
 
 const supportiveReplyCategories = [
-  { key: 'empathy', label: '共情' },
-  { key: 'ask', label: '提问' },
-  { key: 'encourage', label: '鼓励' },
-  { key: 'boundary', label: '边界' },
-  { key: 'practical', label: '小步' },
+  { key: 'empathy', label: '共情回应', description: '先接住对方的情绪，减少被忽视感。' },
+  { key: 'ask', label: '温和提问', description: '用问题帮助对方继续表达，而不是急着下结论。' },
+  { key: 'encourage', label: '鼓励支持', description: '在不说教的前提下，给对方一点力量感。' },
+  { key: 'boundary', label: '尊重边界', description: '给对方留空间，避免把聊天变成压力。' },
+  { key: 'practical', label: '小步行动', description: '陪对方把注意力落到一个可执行的小动作。' },
 ]
 
 const supportiveRepliesByCategory = {
@@ -3225,6 +3626,10 @@ const supportiveRepliesByCategory = {
 }
 
 const activeSupportiveReplies = computed(() => supportiveRepliesByCategory[activeSupportiveReplyCategory.value] || [])
+const activeSupportiveReplyCategoryMeta = computed(() => (
+  supportiveReplyCategories.find(category => category.key === activeSupportiveReplyCategory.value)
+  || supportiveReplyCategories[0]
+))
 
 const openSupportiveReplyModal = () => {
   supportiveReplyModalVisible.value = true
@@ -3403,9 +3808,11 @@ const formatChatMessageTime = (value) => {
 
 const scrollChatToBottom = () => {
   nextTick(() => {
-    const container = chatMessageListRef.value
-    if (!container) return
-    container.scrollTop = container.scrollHeight
+    window.requestAnimationFrame(() => {
+      const container = chatMessageListRef.value
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    })
   })
 }
 
@@ -3705,6 +4112,17 @@ watch(activeChatFriendId, (newFriendId) => {
   fetchChatMessages(newFriendId, { markRead: true, scroll: true })
 })
 
+watch(
+  () => [currentTab.value, activeChatFriendId.value, chatMessages.value.length, isChatLoading.value],
+  ([tab, friendId, messageCount, loading]) => {
+    if (tab !== 'chat' || !friendId || loading || messageCount <= 0) {
+      return
+    }
+    scrollChatToBottom()
+  },
+  { flush: 'post' }
+)
+
 const deleteFriend = async (friendshipId) => {
   if (confirm('确定要删除这位好友吗？')) {
     try {
@@ -3985,6 +4403,7 @@ window.addEventListener('resize', () => {
 /* Sidebar */
 .sidebar {
   width: 250px;
+  max-width: 100%;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4054,8 +4473,15 @@ window.addEventListener('resize', () => {
   padding-right: 4px;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
   position: relative;
   z-index: 1;
+}
+
+.space-nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .nav-item {
@@ -4140,6 +4566,7 @@ window.addEventListener('resize', () => {
 /* Main Content */
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 30px;
   display: flex;
   flex-direction: column;
@@ -4171,6 +4598,7 @@ window.addEventListener('resize', () => {
   display: flex;
   gap: 20px;
   margin-bottom: 20px;
+  min-width: 0;
 }
 
 .diary-weekly-chart {
@@ -4220,7 +4648,7 @@ window.addEventListener('resize', () => {
 }
 
 .diary-editor-section {
-  width: 400px;
+  width: min(400px, 100%);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4377,6 +4805,185 @@ window.addEventListener('resize', () => {
   grid-template-columns: 2fr 1fr;
   gap: 20px;
   flex: 1;
+}
+
+.feedback-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.feedback-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.feedback-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.feedback-header-desc {
+  margin: -8px 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.feedback-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.feedback-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.feedback-card-head p,
+.feedback-history-item p,
+.feedback-history-time {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.feedback-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(118, 150, 157, 0.12);
+  color: #48656d;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.feedback-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedback-field span,
+.feedback-history-head h5 {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.feedback-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.feedback-select,
+.feedback-textarea {
+  width: 100%;
+}
+
+.feedback-rating-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.feedback-rating-btn {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(118, 150, 157, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  color: #48656d;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.feedback-rating-btn.active,
+.feedback-rating-btn:hover {
+  background: rgba(118, 150, 157, 0.14);
+  border-color: rgba(118, 150, 157, 0.32);
+  transform: translateY(-1px);
+}
+
+.feedback-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feedback-actions .action-btn {
+  width: auto;
+  min-width: 120px;
+  padding-inline: 22px;
+}
+
+.feedback-preference-grid,
+.feedback-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedback-preference-item,
+.feedback-history-item {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(118, 150, 157, 0.12);
+}
+
+.feedback-preference-top,
+.feedback-history-top,
+.feedback-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.feedback-preference-top strong,
+.feedback-history-top strong {
+  color: #31474d;
+}
+
+.feedback-preference-top span,
+.feedback-history-top span {
+  color: #587078;
+  font-weight: 600;
+}
+
+.feedback-progress-track {
+  margin-top: 10px;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(118, 150, 157, 0.12);
+  overflow: hidden;
+}
+
+.feedback-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #86aa8a 0%, #6e98a3 100%);
+}
+
+.feedback-empty-state {
+  min-height: 120px;
 }
 
 .chart-card {
@@ -4642,6 +5249,57 @@ window.addEventListener('resize', () => {
 
 .social-menu-item.danger:hover {
   background: rgba(255, 82, 82, 0.1);
+}
+
+.social-ai-suggestion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(239, 246, 244, 0.92));
+  border: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.social-ai-suggestion-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #3c5961;
+}
+
+.social-ai-suggestion-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.social-ai-suggestion-text,
+.social-ai-suggestion-placeholder,
+.social-ai-suggestion-error {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.social-ai-suggestion-text,
+.social-ai-suggestion-placeholder {
+  color: #425d64;
+}
+
+.social-ai-suggestion-error {
+  color: #b44c5d;
+}
+
+.social-text-btn {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: #6d86ad;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .social-feedback-card {
@@ -6102,58 +6760,202 @@ window.addEventListener('resize', () => {
 }
 
 .supportive-replies-modal-card {
-  max-width: 760px;
+  width: min(calc(100vw - 48px), 920px);
+  max-width: 920px;
+  max-height: min(calc(100vh - 48px), 760px);
+  overflow: hidden;
+}
+
+.supportive-replies-modal-card .modal-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 64px;
+  padding: 22px 72px 18px 24px;
+  border-bottom: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.supportive-replies-modal-card .modal-header h3 {
+  margin: 0;
+  min-width: 0;
+  color: #22353b;
+  font-size: 1.34rem;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.supportive-replies-modal-card .close-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(111, 124, 130, 0.12);
+  color: #33464d;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.supportive-replies-modal-card .close-btn:hover {
+  background: rgba(111, 124, 130, 0.2);
+  transform: scale(1.03);
 }
 
 .supportive-modal-body {
-  padding: 18px;
+  padding: 20px;
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
-.supportive-categories {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.supportive-modal-intro {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(238, 247, 242, 0.92) 0%, rgba(245, 250, 248, 0.96) 100%);
+  border: 1px solid rgba(118, 150, 157, 0.14);
+}
+
+.supportive-modal-intro p {
+  margin: 8px 0 0;
+  color: #5f757d;
+  line-height: 1.7;
+}
+
+.supportive-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(54, 95, 77, 0.1);
+  color: #365f4d;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.supportive-modal-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.supportive-categories-panel,
+.supportive-suggestions-panel {
+  min-height: 0;
+}
+
+.supportive-categories-panel {
+  display: grid;
+  gap: 12px;
 }
 
 .supportive-category {
-  border: none;
+  border: 1px solid rgba(118, 150, 157, 0.14);
   cursor: pointer;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(54, 95, 77, 0.08);
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
   color: #365f4d;
   font: inherit;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.supportive-category strong {
+  font-size: 0.98rem;
+}
+
+.supportive-category span {
+  color: #6c8289;
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 
 .supportive-category.active {
-  background: #365f4d;
-  color: #fff;
+  background: linear-gradient(135deg, #edf6f0 0%, #f8fbf9 100%);
+  border-color: rgba(77, 116, 98, 0.34);
+  box-shadow: 0 16px 28px rgba(77, 116, 98, 0.12);
+  transform: translateY(-1px);
+}
+
+.supportive-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.supportive-panel-head h4 {
+  margin: 8px 0 0;
+  color: #29453b;
+  font-size: 1.16rem;
+}
+
+.supportive-panel-head p {
+  margin: 0;
+  max-width: 280px;
+  color: #6b8088;
+  line-height: 1.7;
+  font-size: 0.9rem;
+}
+
+.supportive-suggestions-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(118, 150, 157, 0.12);
+  overflow: hidden;
 }
 
 .supportive-suggestions {
-  display: flex;
+  display: grid;
   gap: 12px;
-  flex-wrap: wrap;
-  max-height: 360px;
+  max-height: 420px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 6px;
 }
 
 .supportive-chip {
-  border: 1px solid rgba(118, 150, 157, 0.16);
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 999px;
-  padding: 10px 14px;
+  border: 1px solid rgba(118, 150, 157, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 18px;
+  padding: 14px 16px;
   cursor: pointer;
   font: inherit;
   color: #28444c;
   text-align: left;
+  display: grid;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.supportive-chip strong {
+  color: #28444c;
+  font-weight: 600;
+}
+
+.supportive-chip span {
+  color: #6d828a;
+  font-size: 0.82rem;
 }
 
 .supportive-chip:hover {
-  background: rgba(222, 241, 234, 0.96);
+  background: rgba(244, 250, 246, 0.98);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(118, 150, 157, 0.1);
 }
 
 .chat-textarea {
@@ -6209,7 +7011,9 @@ window.addEventListener('resize', () => {
   .friend-detail-heading,
   .chat-header,
   .chat-friend-topline,
-  .chat-composer-footer {
+  .chat-composer-footer,
+  .feedback-tab-header,
+  .supportive-panel-head {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -6239,6 +7043,15 @@ window.addEventListener('resize', () => {
   .friend-detail-actions {
     justify-content: stretch;
   }
+
+  .supportive-modal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .supportive-panel-head p {
+    max-width: none;
+  }
+
 
   .friend-chat-btn,
   .friend-delete-btn {
@@ -6659,6 +7472,14 @@ window.addEventListener('resize', () => {
   padding: 0 14px;
 }
 
+.feedback-refresh-btn {
+  width: auto;
+  min-width: 72px;
+  padding-inline: 12px;
+  font-size: 0.92rem;
+  flex: 0 0 auto;
+}
+
 .delete-pl-btn {
   border-radius: 10px;
 }
@@ -6781,8 +7602,15 @@ window.addEventListener('resize', () => {
 }
 
 @media (max-width: 1180px) {
-  .sidebar {
-    width: 232px;
+  .diary-layout,
+  .charts-grid,
+  .feedback-layout {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .diary-editor-section {
+    width: 100%;
   }
 
   .music-overview-grid,
@@ -6796,6 +7624,34 @@ window.addEventListener('resize', () => {
 
   .social-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .page-shell {
+    height: auto;
+    min-height: calc(100vh - 120px);
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .space-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    min-width: 148px;
+  }
+
+  .main-content {
+    min-height: 0;
   }
 }
 
@@ -6820,6 +7676,10 @@ window.addEventListener('resize', () => {
 
   .sidebar {
     width: 100%;
+  }
+
+  .space-nav {
+    flex-wrap: nowrap;
   }
 
   .music-header {
@@ -6850,6 +7710,10 @@ window.addEventListener('resize', () => {
   .track-action-row {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6896,8 +7760,20 @@ window.addEventListener('resize', () => {
     grid-auto-columns: 88%;
   }
 
+  .feedback-layout,
+  .feedback-form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .social-comment-editor {
     grid-template-columns: 1fr;
+  }
+
+  .feedback-actions,
+  .feedback-card-head,
+  .feedback-history-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
@@ -6924,7 +7800,12 @@ window.addEventListener('resize', () => {
 }
 
 .upload-modal-card.modal-content {
-  max-width: 560px;
+  width: min(calc(100vw - 48px), 720px);
+  max-width: 720px;
+  max-height: min(calc(100vh - 48px), 820px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .playlist-modal-card.modal-content {
@@ -6964,6 +7845,14 @@ window.addEventListener('resize', () => {
 .music-modal-card .close-btn:hover {
   background: rgba(111, 124, 130, 0.2);
   transform: scale(1.03);
+}
+
+.upload-modal-card .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-right: -8px;
 }
 
 .modal-overlay {
@@ -7056,6 +7945,34 @@ window.addEventListener('resize', () => {
   color: #4a458a;
   font-size: 0.9rem;
   line-height: 1.6;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.music-upload-cover-preview {
+  min-height: 112px;
+  border: 1px dashed rgba(124, 150, 156, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.music-upload-cover-image {
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.music-upload-cover-placeholder {
+  color: #6b7d77;
+  font-size: 0.92rem;
+  text-align: center;
 }
 
 .current-tags {

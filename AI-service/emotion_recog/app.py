@@ -15,7 +15,6 @@ import numpy as np
 from flask import Flask, request, jsonify
 import torch
 import torchaudio
-from transformers import pipeline
 from langdetect import detect
 
 app = Flask(__name__)
@@ -62,14 +61,19 @@ speech_classifier = None
 speech_to_text = None
 text_classifier = None
 zh_en_translator = None
+models_ready = False
+models_error = None
 
 
 def load_model():
-    global speech_classifier, speech_to_text, text_classifier, zh_en_translator
+    global speech_classifier, speech_to_text, text_classifier, zh_en_translator, models_ready, models_error
+    if models_ready:
+        return
     device = 0 if torch.cuda.is_available() else -1
     print(f"Loading models on {'cuda' if device == 0 else 'cpu'}...")
 
     try:
+        from transformers import pipeline
         speech_classifier = pipeline(
             "audio-classification",
             model="prithivMLmods/Speech-Emotion-Classification",
@@ -97,10 +101,14 @@ def load_model():
             model_kwargs={"local_files_only": True},
         )
     except Exception as exc:
+        models_ready = False
+        models_error = str(exc)
         raise RuntimeError(
             "本地模型加载失败，请确认 Hugging Face 缓存已存在于 D:/hf_cache/hub"
         ) from exc
     print("Models loaded successfully!")
+    models_ready = True
+    models_error = None
 
 
 # ---------------------------------------------------------------------------
@@ -363,9 +371,12 @@ def analyze_text_emotion(text: str) -> tuple:
 # ---------------------------------------------------------------------------
 @app.route('/predict', methods=['POST'])
 def predict():
-    global speech_classifier, speech_to_text, text_classifier
-    if speech_classifier is None:
-        return jsonify({'error': 'Models not loaded'}), 500
+    global speech_classifier, speech_to_text, text_classifier, models_ready, models_error
+    if not models_ready or speech_classifier is None:
+        try:
+            load_model()
+        except Exception:
+            return jsonify({'error': 'Models not loaded', 'detail': models_error}), 503
     if 'audio' not in request.files:
         return jsonify({'error': 'No audio file provided'}), 400
 
@@ -477,6 +488,9 @@ def predict():
 
 
 if __name__ == '__main__':
-    load_model()
+    try:
+        load_model()
+    except Exception:
+        pass
     port = int(os.environ.get('PORT', 5003))
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -21,6 +21,12 @@
 | `GET /api/users/avatars/{filename}` | 间接使用 | 头像 `avatarUrl` 作为资源地址直接访问 |
 | `GET /api/users/search` | 已使用 | `PersonalSpace.vue` |
 | `GET /api/users/summaries` | 已使用 | `PersonalSpace.vue` |
+| `POST /api/feedback/mine` | 已使用 | `PersonalSpace.vue` 提交普通用户服务反馈 |
+| `GET /api/feedback/mine` | 已使用 | `PersonalSpace.vue` 查看当前用户反馈历史 |
+| `GET /api/feedback/preferences` | 已使用 | `PersonalSpace.vue` 查看当前用户反馈偏好画像 |
+| `GET /api/feedback/preferences/{userId}` | 已使用 | `AdminFeedbackPage.vue` 查看指定用户反馈偏好画像 |
+| `GET /api/feedback/all` | 已使用 | `AdminFeedbackPage.vue` 管理员筛选全部反馈列表 |
+| `GET /api/feedback/{id}` | 已使用 | `AdminFeedbackPage.vue` 查看单条反馈详情 |
 | `PATCH /api/users/update-info` | 已使用 | `PersonalSpace.vue` |
 | `DELETE /api/users/delete-me` | 未接入 | 无前端调用 |
 | `POST /api/users/change-password` | 未接入 | 无前端调用 |
