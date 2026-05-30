@@ -149,15 +149,21 @@
             <p class="kicker">Voice Companion</p>
             <h2>先说一句，让今天的情绪被看见。</h2>
           </div>
-          <div class="status-pill" :class="{ listening: isListening }">
+          <div class="status-pill" :class="{ listening: isListening, processing: isCompanionProcessing }">
             {{
-              isListening
-                ? '正在聆听'
-                : voiceSupported
-                  ? '可语音输入'
-                  : '当前浏览器不支持语音输入'
+              isCompanionProcessing
+                ? 'AI 处理中'
+                : isListening
+                  ? '正在聆听'
+                  : voiceSupported
+                    ? '可语音输入'
+                    : '当前浏览器不支持语音输入'
             }}
           </div>
+        </div>
+
+        <div v-if="isCompanionProcessing" class="companion-loading-banner">
+          {{ companionLoadingText }}
         </div>
 
         <div class="chat-stream">
@@ -215,8 +221,8 @@
               </option>
             </select>
           </label>
-          <button class="primary-button full" type="button" @click="toggleVoiceInput">
-            <span>{{ isListening ? '结束语音输入' : '开始语音输入' }}</span>
+          <button class="primary-button full" type="button" :disabled="isCompanionProcessing" @click="toggleVoiceInput">
+            <span>{{ isListening ? '结束语音输入' : isCompanionProcessing ? 'AI 处理中...' : '开始语音输入' }}</span>
           </button>
           <p class="heard-text">
             {{ heardText || '点击后可直接说话；语音会转文字后发送给 AI，识别情绪并给出陪伴回复。' }}
@@ -275,6 +281,8 @@ const searchText = ref('')
 const messages = ref([...initialMessages])
 const heardText = ref('')
 const isListening = ref(false)
+const isCompanionProcessing = ref(false)
+const companionLoadingText = ref('AI 正在准备回复...')
 const selectedTtsVoice = ref('claire')
 const mediaRecorder = ref(null)
 const audioChunks = ref([])
@@ -745,6 +753,7 @@ const readStreamAsText = async (streamResponse, assistantMsgId) => {
 }
 
 const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
+  isCompanionProcessing.value = true
   try {
     const userId = getCurrentUserId()
     const sessionId = getCompanionSessionId()
@@ -755,6 +764,8 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
 
     // 阶段1：语音先做识别与情绪分析
     if (audioBlob) {
+      companionLoadingText.value = '正在识别语音与情绪，请稍候...'
+      heardText.value = companionLoadingText.value
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.wav')
       if (finalTranscript) {
@@ -784,6 +795,8 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
     }
 
     // 阶段2：普通聊天，支持后端 LLM tool calling
+    companionLoadingText.value = 'AI 正在思考回复...'
+    heardText.value = companionLoadingText.value
     const assistantMsgId = createAssistantPlaceholder()
     const chatResp = await askCompanionApi({
       userId,
@@ -804,11 +817,25 @@ const askCompanion = async (transcript, audioBlob = null, userMsgId = null) => {
       complex: emotionDetails?.complex_emotion || null,
     }
     updateAssistantMessage(assistantMsgId, replyText, emotions, toolResults)
-    await playAssistantSpeech(chatData.audio_url)
+    heardText.value = '回复已生成，正在准备语音播报...'
+    void playAssistantSpeech(chatData.audio_url)
   } catch (error) {
     console.error(error)
-    pushAssistantMessage('我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。')
-    ElMessage.error('陪伴接口调用失败，请检查后端服务与 API Key。')
+    const isTimeout = error?.code === 'ECONNABORTED'
+      || String(error?.message || '').toLowerCase().includes('timeout')
+    pushAssistantMessage(
+      isTimeout
+        ? '这次等待有点久，但我还在。你可以稍后再试，或改用文字继续聊聊。'
+        : '我刚刚有点走神了，暂时没接到你的情绪信号。你可以再说一遍，我会认真听。',
+    )
+    ElMessage.error(
+      isTimeout
+        ? 'AI 服务响应超时，请稍后重试。'
+        : '陪伴接口调用失败，请检查后端服务与 API Key。',
+    )
+  } finally {
+    isCompanionProcessing.value = false
+    companionLoadingText.value = 'AI 正在准备回复...'
   }
 }
 
@@ -1031,6 +1058,9 @@ const setupSpeechRecognition = () => {
 }
 
 const toggleVoiceInput = async () => {
+  if (isCompanionProcessing.value) {
+    return
+  }
   if (!voiceSupported) {
     ElMessage.warning('当前浏览器暂不支持录音。')
     pushAssistantMessage('这个浏览器暂时不能录音，可以换用 Chrome 或 Edge 再试一次。')
@@ -1414,6 +1444,19 @@ onBeforeUnmount(() => {
 
 .status-pill.listening {
   background: var(--color-accent-terracotta);
+}
+
+.status-pill.processing {
+  background: #5b7c99;
+}
+
+.companion-loading-banner {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(91, 124, 153, 0.12);
+  color: #4f6578;
+  font-size: 14px;
 }
 
 .top-tools {
