@@ -43,7 +43,7 @@
             <div class="profile-avatar-section">
               <div class="avatar-wrapper">
                 <font-awesome-icon icon="user" v-if="!userProfile.avatar" class="default-avatar" />
-                <img :src="userProfile.avatar" v-else class="user-avatar" alt="User Avatar" />
+                <img loading="lazy" :src="userProfile.avatar" v-else class="user-avatar" alt="User Avatar" />
                 <div v-if="isEditingProfile" class="avatar-edit-overlay" @click="triggerAvatarUpload">
                   <font-awesome-icon icon="camera" />
                   <span>更换头像</span>
@@ -677,7 +677,7 @@
                 <div class="social-post-top">
                   <div class="social-author-block">
                     <div class="social-avatar">
-                      <img v-if="post.authorAvatarUrl" :src="post.authorAvatarUrl" alt="avatar" />
+                      <img loading="lazy" v-if="post.authorAvatarUrl" :src="post.authorAvatarUrl" alt="avatar" />
                       <span v-else>{{ getNameInitial(post.authorName) }}</span>
                     </div>
                     <div>
@@ -900,7 +900,7 @@
               <div class="friend-item" v-for="user in searchResults" :key="user.userId">
                 <div class="friend-info">
                   <div class="friend-avatar">
-                    <img v-if="user.avatarUrl" :src="user.avatarUrl" alt="avatar" />
+                    <img loading="lazy" v-if="user.avatarUrl" :src="user.avatarUrl" alt="avatar" />
                     <font-awesome-icon v-else icon="user" />
                   </div>
                   <div class="friend-details">
@@ -919,7 +919,7 @@
               <div class="friend-item" v-for="req in friendRequests" :key="req.id">
                 <div class="friend-info">
                   <div class="friend-avatar">
-                    <img v-if="req.senderAvatarUrl" :src="req.senderAvatarUrl" alt="avatar" />
+                    <img loading="lazy" v-if="req.senderAvatarUrl" :src="req.senderAvatarUrl" alt="avatar" />
                     <font-awesome-icon v-else icon="user" />
                   </div>
                   <div class="friend-details">
@@ -955,7 +955,7 @@
                 >
                   <div class="friend-info">
                     <div class="friend-avatar">
-                      <img v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
+                      <img loading="lazy" v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
                       <font-awesome-icon v-else icon="user" />
                     </div>
                     <div class="friend-details">
@@ -985,7 +985,7 @@
                 </div>
                 <div class="friend-detail-top">
                   <div class="friend-detail-avatar">
-                    <img v-if="selectedFriend.avatarUrl" :src="selectedFriend.avatarUrl" alt="avatar" />
+                    <img loading="lazy" v-if="selectedFriend.avatarUrl" :src="selectedFriend.avatarUrl" alt="avatar" />
                     <font-awesome-icon v-else icon="user" />
                   </div>
                   <div class="friend-detail-main">
@@ -1081,7 +1081,7 @@
                 >
                   <div class="friend-info">
                     <div class="friend-avatar">
-                      <img v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
+                      <img loading="lazy" v-if="friend.avatarUrl" :src="friend.avatarUrl" alt="avatar" />
                       <font-awesome-icon v-else icon="user" />
                     </div>
                     <div class="friend-details">
@@ -1111,7 +1111,7 @@
                 <div class="chat-window-header">
                   <div class="friend-info">
                     <div class="friend-avatar large-avatar">
-                      <img v-if="activeChatFriend.avatarUrl" :src="activeChatFriend.avatarUrl" alt="avatar" />
+                      <img loading="lazy" v-if="activeChatFriend.avatarUrl" :src="activeChatFriend.avatarUrl" alt="avatar" />
                       <font-awesome-icon v-else icon="user" />
                     </div>
                     <div class="friend-details">

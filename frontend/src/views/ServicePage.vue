@@ -86,7 +86,7 @@
               type="button"
               @click="selectTrack(track)"
             >
-              <img :src="track.cover" :alt="track.title" />
+              <img loading="lazy" :src="track.cover" :alt="track.title" />
               <div class="track-meta">
                 <strong>{{ track.title }}</strong>
                 <span>{{ track.artist }}</span>
@@ -102,7 +102,7 @@
 
         <div class="player-shell" role="button" tabindex="0" @click="openPlayerPage" @keyup.enter="openPlayerPage">
           <div class="now-playing">
-            <img :src="currentTrack.cover" :alt="currentTrack.title" />
+            <img loading="lazy" :src="currentTrack.cover" :alt="currentTrack.title" />
             <div>
               <strong>{{ currentTrack.title }}</strong>
               <span>{{ currentTrack.artist }}</span>
@@ -196,7 +196,7 @@
                   type="button"
                   @click="selectRecommendedTrack(track)"
                 >
-                  <img :src="track.cover" :alt="track.title" />
+                  <img loading="lazy" :src="track.cover" :alt="track.title" />
                   <div>
                     <strong>{{ track.title }}</strong>
                     <span>{{ track.reason }}</span>
@@ -1669,12 +1669,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
-  width: min(100%, 860px);
+  width: min(100%, 680px);
   margin-left: auto;
   margin-right: auto;
-  padding: 12px 20px;
+  padding: 8px 14px;
   background: var(--color-text-primary);
   color: var(--color-bg-primary);
   border-radius: var(--radius-pill);
@@ -1690,14 +1690,14 @@ onBeforeUnmount(() => {
 .now-playing {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 160px;
-  flex: 1 1 220px;
+  gap: 10px;
+  min-width: 130px;
+  flex: 1 1 180px;
 }
 
 .now-playing img {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
   animation: spin 10s linear infinite;
@@ -1710,11 +1710,11 @@ onBeforeUnmount(() => {
 
 .now-playing strong {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
 .now-playing span {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: rgba(255,255,255,0.7);
 }
 
@@ -1723,14 +1723,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-width: 220px;
+  gap: 6px;
+  min-width: 180px;
 }
 
 .player-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: nowrap;
 }
 
@@ -1746,8 +1746,8 @@ onBeforeUnmount(() => {
 }
 
 .action-button {
-  padding: 6px 12px;
-  font-size: 0.9rem;
+  padding: 4px 10px;
+  font-size: 0.8rem;
   color: rgba(255,255,255,0.8);
 }
 .action-button:hover {
@@ -1756,8 +1756,8 @@ onBeforeUnmount(() => {
 }
 
 .primary-button {
-  padding: 8px 18px;
-  font-size: 0.95rem;
+  padding: 6px 14px;
+  font-size: 0.85rem;
   background: #fff;
   color: var(--color-text-primary);
 }
@@ -1768,10 +1768,10 @@ onBeforeUnmount(() => {
 .progress-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   width: 100%;
-  max-width: 400px;
-  font-size: 0.85rem;
+  max-width: 320px;
+  font-size: 0.8rem;
   color: rgba(255,255,255,0.7);
 }
 
@@ -1783,8 +1783,9 @@ onBeforeUnmount(() => {
 .volume-control {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex: 0 1 auto;
+  font-size: 0.8rem;
 }
 
 .volume-control span {

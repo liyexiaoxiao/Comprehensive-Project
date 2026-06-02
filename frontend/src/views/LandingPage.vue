@@ -6,6 +6,8 @@
       <div class="orb orb-3"></div>
     </div>
 
+    <div v-if="menuOpen" class="nav-overlay" @click="closeMenu"></div>
+
     <header class="site-header glass-panel animate-fade-in">
       <div class="brand-mark">
         <div class="brand-logo">EH</div>
@@ -14,11 +16,14 @@
           <span class="brand-subtitle">沉浸式情绪花园</span>
         </div>
       </div>
-      <nav class="site-nav">
-        <a href="#garden-path" class="nav-link">情绪路径</a>
-        <a href="#companions" class="nav-link">陪伴方式</a>
-        <RouterLink class="btn-premium" :to="entryRoute">进入花园</RouterLink>
+      <nav class="site-nav" :class="{ 'nav-open': menuOpen }">
+        <a href="#garden-path" class="nav-link" @click="closeMenu">情绪路径</a>
+        <a href="#companions" class="nav-link" @click="closeMenu">陪伴方式</a>
+        <RouterLink class="btn-premium" :to="entryRoute" @click="closeMenu">进入花园</RouterLink>
       </nav>
+      <button class="hamburger-btn" @click="toggleMenu" :aria-label="menuOpen ? '关闭菜单' : '打开菜单'">
+        <span></span><span></span><span></span>
+      </button>
     </header>
 
     <main class="page-content">
@@ -96,7 +101,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { homeFeatures, homeScenes } from '@/data/mockContent'
 import { getStoredAuthToken } from '@/api/http'
@@ -110,6 +115,10 @@ const entryRoute = computed(() => {
   }
   return '/login'
 })
+
+const menuOpen = ref(false)
+const toggleMenu = () => { menuOpen.value = !menuOpen.value }
+const closeMenu = () => { menuOpen.value = false }
 </script>
 
 <style scoped>
@@ -439,14 +448,85 @@ const entryRoute = computed(() => {
     text-align: center;
     gap: 30px;
   }
-  .site-nav {
-    display: none; /* simple mobile handling */
-  }
   .companion-content {
     padding: 50px 30px;
   }
   .features-grid {
     gap: 20px;
+  }
+
+  /* Nav overlay backdrop */
+  .nav-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 999;
+  }
+
+  /* Hamburger menu */
+  .hamburger-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    z-index: 1001;
+  }
+
+  .hamburger-btn span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--color-text-primary);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+  }
+
+  .site-nav {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 260px;
+    height: 100vh;
+    height: 100dvh;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(20px);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 80px 24px 24px;
+    z-index: 1000;
+    transition: right 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.08);
+  }
+
+  .site-nav.nav-open {
+    right: 0;
+  }
+
+  .site-nav .nav-link {
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    font-size: 1.1rem;
+  }
+
+  .site-nav .btn-premium {
+    margin-top: 20px;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Hide hamburger on desktop */
+@media (min-width: 993px) {
+  .hamburger-btn {
+    display: none;
   }
 }
 

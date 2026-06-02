@@ -158,7 +158,7 @@
                   :class="{ active: track.id === editingOfficialTrackId }"
                   @click="selectOfficialTrack(track)"
                 >
-                  <img :src="track.cover || fallbackOfficialCover(track)" alt="" class="official-track-cover" />
+                  <img loading="lazy" :src="track.cover || fallbackOfficialCover(track)" alt="" class="official-track-cover" />
                   <div class="official-track-copy">
                     <strong>{{ track.title }}</strong>
                     <span>{{ track.artist || '佚名' }}</span>

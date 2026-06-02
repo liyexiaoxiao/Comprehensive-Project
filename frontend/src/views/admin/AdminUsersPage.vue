@@ -31,7 +31,7 @@
           :class="{ active: user.userId === selectedUserId }"
           @click="selectUser(user.userId)"
         >
-          <img :src="resolveAvatar(user.avatarUrl)" alt="" class="user-avatar" />
+          <img loading="lazy" :src="resolveAvatar(user.avatarUrl)" alt="" class="user-avatar" />
           <div class="user-row-main">
             <strong>{{ user.nickname || user.username }}</strong>
             <span>{{ user.username }}</span>
@@ -93,7 +93,7 @@
           <label class="full-width avatar-readonly-field">
             <span>头像</span>
             <div class="avatar-readonly-row">
-              <img :src="resolveAvatar(userForm.avatarUrl)" alt="" class="user-avatar preview-avatar" />
+              <img loading="lazy" :src="resolveAvatar(userForm.avatarUrl)" alt="" class="user-avatar preview-avatar" />
               <p class="avatar-readonly-hint">头像由用户通过上传接口设置，管理员不可填写外部链接。</p>
             </div>
           </label>

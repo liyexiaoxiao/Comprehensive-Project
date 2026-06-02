@@ -15,7 +15,7 @@
       <section class="cover-zone">
         <div class="cover-shell">
           <div class="record-disc" :class="{ spinning: isPlaying }">
-            <img :src="currentTrack.cover" :alt="currentTrack.title" class="vinyl-cover" />
+            <img loading="lazy" :src="currentTrack.cover" :alt="currentTrack.title" class="vinyl-cover" />
             <div class="record-center"></div>
           </div>
         </div>
@@ -98,7 +98,7 @@
               type="button"
               @click="selectTrack(track)"
             >
-              <img :src="track.cover" :alt="track.title" />
+              <img loading="lazy" :src="track.cover" :alt="track.title" />
               <div class="queue-item-meta">
                 <strong>{{ track.title }}</strong>
                 <span>{{ track.artist }}</span>

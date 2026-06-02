@@ -15,7 +15,7 @@ export const clearAuthToken = () => {
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_GATEWAY_BASE_URL || 'http://localhost:8080',
-  timeout: 10000,
+  timeout: 30000,
 })
 
 http.interceptors.request.use((config) => {

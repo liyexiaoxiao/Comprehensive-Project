@@ -73,7 +73,7 @@
               type="button"
               @click="selectPlaylist(playlist.id)"
             >
-              <img :src="playlist.cover" :alt="playlist.name" />
+              <img loading="lazy" :src="playlist.cover" :alt="playlist.name" />
               <div class="playlist-card-body">
                 <div class="playlist-card-top">
                   <span class="playlist-source-badge">{{ playlist.sourceLabel }}</span>
@@ -93,7 +93,7 @@
         <section class="detail-panel surface">
           <template v-if="activePlaylist">
             <div class="detail-hero">
-              <img :src="activePlaylist.cover" :alt="activePlaylist.name" />
+              <img loading="lazy" :src="activePlaylist.cover" :alt="activePlaylist.name" />
               <div class="detail-copy">
                 <span class="playlist-source-badge">{{ activePlaylist.sourceLabel }}</span>
                 <h2>{{ activePlaylist.name }}</h2>
@@ -130,7 +130,7 @@
                   type="button"
                   @click="playPlaylist(track)"
                 >
-                  <img :src="track.cover || fallbackCover(track)" :alt="track.title" />
+                  <img loading="lazy" :src="track.cover || fallbackCover(track)" :alt="track.title" />
                   <div class="track-meta">
                     <strong>{{ track.title }}</strong>
                     <span>{{ track.artist || '佚名' }}</span>
