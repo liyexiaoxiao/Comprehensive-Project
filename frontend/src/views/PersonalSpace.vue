@@ -747,7 +747,7 @@
                   </div>
                   <div class="friend-details">
                     <span class="friend-name">{{ user.nickname || user.username }}</span>
-                    <span class="friend-id">{{ user.username ? `账号：${user.username}` : '账号信息暂不可用' }}</span>
+                    <span class="friend-id">{{ user.username ? `账号：${user.username}` : (user.userId ? `用户ID：${user.userId}` : '账号信息暂不可用') }}</span>
                   </div>
                 </div>
                 <button class="action-btn outline slim-btn" @click="addFriend(user.userId)">发送申请</button>
@@ -766,7 +766,7 @@
                   </div>
                   <div class="friend-details">
                     <span class="friend-name">{{ req.senderName }}</span>
-                    <span class="friend-id">{{ req.senderUsername ? `账号：${req.senderUsername}` : '请求添加您为好友' }}</span>
+                    <span class="friend-id">{{ req.senderUsername ? `账号：${req.senderUsername}` : (req.senderId ? `用户ID：${req.senderId}` : '请求添加您为好友') }}</span>
                   </div>
                 </div>
                 <div class="request-actions">
@@ -802,7 +802,7 @@
                     </div>
                     <div class="friend-details">
                       <span class="friend-name">{{ friend.name }}</span>
-                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : (friend.userId ? `用户ID：${friend.userId}` : '账号信息暂不可用') }}</span>
                       <span class="friend-desc">{{ friend.friendshipDescription }}</span>
                     </div>
                   </div>
@@ -834,7 +834,7 @@
                     <div class="friend-detail-heading">
                       <div>
                         <h4>{{ selectedFriend.name }}</h4>
-                        <p>{{ selectedFriend.username ? `账号：${selectedFriend.username}` : '账号信息暂不可用' }}</p>
+                        <p>{{ selectedFriend.username ? `账号：${selectedFriend.username}` : (selectedFriend.userId ? `用户ID：${selectedFriend.userId}` : '账号信息暂不可用') }}</p>
                       </div>
                       <span class="friendship-badge">{{ selectedFriend.intimacy }}/3 朵花</span>
                     </div>
@@ -931,7 +931,7 @@
                         <span class="friend-name">{{ friend.name }}</span>
                         <span class="chat-list-time">{{ formatChatListTime(friend.lastMessageAt) }}</span>
                       </div>
-                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : (friend.userId ? `用户ID：${friend.userId}` : '账号信息暂不可用') }}</span>
                       <div class="chat-preview-row">
                         <span class="chat-last-message">{{ friend.lastMessagePreview || '点击开始聊天' }}</span>
                         <span v-if="friend.unreadCount > 0" class="chat-unread-badge">
@@ -961,7 +961,7 @@
                         <h4>{{ activeChatFriend.name }}</h4>
                         <span class="friendship-badge">{{ activeChatFriend.intimacy }}/3 朵花</span>
                       </div>
-                      <span class="friend-id">{{ activeChatFriend.username ? `账号：${activeChatFriend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ activeChatFriend.username ? `账号：${activeChatFriend.username}` : (activeChatFriend.userId ? `用户ID：${activeChatFriend.userId}` : '账号信息暂不可用') }}</span>
                       <span class="friend-desc">{{ activeChatFriend.bio || '和这位朋友聊聊最近的心情吧。' }}</span>
                     </div>
                   </div>
@@ -3554,6 +3554,7 @@ const fetchFriends = async () => {
         return {
         friendshipId: f.friendshipId,
         id: f.friendUserId,
+        userId: f.friendUserId,
         name: getDisplayName(friendUserMap.value[f.friendUserId]) || `用户 ${f.friendUserId}`,
         username: friendUserMap.value[f.friendUserId]?.username || '',
         avatarUrl: friendUserMap.value[f.friendUserId]?.avatarUrl || '',

@@ -467,6 +467,7 @@ public class UserService {
     private static UserInfoRequest toPublicUserSummary(UserInfo user) {
         UserInfoRequest summary = new UserInfoRequest();
         summary.setUserId(user.getId());
+        summary.setUsername(user.getUsername());
         summary.setNickname(user.getNickname());
         summary.setAvatarUrl(user.getAvatarUrl());
         return summary;

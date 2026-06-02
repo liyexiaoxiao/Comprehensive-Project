@@ -688,8 +688,8 @@ public class SocialApiController {
 					if (request.accept()) {
 						friendReq.setStatus("ACCEPTED");
 						
-						// Create bilateral friendship
-						Integer intimacyLevel = 0;
+						// Initialize with a DB-valid positive score.
+						Integer intimacyLevel = 1;
 						if (!friendshipRepository.existsByUserIdAndFriendUserId(userId, friendReq.getSenderId())) {
 							Friendship selfSide = new Friendship();
 							selfSide.setUserId(userId);
