@@ -24,4 +24,4 @@ server:
 
 ai:
   service:
-    base-urls: ${AI_SERVICE_BASE_URLS:}
+    base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:5001}

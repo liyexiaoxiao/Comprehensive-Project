@@ -48,8 +48,6 @@ import {
     getPreviousEmotionMusicApi,
 } from '@/api/python';
 
-import '@fortawesome/fontawesome-free/css/all.css';
-
 const isPlaying = ref(false);
 const isMuted = ref(false);
 const audio = new Audio();
@@ -267,6 +265,7 @@ onUnmounted(() => {
     justify-content: center;
     gap: 30px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .controls button {
@@ -361,6 +360,38 @@ input[type="range"] {
     }
     100% {
         opacity: 0.7;
+    }
+}
+
+@media (max-width: 480px) {
+    .controls {
+        gap: 16px;
+    }
+
+    .controls button {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    .progress {
+        gap: 8px;
+        font-size: 0.8rem;
+    }
+
+    .voice-control-section {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .voice-control-status {
+        font-size: 0.8rem;
+        padding: 4px 10px;
+    }
+
+    .language-toggle {
+        padding: 4px 12px;
+        font-size: 0.8rem;
     }
 }
 </style>

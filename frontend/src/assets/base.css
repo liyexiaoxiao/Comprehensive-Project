@@ -155,3 +155,21 @@ button {
 .animate-fade-in {
   animation: fadeIn 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* ===== Global Responsive Adjustments ===== */
+@media (max-width: 480px) {
+  .btn-premium {
+    padding: 10px 22px;
+    font-size: 0.9rem;
+  }
+
+  .btn-outline-premium {
+    padding: 9px 21px;
+    font-size: 0.9rem;
+  }
+
+  .glass-panel {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
+}

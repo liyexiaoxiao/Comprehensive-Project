@@ -29,11 +29,13 @@ import com.donffroodus.user_service.entity.UserInfo;
 import com.donffroodus.user_service.repository.OperationLogRepository;
 import com.donffroodus.user_service.repository.UserInfoRepository;
 import com.donffroodus.user_service.utils.JwtUtils;
+import com.donffroodus.user_service.utils.PasswordPolicy;
 
 @Service
 public class UserService {
     private static final String LOCAL_AVATAR_PREFIX = "/api/users/avatars/";
     private static final long MAX_AVATAR_SIZE = 5L * 1024 * 1024;
+    private static final int MAX_SUMMARY_IDS = 50;
     private static final Set<String> ALLOWED_AVATAR_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif", ".webp");
 
     @Autowired
@@ -87,12 +89,27 @@ public class UserService {
         return filename.substring(dotIndex).toLowerCase();
     }
 
+    private static boolean isManagedAvatarUrl(String avatarUrl) {
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            return false;
+        }
+        String trimmed = avatarUrl.trim();
+        if (!trimmed.startsWith(LOCAL_AVATAR_PREFIX)) {
+            return false;
+        }
+        String filename = trimmed.substring(LOCAL_AVATAR_PREFIX.length());
+        if (filename.isBlank() || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            return false;
+        }
+        return ALLOWED_AVATAR_EXTENSIONS.contains(extractFileExtension(filename));
+    }
+
     private void deleteManagedAvatar(String avatarUrl) {
-        if (avatarUrl == null || avatarUrl.isBlank() || !avatarUrl.startsWith(LOCAL_AVATAR_PREFIX)) {
+        if (!isManagedAvatarUrl(avatarUrl)) {
             return;
         }
 
-        String filename = avatarUrl.substring(LOCAL_AVATAR_PREFIX.length());
+        String filename = avatarUrl.trim().substring(LOCAL_AVATAR_PREFIX.length());
         if (filename.isBlank()) {
             return;
         }
@@ -112,6 +129,7 @@ public class UserService {
         if (request.getPassword() == null || request.getPassword().isEmpty()) {
             throw new RuntimeException("Password is required");
         }
+        PasswordPolicy.validate(request.getPassword());
         if (userInfoRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("Username already exists");
         }
@@ -206,7 +224,11 @@ public class UserService {
             targetUser.setStatus(request.getStatus());
         }
         if (request.getAvatarUrl() != null) {
-            targetUser.setAvatarUrl(request.getAvatarUrl());
+            String avatarUrl = request.getAvatarUrl().trim();
+            if (!avatarUrl.isEmpty() && !isManagedAvatarUrl(avatarUrl)) {
+                throw new RuntimeException("头像地址无效，仅支持本系统上传的头像");
+            }
+            targetUser.setAvatarUrl(avatarUrl.isEmpty() ? null : avatarUrl);
         }
         if (request.getBio() != null) {
             targetUser.setBio(request.getBio());
@@ -221,6 +243,7 @@ public class UserService {
         UserInfo targetUser = userInfoRepository.findById(targetUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        PasswordPolicy.validate(request.getNewPassword());
         targetUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userInfoRepository.save(targetUser);
 
@@ -246,9 +269,7 @@ public class UserService {
         if (request.getNickname() != null) {
             userInfo.setNickname(request.getNickname());
         }
-        if (request.getAvatarUrl() != null) {
-            userInfo.setAvatarUrl(request.getAvatarUrl());
-        }
+        // 头像仅允许通过 POST /api/users/me/avatar 上传，此处忽略 avatarUrl 字段以防 SSRF。
         if (request.getBio() != null) {
             userInfo.setBio(request.getBio());
         }
@@ -291,8 +312,16 @@ public class UserService {
     }
 
     public Resource loadAvatarResource(String filename) {
+        if (filename == null || filename.isBlank() || filename.contains("..")
+                || filename.contains("/") || filename.contains("\\")) {
+            throw new RuntimeException("Avatar not found");
+        }
         try {
-            Path filePath = ensureAvatarUploadDirectory().resolve(filename).normalize();
+            Path avatarDir = ensureAvatarUploadDirectory();
+            Path filePath = avatarDir.resolve(filename).normalize();
+            if (!filePath.startsWith(avatarDir)) {
+                throw new RuntimeException("Avatar not found");
+            }
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
                 throw new RuntimeException("Avatar not found");
@@ -311,6 +340,7 @@ public class UserService {
             throw new RuntimeException("Old password is incorrect");
         }
 
+        PasswordPolicy.validate(newPassword);
         userInfo.setPassword(passwordEncoder.encode(newPassword));
         userInfoRepository.save(userInfo);
     }
@@ -397,14 +427,18 @@ public class UserService {
         return result;
     }
 
-    public List<UserInfoRequest> getUserSummariesByIds(List<Long> userIds) {
+    public List<UserInfoRequest> getUserSummariesByIds(List<Long> userIds, Long viewerUserId) {
         if (userIds == null || userIds.isEmpty()) {
             return List.of();
+        }
+        if (viewerUserId == null) {
+            throw new RuntimeException("Unauthorized");
         }
 
         List<Long> orderedIds = userIds.stream()
                 .filter(id -> id != null)
                 .distinct()
+                .limit(MAX_SUMMARY_IDS)
                 .toList();
 
         if (orderedIds.isEmpty()) {
@@ -418,10 +452,25 @@ public class UserService {
             users.stream()
                     .filter(user -> userId.equals(user.getId()))
                     .findFirst()
-                    .ifPresent(user -> result.add(toSafeUserInfo(user)));
+                    .ifPresent(user -> {
+                        if (viewerUserId.equals(user.getId())) {
+                            result.add(toSafeUserInfo(user));
+                        } else {
+                            result.add(toPublicUserSummary(user));
+                        }
+                    });
         }
 
         return result;
+    }
+
+    private static UserInfoRequest toPublicUserSummary(UserInfo user) {
+        UserInfoRequest summary = new UserInfoRequest();
+        summary.setUserId(user.getId());
+        summary.setUsername(user.getUsername());
+        summary.setNickname(user.getNickname());
+        summary.setAvatarUrl(user.getAvatarUrl());
+        return summary;
     }
 
     private static UserInfoRequest toSafeUserInfo(UserInfo user) {

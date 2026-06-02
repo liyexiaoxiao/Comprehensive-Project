@@ -14,33 +14,52 @@ call :load_supported_env "%ROOT%\.env"
 call :prepare_jwt_secret
 
 echo Cleaning existing backend processes...
-call :stop_service "Python Backend" 5000
-call :stop_service "AI Service" 5001
-call :stop_service "Emotion Recognition" 5003
-call :stop_service "API Gateway" 8080
-call :stop_service "Music Service" 8081
-call :stop_service "User Service" 8082
-call :stop_service "Social Service" 8083
-call :stop_service "Data Service" 8084
-call :stop_service "Meditation Service" 8085
+start "" /b cmd /c "call :stop_service_no_pause ""Python Backend"" 5000 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""AI Service"" 5001 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""Emotion Recognition"" 5003 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""API Gateway"" 8080 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""Music Service"" 8081 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""User Service"" 8082 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""Social Service"" 8083 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""Data Service"" 8084 >nul 2>&1"
+start "" /b cmd /c "call :stop_service_no_pause ""Meditation Service"" 8085 >nul 2>&1"
+timeout /t 2 /nobreak >nul
 
-echo.
 echo Cleaning stale build output...
 call :clean_dir "%ROOT%\music-service\target" "Music Service target"
 
 echo.
-echo Starting services one by one and waiting for ports...
+echo =========================================
+echo Launching ALL services in parallel...
+echo =========================================
 echo.
 
-call :start_and_wait "Python Backend" 5000 "cd /d ""%ROOT%\backend"" && set JWT_SECRET=%JWT_SECRET% && python app.py"
-call :start_and_wait "AI Service" 5001 "cd /d ""%ROOT%\AI-service\backend"" && set JWT_SECRET=%JWT_SECRET% && set AI_SERVICE_PORT=5001 && call pip install -r requirements.txt && python app.py"
-call :start_and_wait "User Service" 8082 "cd /d ""%ROOT%\user-service"" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
-call :start_and_wait "Music Service" 8081 "cd /d ""%ROOT%\music-service"" && call mvnw.cmd spring-boot:run"
-call :start_and_wait "Social Service" 8083 "cd /d ""%ROOT%"" && call api-gateway\mvnw.cmd -f social-service\pom.xml spring-boot:run"
-call :start_and_wait "Data Service" 8084 "cd /d ""%ROOT%"" && call api-gateway\mvnw.cmd -f data-service\pom.xml spring-boot:run"
-call :start_and_wait "Meditation Service" 8085 "cd /d ""%ROOT%\meditation-service\meditation-service"" && call mvnw.cmd spring-boot:run"
-call :start_and_wait "API Gateway" 8080 "cd /d ""%ROOT%\api-gateway"" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
-call :start_optional_service "Emotion Recognition" 5003 "cd /d ""%ROOT%\AI-service\emotion_recog"" && set PORT=5003 && call pip install -r requirements.txt && python app.py"
+:: ---------- Phase 1: fire all services simultaneously ----------
+
+start "Python Backend" cmd /c "cd /d "%ROOT%\backend" && set JWT_SECRET=%JWT_SECRET% && python app.py"
+start "AI Service" cmd /c "cd /d "%ROOT%\AI-service\backend" && set JWT_SECRET=%JWT_SECRET% && set AI_SERVICE_PORT=5001 && pip install -r requirements.txt >nul 2>&1 && python app.py"
+start "User Service" cmd /c "cd /d "%ROOT%\user-service" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
+start "Music Service" cmd /c "cd /d "%ROOT%\music-service" && call mvnw.cmd spring-boot:run"
+start "Social Service" cmd /c "cd /d "%ROOT%" && call api-gateway\mvnw.cmd -f social-service\pom.xml spring-boot:run"
+start "Data Service" cmd /c "cd /d "%ROOT%" && call api-gateway\mvnw.cmd -f data-service\pom.xml spring-boot:run"
+start "Meditation Service" cmd /c "cd /d "%ROOT%\meditation-service\meditation-service" && call mvnw.cmd spring-boot:run"
+start "API Gateway" cmd /c "cd /d "%ROOT%\api-gateway" && set JWT_SECRET=%JWT_SECRET% && call mvnw.cmd spring-boot:run"
+start "Emotion Recognition" cmd /c "cd /d "%ROOT%\AI-service\emotion_recog" && set PORT=5003 && pip install -r requirements.txt >nul 2>&1 && python app.py"
+
+echo All services launched. Waiting for ports...
+echo.
+
+:: ---------- Phase 2: wait for all ports (they boot in parallel, so this is fast) ----------
+
+call :wait_for_port 5000 "Python Backend" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 5001 "AI Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8082 "User Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8081 "Music Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8083 "Social Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8084 "Data Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8085 "Meditation Service" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 8080 "API Gateway" "%BOOT_TIMEOUT_SECONDS%"
+call :wait_for_port 5003 "Emotion Recognition" "%OPTIONAL_TIMEOUT_SECONDS%"
 
 echo.
 echo Startup sequence finished. Verify any window that reported a timeout.
@@ -53,7 +72,6 @@ if not exist "%~1" (
   echo No .env file found. Using current shell environment only.
   goto :eof
 )
-
 echo Loading supported environment variables from .env ...
 for /f "usebackq tokens=* delims=" %%L in ("%~1") do (
   set "LINE=%%L"
@@ -87,24 +105,6 @@ if defined JWT_SECRET (
 set "JWT_SECRET=emotion-healing-dev-jwt-secret-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%"
 goto :eof
 
-:start_and_wait
-set "SERVICE_NAME=%~1"
-set "SERVICE_PORT=%~2"
-set "SERVICE_COMMAND=%~3"
-echo Starting %SERVICE_NAME% on port %SERVICE_PORT%...
-start "%SERVICE_NAME%" cmd /k "%SERVICE_COMMAND%"
-call :wait_for_port "%SERVICE_PORT%" "%SERVICE_NAME%" "%BOOT_TIMEOUT_SECONDS%"
-goto :eof
-
-:start_optional_service
-set "SERVICE_NAME=%~1"
-set "SERVICE_PORT=%~2"
-set "SERVICE_COMMAND=%~3"
-echo Starting optional service %SERVICE_NAME% on port %SERVICE_PORT%...
-start "%SERVICE_NAME%" cmd /k "%SERVICE_COMMAND%"
-call :wait_for_port "%SERVICE_PORT%" "%SERVICE_NAME%" "%OPTIONAL_TIMEOUT_SECONDS%"
-goto :eof
-
 :wait_for_port
 set "WAIT_PORT=%~1"
 set "WAIT_SERVICE=%~2"
@@ -120,7 +120,6 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:":%WAIT_PORT% .*LISTENI
 if %WAIT_ELAPSED% GEQ %WAIT_TIMEOUT% (
   echo [WARN] %WAIT_SERVICE% did not open port %WAIT_PORT% within %WAIT_TIMEOUT% seconds.
   echo        Please inspect the "%WAIT_SERVICE%" window for startup errors.
-  echo        Startup will continue for the remaining services.
   goto :eof
 )
 
@@ -128,20 +127,16 @@ set /a WAIT_ELAPSED+=1
 timeout /t 1 /nobreak >nul
 goto wait_loop
 
-:stop_service
+:stop_service_no_pause
 set "SERVICE_NAME=%~1"
 set "SERVICE_PORT=%~2"
-
-echo Stopping %SERVICE_NAME%...
 taskkill /FI "WINDOWTITLE eq %SERVICE_NAME%" /T /F >nul 2>&1
 call :kill_port "%SERVICE_PORT%"
-timeout /t 1 /nobreak >nul
 goto :eof
 
 :kill_port
 set "TARGET_PORT=%~1"
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:":%TARGET_PORT% .*LISTENING"') do (
-  echo   Killing PID %%P on port %TARGET_PORT%...
   taskkill /PID %%P /T /F >nul 2>&1
 )
 goto :eof

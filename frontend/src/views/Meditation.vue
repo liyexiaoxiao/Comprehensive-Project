@@ -1064,6 +1064,7 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
 .meditation-page {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
   background-color: var(--color-bg-primary);
@@ -2000,6 +2001,64 @@ watch([guideModalVisible, isGuideSpeaking, isGuidePreparingAudio], () => {
   .now-playing-info,
   .control-buttons {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .meditation-page {
+    padding: 12px;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .glass-panel {
+    padding: 16px;
+  }
+
+  .timer-wrapper :deep(.circle-timer) {
+    max-width: 320px;
+    max-height: 320px;
+  }
+
+  .time-btn {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+  }
+
+  .custom-time-input {
+    width: 130px;
+    font-size: 0.9rem;
+  }
+
+  .apply-time-btn,
+  .timer-action-btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+
+  .back-btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+
+  .timer-status-text {
+    font-size: 0.85rem;
+  }
+
+  .emotion-btn {
+    width: 110px;
+    height: 100px;
+  }
+
+  .emotion-name {
+    font-size: 0.8rem;
+  }
+
+  .guide-modal-card {
+    min-height: auto;
+    padding: 16px;
   }
 }
 </style>

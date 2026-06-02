@@ -508,6 +508,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .music-player-page {
   height: 100vh;
+  height: 100dvh;
   padding: 24px;
   position: relative;
   overflow: hidden;
@@ -1084,6 +1085,44 @@ input[type='range'] {
   .queue-item small {
     grid-column: 2;
     text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .music-player-page {
+    padding: 8px;
+  }
+
+  .player-stage {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .cover-shell {
+    width: min(100%, 280px);
+  }
+
+  .bottom-controls {
+    padding: 12px;
+  }
+
+  .progress-block {
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    font-size: 0.8rem;
+  }
+
+  .queue-item {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+
+  .queue-item img {
+    width: 42px;
+    height: 42px;
   }
 }
 </style>

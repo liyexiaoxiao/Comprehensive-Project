@@ -495,6 +495,7 @@ onMounted(async () => {
 <style scoped>
 .mini-missions-page {
   height: 100vh;
+  height: 100dvh;
   background: linear-gradient(180deg, #dff7ef 0%, #eaf8ff 52%, #f2fff7 100%);
   color: #f2f6f4;
   position: relative;

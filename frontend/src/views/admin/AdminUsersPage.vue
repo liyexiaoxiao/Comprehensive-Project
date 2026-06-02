@@ -90,9 +90,12 @@
               <option value="DISABLED">DISABLED</option>
             </select>
           </label>
-          <label class="full-width">
-            <span>头像地址</span>
-            <input v-model.trim="userForm.avatarUrl" type="text" />
+          <label class="full-width avatar-readonly-field">
+            <span>头像</span>
+            <div class="avatar-readonly-row">
+              <img :src="resolveAvatar(userForm.avatarUrl)" alt="" class="user-avatar preview-avatar" />
+              <p class="avatar-readonly-hint">头像由用户通过上传接口设置，管理员不可填写外部链接。</p>
+            </div>
           </label>
           <label class="full-width">
             <span>简介</span>
@@ -305,12 +308,15 @@ const selectUser = async (userId) => {
   }
 }
 
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
+
 const saveUser = async () => {
   if (!selectedUserId.value) return
   isSavingUser.value = true
   try {
+    const { avatarUrl: _avatarUrl, ...profilePayload } = userForm
     await updateAdminUserApi(selectedUserId.value, {
-      ...userForm,
+      ...profilePayload,
       role: normalizeRoleValue(userForm.role),
     })
     ElMessage.success('用户资料已更新')
@@ -327,6 +333,10 @@ const resetPassword = async () => {
   if (!selectedUserId.value) return
   if (!resetPasswordForm.newPassword) {
     ElMessage.warning('请先填写新密码')
+    return
+  }
+  if (!PASSWORD_PATTERN.test(resetPasswordForm.newPassword)) {
+    ElMessage.warning('密码至少 8 位，且需同时包含字母和数字')
     return
   }
   isResettingPassword.value = true
@@ -614,6 +624,23 @@ onMounted(async () => {
   border-radius: 50%;
   object-fit: cover;
   background: #eff5f2;
+}
+
+.avatar-readonly-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-avatar {
+  flex-shrink: 0;
+}
+
+.avatar-readonly-hint {
+  margin: 0;
+  color: #6b7d77;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .user-row-main {

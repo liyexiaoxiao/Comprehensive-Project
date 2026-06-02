@@ -82,7 +82,7 @@
               v-else
               v-model.trim="registerForm.password"
               type="password"
-              placeholder="设置登录密码"
+              placeholder="至少 8 位，含字母和数字"
             />
           </div>
 
@@ -209,6 +209,12 @@ const handleSubmit = async () => {
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailPattern.test(registerForm.email)) {
     errorMessage.value = '请输入正确的邮箱格式。'
+    return
+  }
+
+  const passwordPattern = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
+  if (!passwordPattern.test(registerForm.password)) {
+    errorMessage.value = '密码至少 8 位，且需同时包含字母和数字。'
     return
   }
 

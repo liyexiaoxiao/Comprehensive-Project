@@ -4,8 +4,8 @@ import router from './router'
 import { createPinia } from 'pinia'
 import { restoreSession } from './api/session'
 
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import './assets/base.css'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -18,7 +18,6 @@ import {
   faVolumeXmark,
   faAngleLeft,
   faAngleRight,
-  faClockRotateLeft,
   faMicrophone,
   faCircleInfo,
   faXmark,
@@ -46,7 +45,6 @@ library.add(
   faVolumeXmark,
   faAngleLeft,
   faAngleRight,
-  faClockRotateLeft,
   faMicrophone,
   faCircleInfo,
   faXmark,
@@ -77,7 +75,6 @@ const bootstrap = async () => {
   }
 
   app.use(router)
-  app.use(ElementPlus)
   app.use(pinia)
   app.mount('#app')
 }

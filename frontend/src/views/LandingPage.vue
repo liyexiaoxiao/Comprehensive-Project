@@ -424,9 +424,15 @@ const entryRoute = computed(() => {
 @media (max-width: 992px) {
   .hero-section {
     grid-template-columns: 1fr;
+    gap: 40px;
+    margin-bottom: 80px;
   }
   .hero-title {
     font-size: 3rem;
+  }
+  .hero-description {
+    font-size: 1.1rem;
+    max-width: 100%;
   }
   .cta-section {
     flex-direction: column;
@@ -436,5 +442,117 @@ const entryRoute = computed(() => {
   .site-nav {
     display: none; /* simple mobile handling */
   }
+  .companion-content {
+    padding: 50px 30px;
+  }
+  .features-grid {
+    gap: 20px;
+  }
 }
+
+@media (max-width: 768px) {
+  .landing-page {
+    padding: 20px 3%;
+  }
+  .site-header {
+    padding: 12px 20px;
+    margin-bottom: 40px;
+  }
+  .hero-title {
+    font-size: 2.5rem;
+  }
+  .hero-visual {
+    padding: 40px 24px;
+  }
+  .visual-title {
+    font-size: 2rem;
+  }
+  .section-header {
+    margin-bottom: 40px;
+  }
+  .section-header h2 {
+    font-size: 2rem;
+  }
+  .companion-content h2 {
+    font-size: 2rem;
+  }
+  .features-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .path-section,
+  .companion-section {
+    margin-bottom: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .landing-page {
+    padding: 16px 12px;
+  }
+  .hero-title {
+    font-size: 2rem;
+  }
+  .hero-visual {
+    padding: 30px 20px;
+  }
+  .hero-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .hero-actions .btn-premium,
+  .hero-actions .btn-outline-premium {
+    width: 100%;
+    text-align: center;
+  }
+  .site-header {
+    padding: 10px 16px;
+    margin-bottom: 30px;
+    gap: 12px;
+  }
+  .brand-logo {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+  }
+  .brand-name {
+    font-size: 1rem;
+  }
+  .brand-subtitle {
+    font-size: 0.7rem;
+  }
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .feature-card {
+    padding: 30px 20px;
+  }
+  .companion-content {
+    padding: 30px 16px;
+  }
+  .companion-content h2 {
+    font-size: 1.6rem;
+  }
+  .cta-section {
+    padding: 30px 20px;
+  }
+  .cta-title {
+    font-size: 1.5rem;
+  }
+  .cta-desc {
+    font-size: 1rem;
+  }
+  .scene-item {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+  .section-header h2 {
+    font-size: 1.6rem;
+  }
+  .hero-description {
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+}
+
 </style>

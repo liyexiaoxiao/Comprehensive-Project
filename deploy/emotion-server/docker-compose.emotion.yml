@@ -1,0 +1,16 @@
+services:
+  emotion-recog:
+    build: ../../AI-service/emotion_recog
+    container_name: emohealing-emotion-recog
+    environment:
+      PORT: 5003
+      HF_HOME: /models/hf
+      HF_HUB_CACHE: /models/hf/hub
+      TRANSFORMERS_CACHE: /models/hf/hub
+      HF_HUB_OFFLINE: 1
+      TRANSFORMERS_OFFLINE: 1
+    ports:
+      - "5003:5003"
+    volumes:
+      - ~/hf_cache:/models/hf
+    restart: unless-stopped

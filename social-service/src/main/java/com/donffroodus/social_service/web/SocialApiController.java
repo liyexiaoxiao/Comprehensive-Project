@@ -36,6 +36,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.donffroodus.social_service.config.AiServiceProperties;
 import com.donffroodus.social_service.entity.FriendRequest;
 import com.donffroodus.social_service.entity.Friendship;
 import com.donffroodus.social_service.entity.MoodDiary;
@@ -80,6 +81,8 @@ public class SocialApiController {
 	private final SocialInteractionRepository socialInteractionRepository;
 	private final FriendshipRepository friendshipRepository;
 	private final FriendRequestRepository friendRequestRepository;
+	private final RestTemplate restTemplate;
+	private final AiServiceProperties aiServiceProperties;
 
 	@Value("${ai.service.base-urls:}")
 	private String aiServiceBaseUrlsConfig;
@@ -89,12 +92,16 @@ public class SocialApiController {
 			SocialPostRepository socialPostRepository,
 			SocialInteractionRepository socialInteractionRepository,
 			FriendshipRepository friendshipRepository,
-			FriendRequestRepository friendRequestRepository) {
+			FriendRequestRepository friendRequestRepository,
+			RestTemplate restTemplate,
+			AiServiceProperties aiServiceProperties) {
 		this.moodDiaryRepository = moodDiaryRepository;
 		this.socialPostRepository = socialPostRepository;
 		this.socialInteractionRepository = socialInteractionRepository;
 		this.friendshipRepository = friendshipRepository;
 		this.friendRequestRepository = friendRequestRepository;
+		this.restTemplate = restTemplate;
+		this.aiServiceProperties = aiServiceProperties;
 	}
 
 	private static List<String> parseMoodTags(String moodTag) {
@@ -524,14 +531,13 @@ public class SocialApiController {
 
 	@GetMapping("/posts/ai-response/{postId}")
 	public ResponseEntity<?> getAiResponseForPost(@PathVariable("postId") Long postId, @RequestHeader(value = "Authorization", required = false) String authorization) {
-		String post_content = socialPostRepository.findById(postId)
+		String postContent = socialPostRepository.findById(postId)
 				.map(SocialPost::getContent)
 				.orElse(null);
-		if (post_content == null) {
+		if (postContent == null) {
 			return ResponseEntity.notFound().build();
 		}
-		RestTemplate restTemplate = new RestTemplate();
-		Map<String, String> requestBody = Map.of("content", post_content);
+		Map<String, String> requestBody = Map.of("content", postContent);
 		HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, buildAuthorizationHeaders(authorization));
 		HttpStatusCodeException lastHttpError = null;
 		for (String baseUrl : resolveAiServiceBaseUrls()) {
@@ -725,8 +731,8 @@ public class SocialApiController {
 					if (request.accept()) {
 						friendReq.setStatus("ACCEPTED");
 						
-						// Create bilateral friendship
-						Integer intimacyLevel = 0;
+						// Initialize with a DB-valid positive score.
+						Integer intimacyLevel = 1;
 						if (!friendshipRepository.existsByUserIdAndFriendUserId(userId, friendReq.getSenderId())) {
 							Friendship selfSide = new Friendship();
 							selfSide.setUserId(userId);

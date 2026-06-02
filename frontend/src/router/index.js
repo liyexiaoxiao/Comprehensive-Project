@@ -3,18 +3,36 @@ import { getCurrentUserFromStorage, isAdminUser } from '@/api/user'
 import { getStoredAuthToken } from '@/api/http'
 import { resolveAuthenticatedRoute, restoreSession } from '@/api/session'
 
-import LandingPage from '@/views/LandingPage.vue'
-import LoginPage from '@/views/LoginPage.vue'
-import ServicePage from '@/views/ServicePage.vue'
-import MusicPlayerPage from '@/views/MusicPlayerPage.vue'
-import AllPlaylistsPage from '@/views/AllPlaylistsPage.vue'
-
 const routes = [
-  { path: '/', name: 'landing', component: LandingPage },
-  { path: '/login', name: 'login', component: LoginPage, meta: { guestOnly: true } },
-  { path: '/service', name: 'service', component: ServicePage, meta: { requiresAuth: true } },
-  { path: '/playlists', name: 'all-playlists', component: AllPlaylistsPage, meta: { requiresAuth: true } },
-  { path: '/music-player', name: 'music-player', component: MusicPlayerPage, meta: { requiresAuth: true } },
+  {
+    path: '/',
+    name: 'landing',
+    component: () => import('@/views/LandingPage.vue'),
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginPage.vue'),
+    meta: { guestOnly: true },
+  },
+  {
+    path: '/service',
+    name: 'service',
+    component: () => import('@/views/ServicePage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/playlists',
+    name: 'all-playlists',
+    component: () => import('@/views/AllPlaylistsPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/music-player',
+    name: 'music-player',
+    component: () => import('@/views/MusicPlayerPage.vue'),
+    meta: { requiresAuth: true },
+  },
   {
     path: '/meditation-room',
     name: 'meditation-room',

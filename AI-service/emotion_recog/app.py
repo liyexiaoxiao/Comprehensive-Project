@@ -6,8 +6,9 @@ Flask backend - dual-channel fusion with VA mapping and complex emotion inferenc
 
 import os
 os.environ.setdefault("HF_HOME", "D:/hf_cache")
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# 首次启动需要联网下载模型，下载完成后可取消下面注释以启用离线模式
+# os.environ.setdefault("HF_HUB_OFFLINE", "1")
+# os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 import math
 import tempfile
@@ -78,13 +79,11 @@ def load_model():
             "audio-classification",
             model="prithivMLmods/Speech-Emotion-Classification",
             device=device,
-            model_kwargs={"local_files_only": True},
         )
         speech_to_text = pipeline(
             "automatic-speech-recognition",
             model="openai/whisper-tiny",
             device=device,
-            model_kwargs={"local_files_only": True},
         )
         text_classifier = pipeline(
             "text-classification",
@@ -92,13 +91,11 @@ def load_model():
             return_all_scores=True,
             framework="pt",
             device=device,
-            model_kwargs={"local_files_only": True},
         )
         zh_en_translator = pipeline(
             "translation",
             model="Helsinki-NLP/opus-mt-zh-en",
             device=device,
-            model_kwargs={"local_files_only": True},
         )
     except Exception as exc:
         models_ready = False

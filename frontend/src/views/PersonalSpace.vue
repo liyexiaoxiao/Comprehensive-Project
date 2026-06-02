@@ -670,6 +670,9 @@
 
           <div class="social-layout">
             <div class="social-feed">
+              <div v-if="isSocialPostsLoading" class="empty-state compact-empty-state">
+                正在加载动态...
+              </div>
               <article v-for="post in socialPosts" :key="post.id" class="social-post-card glass-panel-inner">
                 <div class="social-post-top">
                   <div class="social-author-block">
@@ -799,8 +802,28 @@
                 </div>
               </article>
 
-              <div v-if="socialPosts.length === 0" class="empty-state compact-empty-state">
+              <div v-if="!isSocialPostsLoading && socialPosts.length === 0" class="empty-state compact-empty-state">
                 朋友圈暂时还没有动态，点击右上角发布第一条帖子吧！
+              </div>
+
+              <div v-if="socialTotalPages > 1" class="social-pagination">
+                <button
+                  class="action-btn social-secondary-btn"
+                  type="button"
+                  :disabled="isSocialPostsLoading || socialPage <= 0"
+                  @click="changeSocialPage(-1)"
+                >
+                  上一页
+                </button>
+                <span class="social-page-indicator">第 {{ socialPage + 1 }} / {{ socialTotalPages }} 页</span>
+                <button
+                  class="action-btn social-secondary-btn"
+                  type="button"
+                  :disabled="isSocialPostsLoading || socialPage >= socialTotalPages - 1"
+                  @click="changeSocialPage(1)"
+                >
+                  下一页
+                </button>
               </div>
             </div>
 
@@ -882,7 +905,7 @@
                   </div>
                   <div class="friend-details">
                     <span class="friend-name">{{ user.nickname || user.username }}</span>
-                    <span class="friend-id">{{ user.username ? `账号：${user.username}` : '账号信息暂不可用' }}</span>
+                    <span class="friend-id">{{ user.username ? `账号：${user.username}` : (user.userId ? `用户ID：${user.userId}` : '账号信息暂不可用') }}</span>
                   </div>
                 </div>
                 <button class="action-btn outline slim-btn" @click="addFriend(user.userId)">发送申请</button>
@@ -901,7 +924,7 @@
                   </div>
                   <div class="friend-details">
                     <span class="friend-name">{{ req.senderName }}</span>
-                    <span class="friend-id">{{ req.senderUsername ? `账号：${req.senderUsername}` : '请求添加您为好友' }}</span>
+                    <span class="friend-id">{{ req.senderUsername ? `账号：${req.senderUsername}` : (req.senderId ? `用户ID：${req.senderId}` : '请求添加您为好友') }}</span>
                   </div>
                 </div>
                 <div class="request-actions">
@@ -937,7 +960,7 @@
                     </div>
                     <div class="friend-details">
                       <span class="friend-name">{{ friend.name }}</span>
-                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : (friend.userId ? `用户ID：${friend.userId}` : '账号信息暂不可用') }}</span>
                       <span class="friend-desc">{{ friend.friendshipDescription }}</span>
                     </div>
                   </div>
@@ -969,7 +992,7 @@
                     <div class="friend-detail-heading">
                       <div>
                         <h4>{{ selectedFriend.name }}</h4>
-                        <p>{{ selectedFriend.username ? `账号：${selectedFriend.username}` : '账号信息暂不可用' }}</p>
+                        <p>{{ selectedFriend.username ? `账号：${selectedFriend.username}` : (selectedFriend.userId ? `用户ID：${selectedFriend.userId}` : '账号信息暂不可用') }}</p>
                       </div>
                       <span class="friendship-badge">{{ selectedFriend.intimacy }}/3 朵花</span>
                     </div>
@@ -1066,7 +1089,7 @@
                         <span class="friend-name">{{ friend.name }}</span>
                         <span class="chat-list-time">{{ formatChatListTime(friend.lastMessageAt) }}</span>
                       </div>
-                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ friend.username ? `账号：${friend.username}` : (friend.userId ? `用户ID：${friend.userId}` : '账号信息暂不可用') }}</span>
                       <div class="chat-preview-row">
                         <span class="chat-last-message">{{ friend.lastMessagePreview || '点击开始聊天' }}</span>
                         <span v-if="friend.unreadCount > 0" class="chat-unread-badge">
@@ -1096,7 +1119,7 @@
                         <h4>{{ activeChatFriend.name }}</h4>
                         <span class="friendship-badge">{{ activeChatFriend.intimacy }}/3 朵花</span>
                       </div>
-                      <span class="friend-id">{{ activeChatFriend.username ? `账号：${activeChatFriend.username}` : '账号信息暂不可用' }}</span>
+                      <span class="friend-id">{{ activeChatFriend.username ? `账号：${activeChatFriend.username}` : (activeChatFriend.userId ? `用户ID：${activeChatFriend.userId}` : '账号信息暂不可用') }}</span>
                       <span class="friend-desc">{{ activeChatFriend.bio || '和这位朋友聊聊最近的心情吧。' }}</span>
                     </div>
                   </div>
@@ -1503,7 +1526,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import { loadEcharts } from '@/utils/loadEcharts'
 import { useMusicStore } from '@/stores/musicStore'
 import { ElMessage } from 'element-plus'
 import {
@@ -1661,7 +1684,6 @@ const handleProfileAction = async () => {
       nickname: userProfile.value.name.trim(),
       email: userProfile.value.email.trim() || null,
       phone: userProfile.value.phone.trim() || null,
-      avatarUrl,
       bio: userProfile.value.description.trim() || null,
     })
 
@@ -1693,6 +1715,37 @@ const tabs = [
 ]
 const currentTab = ref('profile')
 const currentMonth = ref(new Date().getMonth() + 1)
+
+const TAB_CACHE_MS = 60 * 1000
+const tabLoadedAt = ref({})
+const musicTabReady = ref(false)
+let echartsLib = null
+
+const isTabCacheFresh = (tab) => {
+  const loadedAt = tabLoadedAt.value[tab]
+  return Boolean(loadedAt && Date.now() - loadedAt < TAB_CACHE_MS)
+}
+
+const markTabLoaded = (tab) => {
+  tabLoadedAt.value = { ...tabLoadedAt.value, [tab]: Date.now() }
+}
+
+const getEcharts = async () => {
+  if (!echartsLib) {
+    echartsLib = await loadEcharts()
+  }
+  return echartsLib
+}
+
+const ensureMusicTabData = async () => {
+  if (musicTabReady.value) return
+  await Promise.all([
+    musicStore.fetchUserData(),
+    musicStore.fetchEmotionTags(),
+    musicStore.fetchPublicTracks(),
+  ])
+  musicTabReady.value = true
+}
 
 // --- Emotion Configuration ---
 const emotionConfig = {
@@ -2085,7 +2138,7 @@ const fetchEmotionData = async () => {
   isEmotionDataLoading.value = true
   updateDataChartLoading(true)
   try {
-    const res = await getMyEmotionSnapshotsApi({ size: 100 })
+    const res = await getMyEmotionSnapshotsApi({ size: 50 })
     if (res.data && Array.isArray(res.data)) {
       emotionSnapshots.value = res.data
       
@@ -2463,8 +2516,9 @@ const parseDiaryEmotions = (diary) => {
   return diary.emotions.filter((emotion) => emotionConfig[emotion])
 }
 
-const initDiaryWeeklyChart = () => {
+const initDiaryWeeklyChart = async () => {
   if (currentTab.value !== 'diary') return
+  const echarts = await getEcharts()
   nextTick(() => {
     if (diaryWeeklyChartRef.value) {
       if (diaryWeeklyChart) diaryWeeklyChart.dispose()
@@ -2554,9 +2608,10 @@ const initDiaryWeeklyChart = () => {
   })
 }
 
-const initCharts = () => {
+const initCharts = async () => {
   if (currentTab.value !== 'data') return
-  
+  const echarts = await getEcharts()
+
   nextTick(() => {
     // 1. Trend Chart
     if (trendChartRef.value) {
@@ -2593,35 +2648,64 @@ watch(currentTab, (newTab) => {
   if (newTab !== 'chat') {
     stopChatPolling()
   }
-  if (newTab === 'diary') {
-    fetchDiaries().then(() => {
-      initDiaryWeeklyChart()
-    })
-  } else if (newTab === 'data') {
-    initCharts()
-    fetchEmotionData()
-  } else if (newTab === 'feedback') {
-    fetchFeedbackCenterData()
-  } else if (newTab === 'meditation') {
-    fetchMeditationLogs().then(() => {
-      initMeditationCharts()
-    })
-    fetchGardenData()
-  } else if (newTab === 'social') {
-    fetchSocialPosts()
-    fetchSocialNotifications()
-  } else if (newTab === 'friends') {
-    fetchFriends()
-    fetchFriendRequests()
-  } else if (newTab === 'chat') {
-    loadChatTabData()
+  loadTabData(newTab)
+})
+
+const loadTabData = async (tab, { force = false } = {}) => {
+  if (tab === 'diary') {
+    if (!force && isTabCacheFresh('diary')) return
+    await fetchDiaries()
+    await initDiaryWeeklyChart()
+    markTabLoaded('diary')
+    return
+  }
+  if (tab === 'data') {
+    if (!force && isTabCacheFresh('data')) return
+    await initCharts()
+    await fetchEmotionData()
+    markTabLoaded('data')
+    return
+  }
+  if (tab === 'meditation') {
+    if (!force && isTabCacheFresh('meditation')) return
+    await fetchMeditationLogs()
+    await initMeditationCharts()
+    await fetchGardenData()
+    markTabLoaded('meditation')
+    return
+  }
+  if (tab === 'music') {
+    await ensureMusicTabData()
+    return
+  }
+  if (tab === 'social') {
+    if (!force && isTabCacheFresh('social')) return
+    await fetchSocialPosts()
+    if (!force && isTabCacheFresh('social-notifications')) {
+      markTabLoaded('social')
+      return
+    }
+    await fetchSocialNotifications()
+    markTabLoaded('social')
+    markTabLoaded('social-notifications')
+    return
+  }
+  if (tab === 'friends') {
+    if (!force && isTabCacheFresh('friends')) return
+    await fetchFriends()
+    await fetchFriendRequests()
+    markTabLoaded('friends')
+    return
+  }
+  if (tab === 'chat') {
+    await loadChatTabData()
     startChatPolling()
   }
-})
+}
 
 watch(currentDate, () => {
   if (currentTab.value === 'diary') {
-    initDiaryWeeklyChart()
+    void initDiaryWeeklyChart()
   }
 })
 
@@ -3066,6 +3150,10 @@ const socialDraft = ref({
 })
 const parsedSocialMoodTags = computed(() => parseSocialMoodTags(socialDraft.value.mood))
 const socialPosts = ref([])
+const socialPage = ref(0)
+const socialPageSize = 10
+const socialTotalPages = ref(1)
+const isSocialPostsLoading = ref(false)
 const mySocialPosts = ref([])
 const isMyPostsLoading = ref(false)
 const deletingPostId = ref(null)
@@ -3319,20 +3407,43 @@ const mapSocialPostList = async (rawPosts = []) => {
 }
 
 const fetchSocialPosts = async () => {
+  isSocialPostsLoading.value = true
   try {
-    const res = await getPostsApi(0, 50)
-    if (res.data && res.data.content) {
-      socialPosts.value = await mapSocialPostList(res.data.content)
+    const res = await getPostsApi(socialPage.value, socialPageSize)
+    const pageData = res.data
+    if (pageData?.content) {
+      socialPosts.value = await mapSocialPostList(pageData.content)
+      socialTotalPages.value = Math.max(pageData.totalPages || 1, 1)
+    } else {
+      socialPosts.value = []
+      socialTotalPages.value = 1
     }
   } catch (e) {
     console.error('Failed to fetch social posts:', e)
+  } finally {
+    isSocialPostsLoading.value = false
   }
+}
+
+const changeSocialPage = async (delta) => {
+  const nextPage = socialPage.value + delta
+  if (nextPage < 0 || nextPage >= socialTotalPages.value) return
+  socialPage.value = nextPage
+  await fetchSocialPosts()
+}
+
+const refreshSocialFeed = async () => {
+  socialPage.value = 0
+  await fetchSocialPosts()
+  await fetchSocialNotifications()
+  markTabLoaded('social')
+  markTabLoaded('social-notifications')
 }
 
 const fetchMySocialPosts = async () => {
   isMyPostsLoading.value = true
   try {
-    const res = await getMyPostsApi(0, 100)
+    const res = await getMyPostsApi(0, 20)
     const rawPosts = res.data?.content || []
     mySocialPosts.value = await mapSocialPostList(rawPosts)
   } catch (e) {
@@ -3444,7 +3555,7 @@ const toggleSocialLike = async (post) => {
   try {
     await likePostApi(post.id)
     post.isMenuOpen = false
-    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    await refreshSocialFeed()
     
     if (!post.likedByMe) {
       appendUserBehaviorLogApi({
@@ -3466,7 +3577,7 @@ const handleSocialMenuLike = async (post) => {
 const toggleCommentLike = async (post, comment) => {
   try {
     await likeCommentApi(post.id, comment.id)
-    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    await refreshSocialFeed()
   } catch (e) {
     if (e.response?.status === 403) {
       ElMessage.error('只有帖子相关好友与评论主人可以点赞')
@@ -3485,7 +3596,7 @@ const submitSocialComment = async (post) => {
     post.commentDraft = ''
     post.isCommentEditorOpen = false
     ElMessage.success('评论成功')
-    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    await refreshSocialFeed()
   } catch (e) {
     ElMessage.error('评论失败')
   }
@@ -3500,7 +3611,7 @@ const submitCommentReply = async (post, comment) => {
     comment.replyDraft = ''
     comment.isReplyEditorOpen = false
     ElMessage.success('回复成功')
-    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    await refreshSocialFeed()
   } catch (e) {
     if (e.response?.status === 403) {
       ElMessage.error('只有帖子相关好友与评论主人可以回复')
@@ -3520,7 +3631,7 @@ const submitSocialPost = async () => {
     const res = await createPostApi({ content, moodTag: normalizedMood })
     ElMessage.success('发布成功')
     closeSocialComposer()
-    await Promise.all([fetchSocialPosts(), fetchSocialNotifications()])
+    await refreshSocialFeed()
     
     // User Behavior Log
     appendUserBehaviorLogApi({
@@ -3547,7 +3658,7 @@ const deleteSocialPost = async (post, options = {}) => {
     socialPosts.value = socialPosts.value.filter(item => item.id !== post.id)
     mySocialPosts.value = mySocialPosts.value.filter(item => item.id !== post.id)
 
-    const tasks = [fetchSocialNotifications(), fetchSocialPosts()]
+    const tasks = [refreshSocialFeed()]
     if (showMyPostsModal.value) {
       tasks.push(fetchMySocialPosts())
     }
@@ -3874,6 +3985,7 @@ const fetchFriends = async () => {
         return {
         friendshipId: f.friendshipId,
         id: f.friendUserId,
+        userId: f.friendUserId,
         name: getDisplayName(friendUserMap.value[f.friendUserId]) || `用户 ${f.friendUserId}`,
         username: friendUserMap.value[f.friendUserId]?.username || '',
         avatarUrl: friendUserMap.value[f.friendUserId]?.avatarUrl || '',
@@ -4145,7 +4257,8 @@ const deleteFriend = async (friendshipId) => {
 const meditationChartRef = ref(null)
 let meditationChart = null
 
-const initMeditationCharts = () => {
+const initMeditationCharts = async () => {
+  const echarts = await getEcharts()
   nextTick(() => {
     if (meditationChartRef.value) {
       if (meditationChart) meditationChart.dispose();
@@ -4809,7 +4922,7 @@ window.addEventListener('resize', () => {
 
 .feedback-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
   gap: 20px;
   margin-top: 20px;
 }
@@ -5091,6 +5204,19 @@ window.addEventListener('resize', () => {
 .social-feed::-webkit-scrollbar-track {
   background: rgba(235, 242, 240, 0.72);
   border-radius: 999px;
+}
+
+.social-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 4px;
+}
+
+.social-page-indicator {
+  color: #6b7d77;
+  font-size: 14px;
 }
 
 .social-post-card {
@@ -6146,7 +6272,7 @@ window.addEventListener('resize', () => {
 }
 
 .friends-dashboard.detail-open {
-  grid-template-columns: minmax(320px, 1.05fr) minmax(300px, 0.92fr);
+  grid-template-columns: minmax(280px, 1.05fr) minmax(260px, 0.92fr);
 }
 
 .friends-list-panel,
@@ -6585,7 +6711,7 @@ window.addEventListener('resize', () => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr);
   gap: 20px;
 }
 
