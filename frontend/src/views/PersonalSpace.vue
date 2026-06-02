@@ -1378,9 +1378,11 @@ import {
 } from '@/api/social'
 import { formatApiDateTime, parseApiDateTime } from '@/utils/dateTime'
 
-import { getMyEmotionSnapshotsApi } from '@/api/data'
-
-import { appendUserBehaviorLogApi } from '@/api/data'
+import {
+  appendEmotionSnapshotApi,
+  appendUserBehaviorLogApi,
+  getMyEmotionSnapshotsApi,
+} from '@/api/data'
 
 import { getMyMeditationLogsApi, getMyGardenApi } from '@/api/meditation'
 
@@ -1535,6 +1537,28 @@ const markTabLoaded = (tab) => {
   tabLoadedAt.value = { ...tabLoadedAt.value, [tab]: Date.now() }
 }
 
+const invalidateTabCache = (tab) => {
+  const next = { ...tabLoadedAt.value }
+  delete next[tab]
+  tabLoadedAt.value = next
+}
+
+const recordEmotionSnapshotsFromDiary = async (emotions) => {
+  const list = Array.isArray(emotions) ? emotions : []
+  if (!list.length) return
+  await Promise.all(
+    list.map((emotion) => {
+      const cfg = emotionConfig[emotion]
+      if (!cfg) return Promise.resolve()
+      return appendEmotionSnapshotApi({
+        source: 'diary',
+        emotion,
+        score: cfg.score,
+      }).catch((e) => console.warn('append emotion snapshot failed', e))
+    }),
+  )
+}
+
 const getEcharts = async () => {
   if (!echartsLib) {
     echartsLib = await loadEcharts()
@@ -1664,7 +1688,13 @@ const saveDiary = async () => {
     await fetchDiaries()
     initDiaryWeeklyChart()
     syncDiaryFormFromSelected()
-    
+
+    await recordEmotionSnapshotsFromDiary(newDiary.value.emotions)
+    invalidateTabCache('data')
+    if (currentTab.value === 'data') {
+      await fetchEmotionData()
+    }
+
     appendUserBehaviorLogApi({
       actionType,
       targetType: 'diary',
