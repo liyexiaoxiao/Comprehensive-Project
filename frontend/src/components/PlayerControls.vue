@@ -48,8 +48,6 @@ import {
     getPreviousEmotionMusicApi,
 } from '@/api/python';
 
-import '@fortawesome/fontawesome-free/css/all.css';
-
 const isPlaying = ref(false);
 const isMuted = ref(false);
 const audio = new Audio();

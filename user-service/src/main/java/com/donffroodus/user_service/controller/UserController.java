@@ -112,7 +112,12 @@ public class UserController {
     }
 
     @GetMapping("/summaries")
-    public ResponseEntity<?> getUserSummaries(@RequestParam("ids") String ids) {
+    public ResponseEntity<?> getUserSummaries(
+            @RequestParam("ids") String ids,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).body("Unauthorized");
+        }
         if (ids == null || ids.isBlank()) {
             return ResponseEntity.badRequest().body("ids is required");
         }
@@ -123,9 +128,11 @@ public class UserController {
                     .filter(part -> !part.isEmpty())
                     .map(Long::valueOf)
                     .toList();
-            return ResponseEntity.ok(userService.getUserSummariesByIds(userIds));
+            return ResponseEntity.ok(userService.getUserSummariesByIds(userIds, currentUserId));
         } catch (NumberFormatException e) {
             return ResponseEntity.badRequest().body("ids must be comma-separated numbers");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(401).body(e.getMessage());
         }
     }
 

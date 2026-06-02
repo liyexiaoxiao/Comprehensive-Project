@@ -76,6 +76,7 @@ services:
       - DB_HOST=${DB_HOST}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
+      - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL:-http://host.docker.internal:5001}
 
   data-service:
     build: ./data-service

@@ -5,10 +5,10 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(mode === 'development' ? [vueDevTools()] : []),
   ],
   server: {
     proxy: {
@@ -33,4 +33,18 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
-})
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/echarts')) {
+            return 'echarts'
+          }
+          if (id.includes('node_modules/element-plus')) {
+            return 'element-plus'
+          }
+        },
+      },
+    },
+  },
+}))

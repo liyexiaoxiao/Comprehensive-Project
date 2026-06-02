@@ -45,8 +45,8 @@ export const isAdminUser = (user) => {
 export const resolveUserAvatarUrl = (avatarUrl) => {
   const value = typeof avatarUrl === 'string' ? avatarUrl.trim() : ''
   if (!value) return ''
-  if (/^(https?:|data:|blob:)/i.test(value)) {
-    return value
+  if (!value.startsWith('/api/users/avatars/')) {
+    return ''
   }
-  return `${gatewayBaseUrl}${value.startsWith('/') ? value : `/${value}`}`
+  return `${gatewayBaseUrl}${value}`
 }
