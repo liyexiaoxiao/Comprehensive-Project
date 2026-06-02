@@ -72,15 +72,30 @@ services:
     build: ./social-service
     container_name: social-service
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DB_HOST=${DB_HOST}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
       - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL:-http://host.docker.internal:5001}
 
+  mongodb:
+    image: mongo:7
+    container_name: mongodb-dev
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+
   data-service:
     build: ./data-service
     container_name: data-service
     restart: always
+    depends_on:
+      - mongodb
     environment:
-      - MONGO_URI=mongodb://host.docker.internal:27017/emohealing_log_db
+      # Map form avoids '&' being split; timeouts are set in application.yml default URI.
+      MONGO_URI: ${MONGO_URI:-mongodb://mongodb:27017/emohealing_log_db}
+
+volumes:
+  mongo_data:
