@@ -188,8 +188,8 @@
                     <input v-model.trim="officialTrackForm.coverUrl" type="text" />
                   </label>
                   <label class="full-width">
-                    <span>标签（用逗号或空格分隔）</span>
-                    <textarea v-model.trim="officialTrackForm.tagsText" rows="3"></textarea>
+                    <span>情绪标签</span>
+                    <textarea v-model.trim="officialTrackForm.tagsText" rows="3" disabled></textarea>
                   </label>
                 </div>
 
@@ -232,7 +232,7 @@ import {
   mergeOfficialPlaylistConfigs,
 } from '@/utils/playlistCatalog'
 import { readAudioTagMetadata } from '@/utils/audioMetadata'
-import { getRealMusicCover } from '@/utils/realMusic'
+import { getRealMusicCover, readRemoteAudioDuration } from '@/utils/realMusic'
 
 const ADMIN_OFFICIAL_SOURCE_PREFIX = 'admin-official-upload:'
 const isOfficialMusicLoading = ref(false)
@@ -306,12 +306,25 @@ const buildOfficialPlaylistPayload = (playlist) => ({
   sortOrder: Number.isFinite(Number(playlist?.sortOrder)) ? Number(playlist.sortOrder) : 0,
 })
 
-const applyOfficialTrackForm = (track) => {
+const applyOfficialTrackForm = async (track) => {
   officialTrackForm.title = track?.title || ''
   officialTrackForm.artist = track?.artist || ''
   officialTrackForm.duration = Number(track?.duration) || 0
   officialTrackForm.coverUrl = track?.coverUrl || ''
-  officialTrackForm.tagsText = Array.isArray(track?.tags) ? track.tags.join(', ') : ''
+  // 官方歌单曲目的情绪标签由所属歌单决定，不从 track 历史数据读取
+  officialTrackForm.tagsText = activeOfficialPlaylist.value?.tagName || ''
+
+  // 兜底：如果 duration 为 0 但有音频地址，从远程音频文件异步读取真实时长
+  if (!officialTrackForm.duration && track?.fileUrl) {
+    try {
+      const secs = await readRemoteAudioDuration(track.fileUrl)
+      if (secs > 0) {
+        officialTrackForm.duration = secs
+      }
+    } catch {
+      // 读取失败保持表单当前值
+    }
+  }
 }
 
 const parseTagNames = (value) => Array.from(new Set(String(value || '')
@@ -410,14 +423,39 @@ const handleOfficialAudioSelect = async (event) => {
     officialUploadForm.title = fallbackTitle
   }
   officialUploadForm.coverUrl = ''
-  const audio = document.createElement('audio')
-  audio.src = URL.createObjectURL(file)
-  audio.onloadedmetadata = () => {
-    officialUploadForm.duration = Number.isFinite(audio.duration) ? Math.floor(audio.duration) : 0
-    URL.revokeObjectURL(audio.src)
-  }
 
-  const metadata = await readAudioTagMetadata(file)
+  // 从音频文件提取时长（优先于元数据读取，确保可靠获取）
+  const extractDuration = (file) => new Promise((resolve) => {
+    const audio = document.createElement('audio')
+    const objectUrl = URL.createObjectURL(file)
+    audio.src = objectUrl
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+      audio.remove()
+    }
+    audio.addEventListener('loadedmetadata', () => {
+      const secs = Number.isFinite(audio.duration) ? Math.floor(audio.duration) : 0
+      cleanup()
+      resolve(secs)
+    }, { once: true })
+    audio.addEventListener('error', () => {
+      cleanup()
+      resolve(0)
+    }, { once: true })
+    // 超时保护：部分浏览器可能不触发 loadedmetadata
+    setTimeout(() => {
+      if (Number.isNaN(audio.duration) || audio.duration === Infinity) {
+        cleanup()
+        resolve(0)
+      }
+    }, 5000)
+  })
+
+  const [metadata, durationFromAudio] = await Promise.all([
+    readAudioTagMetadata(file),
+    extractDuration(file),
+  ])
+  officialUploadForm.duration = durationFromAudio || officialUploadForm.duration
   if (metadata.title && (!officialUploadForm.title || officialUploadForm.title === fallbackTitle)) {
     officialUploadForm.title = metadata.title
   }
@@ -507,9 +545,9 @@ const submitOfficialUpload = async () => {
   }
 }
 
-const selectOfficialTrack = (track) => {
+const selectOfficialTrack = async (track) => {
   editingOfficialTrackId.value = String(track?.id || '')
-  applyOfficialTrackForm(track)
+  await applyOfficialTrackForm(track)
 }
 
 const saveOfficialTrack = async () => {
@@ -525,7 +563,7 @@ const saveOfficialTrack = async () => {
 
   try {
     isSavingOfficialTrack.value = true
-    const nextTagNames = Array.from(new Set([playlist.tagName, ...parseTagNames(officialTrackForm.tagsText)]))
+    const nextTagNames = [playlist.tagName]
     const tagIds = await ensureEmotionTagIds(nextTagNames)
 
     await updateMusicResourceApi(musicId, {
@@ -544,7 +582,7 @@ const saveOfficialTrack = async () => {
     await refreshOfficialMusic()
     const refreshed = activeOfficialPlaylist.value?.tracks?.find((item) => String(item.id) === String(track.id))
     if (refreshed) {
-      selectOfficialTrack(refreshed)
+      await selectOfficialTrack(refreshed)
     }
     ElMessage.success('官方曲目已更新')
   } catch (error) {

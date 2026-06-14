@@ -1,5 +1,5 @@
 import * as echarts from 'echarts/core'
-import { BarChart, HeatmapChart, LineChart, PieChart } from 'echarts/charts'
+import { BarChart, HeatmapChart, LineChart, PieChart, ScatterChart } from 'echarts/charts'
 import {
   GraphicComponent,
   GridComponent,
@@ -15,6 +15,7 @@ echarts.use([
   LineChart,
   PieChart,
   HeatmapChart,
+  ScatterChart,
   GridComponent,
   TooltipComponent,
   VisualMapComponent,

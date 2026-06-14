@@ -951,24 +951,23 @@ onBeforeUnmount(() => {
   background: rgba(33, 37, 49, 0.86);
   color: #fff;
   display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .progress-block {
-  flex: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 220px;
-  flex-wrap: wrap;
 }
 
 .progress-block span,
 .volume-box span {
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.9rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .control-row {
@@ -976,6 +975,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .secondary-btn,
@@ -1003,9 +1003,13 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-left: 10px;
-  width: 120px;
-  max-width: 100%;
+  margin-left: auto;
+  min-width: 130px;
+}
+
+.volume-box input[type='range'] {
+  width: 80px;
+  flex: none;
 }
 
 input[type='range'] {
@@ -1060,16 +1064,16 @@ input[type='range'] {
 
   .bottom-controls {
     padding: 18px;
-  }
-
-  .progress-block {
-    min-width: 0;
+    gap: 14px;
   }
 
   .volume-box {
-    width: 100%;
     margin-left: 0;
-    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .volume-box input[type='range'] {
+    width: 60px;
   }
 
   .topbar-note,
@@ -1104,13 +1108,12 @@ input[type='range'] {
 
   .bottom-controls {
     padding: 12px;
+    gap: 12px;
   }
 
   .progress-block {
-    flex-direction: column;
-    gap: 6px;
-    align-items: stretch;
     font-size: 0.8rem;
+    gap: 8px;
   }
 
   .queue-item {

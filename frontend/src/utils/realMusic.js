@@ -157,7 +157,7 @@ const createFallbackTags = (emotion) => {
 
 export const normalizeMusicResourceTrack = (resource, tagNames = [], options = {}) => {
   const normalizedTags = [...new Set((Array.isArray(tagNames) ? tagNames : []).filter(Boolean))]
-  const emotion = normalizeEmotion(normalizedTags[0] || options.emotion || resource?.artist || resource?.title || 'neutral')
+  const emotion = normalizeEmotion(normalizedTags[0] || options.emotion || 'neutral')
 
   return {
     ...resource,

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,11 +199,90 @@ def find_existing_resource(resources: List[dict], track: TrackSpec) -> Optional[
     return None
 
 
-def build_resource_payload(track: TrackSpec) -> dict:
+# MPEG Audio 比特率查找表（单位：kbps）
+_BITRATE_TABLE_MPEG1 = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0]
+_BITRATE_TABLE_MPEG2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0]
+_SAMPLERATE_TABLE = {
+    0: [44100, 22050, 11025],
+    1: [48000, 24000, 12000],
+    2: [32000, 16000, 8000],
+}
+
+
+def _read_syncsafe_int(data: bytes) -> int:
+    """读取 ID3v2 sync-safe 整数（最高位为 0）。"""
+    return (data[0] << 21) | (data[1] << 14) | (data[2] << 7) | data[3]
+
+
+def get_mp3_duration(filepath: Path) -> int:
+    """使用纯标准库从 MPEG Audio 帧头提取时长（秒），失败返回 0。"""
+    try:
+        with open(filepath, "rb") as fh:
+            # 跳过 ID3v2 标签
+            header = fh.read(10)
+            audio_offset = 0
+            if header[:3] == b"ID3":
+                audio_offset = _read_syncsafe_int(header[6:10]) + 10
+                fh.seek(audio_offset)
+
+            # 寻找第一个帧同步字 0xFFE0
+            while True:
+                byte = fh.read(1)
+                if not byte:
+                    return 0
+                if byte[0] == 0xFF:
+                    next_byte = fh.read(1)
+                    if not next_byte:
+                        return 0
+                    if (next_byte[0] & 0xE0) == 0xE0:
+                        frame_header = byte + next_byte + fh.read(2)
+                        audio_offset += 2  # 已读取同步字
+                        break
+                    fh.seek(-1, 1)
+                audio_offset += 1
+
+            mpeg_version = (frame_header[1] >> 3) & 0x03  # 0=MPEG2.5, 2=MPEG2, 3=MPEG1
+            layer = (frame_header[1] >> 1) & 0x03          # 1=Layer3, 2=Layer2, 3=Layer1
+            bitrate_idx = (frame_header[2] >> 4) & 0x0F
+            samplerate_idx = (frame_header[2] >> 2) & 0x03
+
+            if mpeg_version == 3:
+                br = _BITRATE_TABLE_MPEG1[bitrate_idx] if bitrate_idx < len(_BITRATE_TABLE_MPEG1) else 0
+            else:
+                br = _BITRATE_TABLE_MPEG2[bitrate_idx] if bitrate_idx < len(_BITRATE_TABLE_MPEG2) else 0
+
+            sr = _SAMPLERATE_TABLE.get(mpeg_version, [0, 0, 0])[samplerate_idx] if samplerate_idx < 3 else 0
+
+            if br == 0 or sr == 0:
+                return 0
+
+            # 计算帧长度 → 估算总帧数 → 时长
+            if layer == 3:  # Layer 1
+                frame_size = (12 * br * 1000 // sr + 4) * 4
+            else:            # Layer 2 / Layer 3
+                frame_size = 144 * br * 1000 // sr
+
+            if frame_size <= 0:
+                return 0
+
+            fh.seek(0, 2)
+            total_size = fh.tell()
+            audio_size = total_size - audio_offset - 4
+            if audio_size <= 0:
+                return 0
+            frames = audio_size // frame_size
+            duration = frames * (1152 // (1 if sr >= 32000 else 2)) / sr  # samples per frame
+            return int(duration)
+    except Exception:
+        return 0
+
+
+def build_resource_payload(track: TrackSpec, music_dir: Path) -> dict:
+    duration = get_mp3_duration(music_dir / track.filename)
     return {
         "title": track.title,
         "artist": track.emotion_label,
-        "duration": 0,
+        "duration": duration,
         "fileUrl": track.file_url,
         "coverUrl": None,
         "source": track.source,
@@ -217,14 +297,14 @@ def resource_needs_update(existing: dict, payload: dict) -> bool:
     return False
 
 
-def upsert_resources(api: JsonApiClient, resources: List[dict], tracks: List[TrackSpec], system_user_id: str):
+def upsert_resources(api: JsonApiClient, resources: List[dict], tracks: List[TrackSpec], system_user_id: str, music_dir: Path):
     created = 0
     updated = 0
     unchanged = 0
     results: Dict[str, int] = {}
 
     for track in tracks:
-        payload = build_resource_payload(track)
+        payload = build_resource_payload(track, music_dir)
         existing = find_existing_resource(resources, track)
         if existing is None:
             created_resource = api.request("POST", "/music-resources", payload, headers={"X-User-Id": system_user_id})
@@ -313,6 +393,7 @@ def main() -> int:
             existing_resources,
             specs,
             args.system_user_id,
+            music_dir,
         )
         mapped = apply_tag_mappings(api, specs, music_id_by_file, tag_id_by_name)
 

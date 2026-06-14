@@ -2041,7 +2041,7 @@ const buildTrendChartOption = () => ({
 
 const buildDistributionChartOption = () => ({
   tooltip: { trigger: 'item' },
-  legend: { orient: 'vertical', left: 'left', textStyle: { color: '#666' } },
+  legend: { orient: 'horizontal', bottom: 'bottom', textStyle: { color: '#666' } },
   series: [{
     type: 'pie',
     radius: ['40%', '70%'],
@@ -2164,31 +2164,171 @@ const updateDataChartLoading = (loading) => {
   })
 }
 
+// ===== Mock 数据开关（临时） =====
+const MOCK_EMOTION_DATA = true
+const MOCK_MEDITATION_DATA = true
+
+const generateMockMeditationLogs = () => {
+  const logs = []
+  const now = new Date()
+
+  // 生成过去 35 天的冥想日志，覆盖 tracker 日历和本周柱状图
+  for (let daysAgo = 0; daysAgo < 35; daysAgo++) {
+    // 每天 0-2 条冥想记录（部分天为0，更真实）
+    if (Math.random() < 0.2) continue // 20% 的天没有冥想
+    const sessionCount = 1 + Math.floor(Math.random() * 2)
+    for (let s = 0; s < sessionCount; s++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - daysAgo)
+      // 冥想时间分布在 6:00-23:00
+      d.setHours(6 + Math.floor(Math.random() * 17), Math.floor(Math.random() * 60), 0, 0)
+
+      // 冥想时长 5-45 分钟
+      const duration = 5 + Math.floor(Math.random() * 41)
+
+      logs.push({
+        id: `mock-med-${daysAgo}-${s}`,
+        userId: 1,
+        startTime: d.toISOString(),
+        duration,
+        endTime: new Date(d.getTime() + duration * 60000).toISOString()
+      })
+    }
+  }
+
+  // 确保本周每天至少有一条记录，柱状图有内容
+  for (let daysAgo = 0; daysAgo < 7; daysAgo++) {
+    const hasData = logs.some(l => {
+      const ld = new Date(l.startTime)
+      const nd = new Date(now)
+      nd.setDate(nd.getDate() - daysAgo)
+      return ld.toDateString() === nd.toDateString()
+    })
+    if (!hasData) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - daysAgo)
+      d.setHours(8 + Math.floor(Math.random() * 12), 0, 0, 0)
+      const duration = 10 + Math.floor(Math.random() * 26) // 10-35 min
+      logs.push({
+        id: `mock-med-fill-${daysAgo}`,
+        userId: 1,
+        startTime: d.toISOString(),
+        duration,
+        endTime: new Date(d.getTime() + duration * 60000).toISOString()
+      })
+    }
+  }
+
+  console.log('[Mock] 冥想日志 mock 已启用，共生成', logs.length, '条记录')
+  return logs
+}
+
+const generateMockGardenData = () => ({
+  seeds: [
+    { itemId: 1, count: 3 + Math.floor(Math.random() * 5) },
+    { itemId: 2, count: 1 + Math.floor(Math.random() * 3) },
+    { itemId: 3, count: Math.floor(Math.random() * 3) }
+  ].filter(s => s.count > 0),
+  fruits: [
+    { itemId: 1, count: 1 + Math.floor(Math.random() * 4) },
+    { itemId: 2, count: Math.floor(Math.random() * 3) }
+  ].filter(f => f.count > 0),
+  unlockedPlantIds: [1, 2] // 已解锁向日葵和玫瑰
+})
+
+const generateMockEmotionSnapshots = () => {
+  const emotions = ['Happy', 'Calm', 'Sad', 'Angry', 'Fear', 'Surprise', 'Disgust', 'Neutral']
+  const emotionScores = { Happy: 2, Calm: 1, Sad: -1, Angry: -2, Fear: -2, Surprise: 0, Disgust: -2, Neutral: 0 }
+  const snapshots = []
+  const now = new Date()
+
+  // 生成过去 35 天的数据，覆盖热力图和趋势图
+  for (let daysAgo = 0; daysAgo < 35; daysAgo++) {
+    // 每天 1-3 条情绪快照
+    const count = 1 + Math.floor(Math.random() * 3)
+    for (let j = 0; j < count; j++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - daysAgo)
+      d.setHours(8 + Math.floor(Math.random() * 14), Math.floor(Math.random() * 60), 0, 0)
+
+      const emotion = emotions[Math.floor(Math.random() * emotions.length)]
+      const baseScore = emotionScores[emotion]
+      // 在基础分数上加入小幅随机波动
+      const score = baseScore + (Math.random() - 0.5) * 2
+
+      snapshots.push({
+        id: `mock-${daysAgo}-${j}`,
+        userId: 1,
+        source: 'diary',
+        emotion,
+        score: Math.round(score * 10) / 10,
+        createdAt: d.toISOString()
+      })
+    }
+  }
+
+  // 确保近 7 天每天至少有一条数据，让趋势图有内容
+  for (let daysAgo = 0; daysAgo < 7; daysAgo++) {
+    const hasData = snapshots.some(s => {
+      const sd = new Date(s.createdAt)
+      const nd = new Date(now)
+      nd.setDate(nd.getDate() - daysAgo)
+      return sd.toDateString() === nd.toDateString()
+    })
+    if (!hasData) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - daysAgo)
+      d.setHours(12, 0, 0, 0)
+      const emotion = emotions[Math.floor(Math.random() * emotions.length)]
+      snapshots.push({
+        id: `mock-fill-${daysAgo}`,
+        userId: 1,
+        source: 'diary',
+        emotion,
+        score: emotionScores[emotion],
+        createdAt: d.toISOString()
+      })
+    }
+  }
+
+  return snapshots
+}
+
 const fetchEmotionData = async () => {
   isEmotionDataLoading.value = true
   updateDataChartLoading(true)
   try {
-    const res = await getMyEmotionSnapshotsApi({ size: 50 })
-    if (res.data && Array.isArray(res.data)) {
-      emotionSnapshots.value = res.data
-      
+    let resData = null
+    if (MOCK_EMOTION_DATA) {
+      // 使用 mock 数据
+      await new Promise(r => setTimeout(r, 300)) // 模拟网络延迟
+      resData = generateMockEmotionSnapshots()
+      console.log('[Mock] 情绪数据 mock 已启用，共生成', resData.length, '条快照')
+    } else {
+      const res = await getMyEmotionSnapshotsApi({ size: 50 })
+      resData = res.data
+    }
+
+    if (resData && Array.isArray(resData)) {
+      emotionSnapshots.value = resData
+
       const now = new Date()
       const tData = [0, 0, 0, 0, 0, 0, 0]
       const tCount = [0, 0, 0, 0, 0, 0, 0]
       const distMap = {}
-      
-      res.data.forEach(snap => {
+
+      resData.forEach(snap => {
         const snapDate = new Date(snap.createdAt)
         const diffTime = Math.abs(now - snapDate)
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-        
+
         // Trend
         if (diffDays < 7) {
           const index = 6 - diffDays
           tData[index] += snap.score || 0
           tCount[index] += 1
         }
-        
+
         // Distribution
         const eName = snap.emotion
         if (eName) {
@@ -2234,7 +2374,7 @@ const fetchEmotionData = async () => {
       const firstDayIndex = firstDay === 0 ? 6 : firstDay - 1;
       
       const snapMapByDay = {}
-      res.data.forEach(snap => {
+      resData.forEach(snap => {
         const d = new Date(snap.createdAt)
         if (d.getFullYear() === year && (d.getMonth() + 1) === month) {
           const day = d.getDate()
@@ -2461,10 +2601,18 @@ const buildMeditationDurationMap = (logs = []) => {
 
 const fetchMeditationLogs = async () => {
   try {
-    const res = await getMyMeditationLogsApi()
-    if (res.data && Array.isArray(res.data)) {
-      meditationLogs.value = res.data
-      const durationMap = buildMeditationDurationMap(res.data)
+    let logsData = null
+    if (MOCK_MEDITATION_DATA) {
+      await new Promise(r => setTimeout(r, 200))
+      logsData = generateMockMeditationLogs()
+    } else {
+      const res = await getMyMeditationLogsApi()
+      logsData = res.data
+    }
+
+    if (logsData && Array.isArray(logsData)) {
+      meditationLogs.value = logsData
+      const durationMap = buildMeditationDurationMap(logsData)
       const currentWeekDates = getWeekDatesMondayStart(new Date())
       const data = currentWeekDates.map((date) => {
         const dateKey = formatLocalDateKey(date)
@@ -4353,23 +4501,32 @@ const plantDict = {
 
 const fetchGardenData = async () => {
   try {
-    const res = await getMyGardenApi()
-    if (res.data) {
-      seedInventory.value = (res.data.seeds || []).map(item => ({
+    let gardenData = null
+    if (MOCK_MEDITATION_DATA) {
+      await new Promise(r => setTimeout(r, 150))
+      gardenData = generateMockGardenData()
+      console.log('[Mock] 花园数据 mock 已启用')
+    } else {
+      const res = await getMyGardenApi()
+      gardenData = res.data
+    }
+
+    if (gardenData) {
+      seedInventory.value = (gardenData.seeds || []).map(item => ({
         id: item.itemId,
         name: seedDict[item.itemId]?.name || '未知种子',
         icon: seedDict[item.itemId]?.icon || '🌱',
         count: item.count
       }))
-      
-      fruitInventory.value = (res.data.fruits || []).map(item => ({
+
+      fruitInventory.value = (gardenData.fruits || []).map(item => ({
         id: item.itemId,
         name: fruitDict[item.itemId]?.name || '未知果实',
         icon: fruitDict[item.itemId]?.icon || '🍎',
         count: item.count
       }))
-      
-      unlockedPlants.value = (res.data.unlockedPlantIds || []).map(id => ({
+
+      unlockedPlants.value = (gardenData.unlockedPlantIds || []).map(id => ({
         id,
         name: plantDict[id]?.name || '未知植物',
         icon: plantDict[id]?.icon || '🌿',

@@ -22,5 +22,19 @@
     ],
     "createdAt": "2026-05-30T06:41:58.568201Z",
     "userId": "1"
+  },
+  {
+    "id": "upload_3f6ace47a2e1472698c22f0c8a01c96e",
+    "filename": "upload_3f6ace47a2e1472698c22f0c8a01c96e.mp3",
+    "title": "energysound-powerful-percussion-513717",
+    "artist": "",
+    "duration": 68,
+    "tags": [
+      "喜悦",
+      "平静",
+      "惊喜"
+    ],
+    "createdAt": "2026-06-03T14:57:54.047606Z",
+    "userId": "1"
   }
 ]
